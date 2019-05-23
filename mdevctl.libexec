@@ -1,0 +1,174 @@
+#!/usr/bin/bash
+
+persist_base=/etc/mdev.d
+mdev_base=/sys/bus/mdev/devices
+parent_base=/sys/class/mdev_bus
+
+valid_uuid () {
+    if [[ $1 =~ ^\{?[A-F0-9a-f]{8}-[A-F0-9a-f]{4}-[A-F0-9a-f]{4}-[A-F0-9a-f]{4}-[A-F0-9a-f]{12}\}?$ ]]; then
+        echo $1
+    fi
+}
+
+# The mdev device shows up before the link back to the type, wait for it
+wait_for_mdev_type () {
+    for i in $(seq 1 10); do
+        if [ -L $mdev_base/$1/mdev_type ]; then
+            break;
+        fi
+        sleep 0.5
+    done
+    if [ -L $mdev_base/$1/mdev_type ]; then
+        readlink -f $mdev_base/$1/mdev_type
+    fi
+}
+
+# udev can trigger start-mdev when the parent appears, give it some time
+# to register with mdev
+wait_for_supported_types () {
+    for i in $(seq 1 10); do
+        if [ -d $parent_base/$1/mdev_supported_types ]; then
+            break;
+        fi
+        sleep 0.5
+    done
+    if [ -d $parent_base/$1/mdev_supported_types ]; then
+        echo "$parent_base/$1/mdev_supported_types"
+    fi
+}
+
+case ${1} in
+    start-mdev|stop-mdev)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $0 $1 <mdev UUID>" >&2
+            exit 1
+        fi
+        cmd=$1
+        uuid=$2
+        ;;
+    add-mdev)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $0 $1 <mdev UUID>" >&2
+            exit 1
+        fi
+        cmd=$1
+        uuid=$2
+        ;;
+    get-mdevs)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $0 $1 <parent device>" >&2
+            exit 1
+        fi
+        cmd=$1
+        parent=$2
+        ;;
+    *)
+        echo "Unknown option $1" >&2
+        exit 1
+esac
+
+case ${cmd} in
+    stop-mdev)
+        if [ -z "$(valid_uuid $uuid)" ]; then
+            echo "Invalid UUID $uuid" >&2
+            exit 1
+        fi
+
+        if [ ! -L $mdev_base/$uuid ]; then
+            echo "No device named $uuid found" >&2
+            exit 1
+        fi
+
+        echo 1 > $mdev_base/$uuid/remove
+        if [ $? -ne 0 ]; then
+            echo "Error removin device $uuid" >&2
+            exit 1
+        fi
+        ;;
+
+    start-mdev)
+        if [ -z "$(valid_uuid $uuid)" ]; then
+            echo "Invalid UUID $uuid" >&2
+            exit 1
+        fi
+
+        if [ -L $mdev_base/$uuid ]; then
+            echo "Device $uuid already exists" >&2
+            exit 1
+        fi
+
+        config=$(find $persist_base -name $uuid -type f)
+        if [ -z "$config" ]; then
+            echo "No configuration found for $uuid" >&2
+            exit 1
+        fi
+
+        mdev_type=$(cat $config)
+        if [ -z "$mdev_type" ]; then
+            echo "Invalid configuration for $uuid, no mdev_type" >&2
+            exit 1
+        fi
+        parent=$(basename $(echo $config | sed -s "s/\/$uuid//"))
+        supported_types=$(wait_for_supported_types $parent)
+        if [ -z "$supported_types" ]; then
+            echo "Parent $parent not enabled for mdev" >&2
+            exit 1
+        fi
+
+        if [ ! -d $supported_types/$mdev_type ]; then
+            echo "Parent $parent does not support mdev type $mdev_type" >&2
+            exit 1
+        fi
+
+        avail=$(cat $supported_types/$mdev_type/available_instances)
+        if [ $? -ne 0 ] || [ $avail -eq 0 ]; then
+            echo "No available instances of $mdev_type on $parent" >&2
+            exit 1
+        fi
+
+        echo $uuid > $supported_types/$mdev_type/create
+        if [ $? -ne 0 ]; then
+            echo "Error creating mdev type $mdev_type on $parent" >&2
+            exit 1
+        fi
+        ;;
+
+    add-mdev)
+        if [ -z "$(valid_uuid $uuid)" ]; then
+            echo "Invalid UUID $uuid" >&2
+            exit 1
+        fi
+
+        find $persist_base -name $uuid -type f | xargs rm -f
+
+        parent_type=$(wait_for_mdev_type $uuid)
+        if [ -z "$parent_type" ]; then
+            echo "Type of device $uuid unavailable" >&2
+            exit 1
+        fi
+
+        mdev_type=$(basename $parent_type)
+        parent=$(basename $(echo $parent_type | sed -e 's/\/mdev_supported_types.*//'))
+        mkdir -p $persist_base/$parent
+        echo $mdev_type > $persist_base/$parent/$uuid
+        ;;
+
+    get-mdevs)
+        if [ ! -d $persist_base/$parent ]; then
+          exit 1
+        fi
+
+        for config in $(find $persist_base/$parent/ -maxdepth 1 -mindepth 1 -type f); do
+            uuid=$(basename $config)
+            if [ -n "$(valid_uuid $uuid)" ]; then
+                result+="mdev@$uuid.service "
+            fi
+        done
+
+        if [ -z "$result" ]; then
+            exit 1
+        fi
+
+        echo $result
+        ;;
+esac

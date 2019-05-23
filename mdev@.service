@@ -1,0 +1,11 @@
+[Unit]
+Description=Manage persistent mdev %i
+DefaultDependencies=no
+Before=basic.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/mdevctl start-mdev %i
+ExecStop=/usr/libexec/mdevctl stop-mdev %i
+TimeoutStartSec=300

@@ -1,0 +1,96 @@
+#!/usr/bin/bash
+
+persist_base=/etc/mdev.d
+mdev_base=/sys/bus/mdev/devices
+parent_base=/sys/class/mdev_bus
+
+case ${1} in
+    start-mdev|stop-mdev|remove-mdev)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $0 $1 <mdev UUID>" >&2
+            exit 1
+        fi
+        cmd=$1
+        uuid=$2
+        ;;
+    create-mdev)
+        if [ $# -ne 4 ]; then
+            echo "Usage: $0 $1 <mdev UUID> <parent device> <mdev_type>" >&2
+            exit 1
+        fi
+        cmd=$1
+        uuid=$2
+        parent=$3
+        mdev_type=$4
+        ;;
+    list-available|list-all|list-mdevs|list-saved)
+        if [ $# -ne 1 ]; then
+            echo "Usage: $0 $1" >&2
+            exit 1
+        fi
+        cmd=$1
+        ;;
+esac
+
+case ${cmd} in
+    stop-mdev)
+        systemctl stop mdev@$uuid.service
+        ;;
+
+    start-mdev)
+        systemctl start mdev@$uuid.service
+        ;;
+
+    create-mdev)
+        mkdir -p $persist_base/$parent
+        echo $mdev_type > $persist_base/$parent/$uuid
+        systemctl start mdev@$uuid.service
+        ;;
+
+    remove-mdev)
+        systemctl stop mdev@$uuid.service
+        find $persist_base -name $uuid -type f | xargs rm -f
+        ;;
+
+    list-mdevs)
+        for mdev in $(find $mdev_base/ -maxdepth 1 -mindepth 1 -type l); do
+            uuid=$(basename $mdev)
+            parent_type=$(readlink -f $mdev/mdev_type)
+            mdev_type=$(basename $parent_type)
+            parent=$(basename $(echo $parent_type | sed -e 's/\/mdev_supported_types.*//'))
+            echo "$uuid $parent $mdev_type"
+        done
+        ;;
+    list-saved)
+        for parent in $(find $persist_base/ -maxdepth 1 -mindepth 1 -type d); do
+            for mdev in $(find $parent/ -maxdepth 1 -mindepth 1 -type f); do
+                uuid=$(basename $mdev)
+                mdev_type=$(cat $mdev)
+                parent=$(basename $parent)
+                echo "$uuid $parent $mdev_type"
+            done
+        done
+        ;;
+
+    list-available|list-all)
+        if [ $cmd == "list-available" ]; then
+            exclude_nonavail="yes"
+        fi
+
+        for parent in $(find $parent_base/ -maxdepth 1 -mindepth 1 -type l); do
+            echo "$(basename $parent)"
+            for parent_type in $(find $parent/mdev_supported_types/ -maxdepth 1 -mindepth 1 -type d); do
+                avail=$(cat $parent_type/available_instances)
+                if [ $avail -eq 0 ] && [ "$exclude_nonavail" == "yes" ]; then
+                    continue
+                fi
+                echo "  $(basename $parent_type)"
+                echo "    Available instances: $avail"
+                echo "    Device API: $(cat $parent_type/device_api)"
+                if [ -e $parent_type/description ]; then
+                    echo "    Description: $(cat $parent_type/description | tr '\n' ' ')"
+                fi
+            done
+        done
+        ;;
+esac
