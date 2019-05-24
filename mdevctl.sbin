@@ -30,6 +30,19 @@ case ${1} in
         fi
         cmd=$1
         ;;
+    *)
+        echo "Usage: $0 {COMMAND} ..." >&2
+        echo >&2
+        echo "Available commands:" >&2
+        echo "{start-mdev|stop-mdev|remove-mdev} <mdev-UUID>: start, stop, or remove" >&2
+        echo "                                                a saved mdev" >&2
+        echo "create-mdev <mdev UUID> <parent device> <mdev_type>: create an mdev" >&2
+        echo "list-all: list all possible mdev types supported in the system" >&2
+        echo "list-available: list all mdev types currently available" >&2
+        echo "list-mdev: list currently configured mdevs (including non-persistent mdevs)" >&2
+        echo "list-saved: list all persistent mdevs (including not currently active ones)" >&2
+        exit 1
+        ;;
 esac
 
 case ${cmd} in
