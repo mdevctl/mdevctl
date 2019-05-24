@@ -38,7 +38,8 @@ available, and saved devices.
 %{_libexecdir}/mdevctl
 %{_udevrulesdir}/*.rules
 %{_unitdir}/mdev@.service
-%dir %{_sysconfdir}/mdev.d
+%{_sysconfdir}/mdevctl.conf
+%dir %{_sysconfdir}/mdevctl.d
 
 %post
 %udev_rules_update

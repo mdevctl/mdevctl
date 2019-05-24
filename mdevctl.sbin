@@ -1,49 +1,80 @@
 #!/usr/bin/bash
 
-persist_base=/etc/mdev.d
+persist_base=/etc/mdevctl.d
 mdev_base=/sys/bus/mdev/devices
 parent_base=/sys/class/mdev_bus
+defaults=/etc/mdevctl.conf
 
-case ${1} in
-    start-mdev|stop-mdev|remove-mdev)
-        if [ $# -ne 2 ]; then
-            echo "Usage: $0 $1 <mdev UUID>" >&2
-            exit 1
-        fi
-        cmd=$1
-        uuid=$2
-        ;;
-    create-mdev)
-        if [ $# -ne 4 ]; then
-            echo "Usage: $0 $1 <mdev UUID> <parent device> <mdev_type>" >&2
-            exit 1
-        fi
-        cmd=$1
-        uuid=$2
-        parent=$3
-        mdev_type=$4
-        ;;
-    list-available|list-all|list-mdevs|list-saved)
-        if [ $# -ne 1 ]; then
-            echo "Usage: $0 $1" >&2
-            exit 1
-        fi
-        cmd=$1
-        ;;
-    *)
-        echo "Usage: $0 {COMMAND} ..." >&2
-        echo >&2
-        echo "Available commands:" >&2
-        echo "{start-mdev|stop-mdev|remove-mdev} <mdev-UUID>: start, stop, or remove" >&2
-        echo "                                                a saved mdev" >&2
-        echo "create-mdev <mdev UUID> <parent device> <mdev_type>: create an mdev" >&2
-        echo "list-all: list all possible mdev types supported in the system" >&2
-        echo "list-available: list all mdev types currently available" >&2
-        echo "list-mdevs: list currently configured mdevs" >&2
-        echo "list-saved: list all persistent mdevs (including not currently active ones)" >&2
-        exit 1
-        ;;
-esac
+declare -A config
+config=([start]="auto")
+
+read_config() {
+    if [ -s ${1} ]; then
+        while read line; do
+            if echo $line | grep -F = &>/dev/null; then
+                varname=$(echo "$line" | cut -d '=' -f 1)
+                config[$varname]=$(echo "$line" | cut -d '=' -f 2-)
+            fi
+        done < ${1}
+    fi
+}
+
+read_config $defaults
+
+usage() {
+    echo "Usage: $(basename $0) {COMMAND} ..." >&2
+    echo >&2
+    echo "Available commands:" >&2
+    echo "{start-mdev|stop-mdev|remove-mdev} <mdev-UUID>: start, stop, or remove" >&2
+    echo "                                                a saved mdev" >&2
+    echo "create-mdev [--auto] [--manual] <mdev UUID> <parent device> <mdev_type>" >&2
+    echo "                        create mdev with optional start policy override" >&2
+    echo "set-start [--auto] [--manual] <mdev UUID>: change start policty" >&2
+    echo "                        if not specified, system default policy is used" >&2
+    echo "list-all: list all possible mdev types supported in the system" >&2
+    echo "list-available: list all mdev types currently available" >&2
+    echo "list-mdevs: list currently configured mdevs" >&2
+    echo "list-saved: list all persistent mdevs (including not currently active ones)" >&2
+    exit 1
+}
+
+while (($# > 0)); do
+    case ${1} in
+        --auto)
+            config[start]=auto
+            ;;
+        --manual)
+            config[start]=manual
+            ;;
+        start-mdev|stop-mdev|remove-mdev|set-start)
+            [ $# -ne 2 ] && usage
+            cmd=$1
+            uuid=$2
+            break
+            ;;
+        create-mdev)
+            [ $# -ne 4 ] && usage
+            cmd=$1
+            uuid=$2
+            parent=$3
+            mdev_type=$4
+            break
+            ;;
+        list-available|list-all|list-mdevs|list-saved)
+            [ $# -ne 1 ] && usage
+            cmd=$1
+            break
+            ;;
+        *)
+            usage
+            ;;
+    esac
+    shift
+done
+
+if [ -z "${cmd}" ]; then
+    usage
+fi
 
 case ${cmd} in
     stop-mdev)
@@ -56,13 +87,27 @@ case ${cmd} in
 
     create-mdev)
         mkdir -p $persist_base/$parent
-        echo $mdev_type > $persist_base/$parent/$uuid
+        echo "mdev_type=$mdev_type" > $persist_base/$parent/$uuid
+        echo "start=${config[start]}" >> $persist_base/$parent/$uuid
         systemctl start mdev@$uuid.service
         ;;
 
     remove-mdev)
         systemctl stop mdev@$uuid.service
         find $persist_base -name $uuid -type f | xargs rm -f
+        ;;
+
+    set-start)
+        file=$(find $persist_base -name $uuid -type f)
+        if [ -n "$file" ]; then
+            if grep -q ^start $file; then
+                sed -i "s/^start=.*/start=${config[start]}/g" $file
+            else
+                echo "start=${config[start]}" >> $persist_base/$parent/$uuid
+            fi
+        else
+            exit 1
+        fi
         ;;
 
     list-mdevs)
@@ -74,13 +119,16 @@ case ${cmd} in
             echo "$uuid $parent $mdev_type"
         done
         ;;
+
     list-saved)
         for parent in $(find $persist_base/ -maxdepth 1 -mindepth 1 -type d); do
             for mdev in $(find $parent/ -maxdepth 1 -mindepth 1 -type f); do
                 uuid=$(basename $mdev)
-                mdev_type=$(cat $mdev)
                 parent=$(basename $parent)
-                echo "$uuid $parent $mdev_type"
+                read_config $mdev
+                mdev_type=${config[mdev_type]}
+                start=${config[start]}
+                echo "$uuid $parent $mdev_type $start"
             done
         done
         ;;

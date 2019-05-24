@@ -29,10 +29,10 @@ Architecture
 ------------
 mdevctl inserts udev rules to trigger when a devices is added on the
 mdev subsystem.  The device is recorded in a persistent file under
-/etc/mdev.d/.  Later, if a rule triggers indicating a device was added
-for which we have persistent mdev information stored, mdevctl provides
-information to have systemd start services invoking those persistent
-mdev devices.
+/etc/mdevctl.d/.  Later, if a rule triggers indicating a device was
+added for which we have persistent mdev information stored, mdevctl
+provides information to have systemd start services invoking those
+persistent mdev devices.
 
 The mdevctl scripts are split between libexec and sbin, the latter is
 intended for user consumption while the former is invoked by udev,
@@ -42,8 +42,6 @@ or udev events.
 
 Usage
 -----
-
-(TODO: man page, usage)
 
 List all possible mdev types supported in the system:
 
@@ -95,5 +93,3 @@ Remove an mdev, stopping it if active:
 TODO
 ----
  * man page
- * better help/usage
- * options to have mdevs saved but not automatically created

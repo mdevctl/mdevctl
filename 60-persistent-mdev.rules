@@ -1,2 +1,2 @@
 ACTION=="add", SUBSYSTEM=="mdev", RUN+="/usr/libexec/mdevctl add-mdev %k"
-ACTION=="add", TEST=="/etc/mdev.d/$kernel", PROGRAM="/usr/libexec/mdevctl get-mdevs %k" TAG+="systemd", ENV{SYSTEMD_WANTS}="$result"
+ACTION=="add", TEST=="/etc/mdevctl.d/$kernel", PROGRAM="/usr/libexec/mdevctl get-mdevs %k" TAG+="systemd", ENV{SYSTEMD_WANTS}="$result"

@@ -1,8 +1,25 @@
 #!/usr/bin/bash
 
-persist_base=/etc/mdev.d
+persist_base=/etc/mdevctl.d
 mdev_base=/sys/bus/mdev/devices
 parent_base=/sys/class/mdev_bus
+defaults=/etc/mdevctl.conf
+
+declare -A config
+config=([start]="auto")
+
+read_config() {
+    if [ -s ${1} ]; then
+        while read line; do
+            if echo $line | grep -F = &>/dev/null; then
+                varname=$(echo "$line" | cut -d '=' -f 1)
+                config[$varname]=$(echo "$line" | cut -d '=' -f 2-)
+            fi
+        done < ${1}
+    fi
+}
+
+read_config $defaults
 
 valid_uuid () {
     if [[ $1 =~ ^\{?[A-F0-9a-f]{8}-[A-F0-9a-f]{4}-[A-F0-9a-f]{4}-[A-F0-9a-f]{4}-[A-F0-9a-f]{12}\}?$ ]]; then
@@ -97,38 +114,38 @@ case ${cmd} in
             exit 1
         fi
 
-        config=$(find $persist_base -name $uuid -type f)
-        if [ -z "$config" ]; then
+        file=$(find $persist_base -name $uuid -type f)
+        if [ -z "$file" ]; then
             echo "No configuration found for $uuid" >&2
             exit 1
         fi
 
-        mdev_type=$(cat $config)
-        if [ -z "$mdev_type" ]; then
+        read_config $file
+        if [ -z "${config[mdev_type]}" ]; then
             echo "Invalid configuration for $uuid, no mdev_type" >&2
             exit 1
         fi
-        parent=$(basename $(echo $config | sed -s "s/\/$uuid//"))
+        parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
         supported_types=$(wait_for_supported_types $parent)
         if [ -z "$supported_types" ]; then
             echo "Parent $parent not enabled for mdev" >&2
             exit 1
         fi
 
-        if [ ! -d $supported_types/$mdev_type ]; then
-            echo "Parent $parent does not support mdev type $mdev_type" >&2
+        if [ ! -d $supported_types/${config[mdev_type]} ]; then
+            echo "Parent $parent does not support mdev type ${config[mdev_type]}" >&2
             exit 1
         fi
 
-        avail=$(cat $supported_types/$mdev_type/available_instances)
+        avail=$(cat $supported_types/${config[mdev_type]}/available_instances)
         if [ $? -ne 0 ] || [ $avail -eq 0 ]; then
-            echo "No available instances of $mdev_type on $parent" >&2
+            echo "No available instances of ${config[mdev_type]} on $parent" >&2
             exit 1
         fi
 
-        echo $uuid > $supported_types/$mdev_type/create
+        echo $uuid > $supported_types/${config[mdev_type]}/create
         if [ $? -ne 0 ]; then
-            echo "Error creating mdev type $mdev_type on $parent" >&2
+            echo "Error creating mdev type ${config[mdev_type]} on $parent" >&2
             exit 1
         fi
         ;;
@@ -139,8 +156,6 @@ case ${cmd} in
             exit 1
         fi
 
-        find $persist_base -name $uuid -type f | xargs rm -f
-
         parent_type=$(wait_for_mdev_type $uuid)
         if [ -z "$parent_type" ]; then
             echo "Type of device $uuid unavailable" >&2
@@ -149,8 +164,28 @@ case ${cmd} in
 
         mdev_type=$(basename $parent_type)
         parent=$(basename $(echo $parent_type | sed -e 's/\/mdev_supported_types.*//'))
-        mkdir -p $persist_base/$parent
-        echo $mdev_type > $persist_base/$parent/$uuid
+
+        file=$(find $persist_base -name $uuid -type f)
+        if [ -n "$file" ]; then
+            if [ $file == $persist_base/$parent/$uuid ]; then
+                orig=${config[start]}
+                read_config $file
+                if [  ${config[mdev_type]} != $mdev_type ]; then
+                    config[start]=$orig
+                    rm -f $file
+                fi
+            else
+                rm -f $file
+            fi
+        fi
+
+        if [ -z "$file" ] || [ ! -e $file ]; then
+            if [ ! -d $persist_base/$parent ]; then
+                mkdir -p $persist_base/$parent
+            fi
+            echo "mdev_type=$mdev_type" > $persist_base/$parent/$uuid
+            echo "start=${config[start]}" >> $persist_base/$parent/$uuid
+        fi
         ;;
 
     get-mdevs)
@@ -158,10 +193,15 @@ case ${cmd} in
           exit 1
         fi
 
-        for config in $(find $persist_base/$parent/ -maxdepth 1 -mindepth 1 -type f); do
-            uuid=$(basename $config)
+        for file in $(find $persist_base/$parent/ -maxdepth 1 -mindepth 1 -type f); do
+            uuid=$(basename $file)
             if [ -n "$(valid_uuid $uuid)" ]; then
-                result+="mdev@$uuid.service "
+                orig=${config[start]}
+                read_config $file
+                if [ ${config[start]} == "auto" ]; then
+                    result+="mdev@$uuid.service "
+                fi
+                config[start]=$orig
             fi
         done
 
