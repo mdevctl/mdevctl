@@ -10,11 +10,22 @@ COMMIT=$(shell git rev-list --max-count 1 HEAD)
 NVFMT=$(NAME)-$(VERSION)-$(COMMIT)
 
 files: mdevctl.sbin mdevctl.libexec mdev@.service 60-persistent-mdev.rules \
-	Makefile COPYING README
+	Makefile COPYING README mdevctl.spec.in
 
-archive: files tag
+archive: files tag mdevctl.spec
 	git archive --prefix=$(NVFMT)/ HEAD > $(NVFMT).tar
 	gzip -f -9 $(NVFMT).tar
+
+mdevctl.spec: mdevctl.spec.in files
+	sed -e 's:#VERSION#:$(VERSION):g' \
+	    -e 's:#COMMIT#:$(COMMIT):g'  < mdevctl.spec.in > mdevctl.spec
+	git log --format="* %cd %aN <%ae>%n%B" --date=local mdevctl.spec.in | sed -r -e 's/%/%%/g' -e 's/[0-9]+:[0-9]+:[0-9]+ //' >> mdevctl.spec
+
+srpm: mdevctl.spec archive
+	rpmbuild -bs --define "_sourcedir $(PWD)" --define "_specdir $(PWD)" --define "_builddir $(PWD)" --define "_srcrpmdir $(PWD)" --define "_rpmdir $(PWD)" mdevctl.spec
+
+rpm: mdevctl.spec archive
+	rpmbuild -bb --define "_sourcedir $(PWD)" --define "_specdir $(PWD)" --define "_builddir $(PWD)" --define "_srcrpmdir $(PWD)" --define "_rpmdir $(PWD)" mdevctl.spec
 
 install:
 	mkdir -p $(DESTDIR)/$(CONFDIR)
@@ -26,8 +37,6 @@ install:
 	install -m 755 mdevctl.sbin $(DESTDIR)/$(SBINDIR)/mdevctl
 	mkdir -p $(DESTDIR)/$(LIBEXECDIR)
 	install -m 755 mdevctl.libexec $(DESTDIR)/$(LIBEXECDIR)/mdevctl
-	systemctl daemon-reload
-	udevadm control --reload-rules
 
 clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz

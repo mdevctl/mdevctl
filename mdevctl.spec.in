@@ -1,0 +1,50 @@
+%global commit	#COMMIT#
+
+Name:		mdevctl
+Version:	#VERSION#
+Release:	1%{?dist}
+Summary:	Mediated device management and persistence utility
+
+Group:		System Environment/Kernel
+License:	LGPLv2
+URL:		https://github.com/awilliam/mdevctl
+BuildArch:	noarch
+
+# Probably wrong
+Source0:	https://github.com/awilliam/mdevctl/archive/%{name}-%{version}-%{commit}.tar.gz
+
+BuildRequires: systemd
+Requires(post,postun): %{_sbindir}/udevadm
+Requires: coreutils udev
+
+%description
+mdevctl is a utility for managing and persisting mediated devices.
+
+mdevctl integrates with udev and systemd to automatically persist
+mdevs created through sysfs and provides a user interface for
+creating/removing, starting/stopping, as well as listing active,
+available, and saved devices.
+
+%prep
+%setup -q -n %{name}-%{version}-%{commit}
+
+%install
+%make_install
+
+%files
+%license COPYING
+%doc README
+%{_sbindir}/mdevctl
+%{_libexecdir}/mdevctl
+%{_udevrulesdir}/*.rules
+%{_unitdir}/mdev@.service
+%dir %{_sysconfdir}/mdev.d
+
+%post
+%udev_rules_update
+
+%postun
+%udev_rules_update
+
+%changelog
+
