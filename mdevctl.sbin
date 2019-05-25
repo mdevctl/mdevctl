@@ -22,15 +22,17 @@ read_config() {
 read_config $defaults
 
 usage() {
-    echo "Usage: $(basename $0) {COMMAND} ..." >&2
+    echo "Usage: $(basename $0) [options] {COMMAND} ..." >&2
     echo >&2
     echo "Available commands:" >&2
-    echo "{start-mdev|stop-mdev|remove-mdev} <mdev-UUID>: start, stop, or remove" >&2
-    echo "                                                a saved mdev" >&2
-    echo "create-mdev [--auto] [--manual] <mdev UUID> <parent device> <mdev_type>" >&2
-    echo "                        create mdev with optional start policy override" >&2
-    echo "set-start [--auto] [--manual] <mdev UUID>: change start policty" >&2
-    echo "                        if not specified, system default policy is used" >&2
+    echo "{start-mdev|stop-mdev|remove-mdev} <mdev-UUID>: start, stop, or remove a" >&2
+    echo "                                                saved mdev" >&2
+    echo "create-mdev <mdev UUID> <parent device> <mdev_type>: create mdev with optional" >&2
+    echo "                                                start policy override" >&2
+    echo "                                                options: [--auto] [--manual]" >&2
+    echo "set-start <mdev UUID>: change mdev start policy, if no option specified," >&2
+    echo "                       system default policy is used" >&2
+    echo "                       options: [--auto] [--manual]" >&2
     echo "list-all: list all possible mdev types supported in the system" >&2
     echo "list-available: list all mdev types currently available" >&2
     echo "list-mdevs: list currently configured mdevs" >&2
@@ -89,7 +91,9 @@ case ${cmd} in
         mkdir -p $persist_base/$parent
         echo "mdev_type=$mdev_type" > $persist_base/$parent/$uuid
         echo "start=${config[start]}" >> $persist_base/$parent/$uuid
-        systemctl start mdev@$uuid.service
+        if [ ${config[start]} == "auto" ]; then
+            systemctl start mdev@$uuid.service
+        fi
         ;;
 
     remove-mdev)
