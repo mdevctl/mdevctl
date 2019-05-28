@@ -29,16 +29,16 @@ rpm: mdevctl.spec archive
 	rpmbuild -bb --define "_sourcedir $(PWD)" --define "_specdir $(PWD)" --define "_builddir $(PWD)" --define "_srcrpmdir $(PWD)" --define "_rpmdir $(PWD)" mdevctl.spec
 
 install:
-	mkdir -p $(DESTDIR)/$(CONFDIR)
-	install -m 644 mdevctl.conf $(DESTDIR)/$(ETCDIR)/
-	mkdir -p $(DESTDIR)/$(UDEVDIR)/rules.d/
-	install -m 644 60-persistent-mdev.rules $(DESTDIR)/$(UDEVDIR)/rules.d/
-	mkdir -p $(DESTDIR)/$(UNITDIR)
-	install -m 644 mdev@.service $(DESTDIR)/$(UNITDIR)/
-	mkdir -p $(DESTDIR)/$(SBINDIR)
-	install -m 755 mdevctl.sbin $(DESTDIR)/$(SBINDIR)/mdevctl
-	mkdir -p $(DESTDIR)/$(LIBEXECDIR)
-	install -m 755 mdevctl.libexec $(DESTDIR)/$(LIBEXECDIR)/mdevctl
+	mkdir -p $(DESTDIR)$(CONFDIR)
+	install -m 644 mdevctl.conf $(DESTDIR)$(ETCDIR)/
+	mkdir -p $(DESTDIR)$(UDEVDIR)/rules.d/
+	install -m 644 60-persistent-mdev.rules $(DESTDIR)$(UDEVDIR)/rules.d/
+	mkdir -p $(DESTDIR)$(UNITDIR)
+	install -m 644 mdev@.service $(DESTDIR)$(UNITDIR)/
+	mkdir -p $(DESTDIR)$(SBINDIR)
+	install -m 755 mdevctl.sbin $(DESTDIR)$(SBINDIR)/mdevctl
+	mkdir -p $(DESTDIR)$(LIBEXECDIR)
+	install -m 755 mdevctl.libexec $(DESTDIR)$(LIBEXECDIR)/mdevctl
 
 clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz
