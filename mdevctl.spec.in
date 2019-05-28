@@ -7,11 +7,11 @@ Summary:	Mediated device management and persistence utility
 
 Group:		System Environment/Kernel
 License:	LGPLv2
-URL:		https://github.com/awilliam/mdevctl
+URL:		https://github.com/mdevctl/mdevctl
 BuildArch:	noarch
 
 # Probably wrong
-Source0:	https://github.com/awilliam/mdevctl/archive/%{name}-%{version}-%{commit}.tar.gz
+Source0:	https://github.com/mdevctl/mdevctl/archive/%{name}-%{version}-%{commit}.tar.gz
 
 BuildRequires: systemd
 Requires(post,postun): %{_sbindir}/udevadm
