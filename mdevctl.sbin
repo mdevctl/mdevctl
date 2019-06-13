@@ -22,21 +22,23 @@ read_config() {
 read_config $defaults
 
 usage() {
-    echo "Usage: $(basename $0) [options] {COMMAND} ..." >&2
-    echo >&2
-    echo "Available commands:" >&2
-    echo "{start-mdev|stop-mdev|remove-mdev} <mdev-UUID>: start, stop, or remove a" >&2
-    echo "                                                saved mdev" >&2
-    echo "create-mdev <mdev UUID> <parent device> <mdev_type>: create mdev with optional" >&2
-    echo "                                                start policy override" >&2
-    echo "                                                options: [--auto] [--manual]" >&2
-    echo "set-start <mdev UUID>: change mdev start policy, if no option specified," >&2
-    echo "                       system default policy is used" >&2
-    echo "                       options: [--auto] [--manual]" >&2
-    echo "list-all: list all possible mdev types supported in the system" >&2
-    echo "list-available: list all mdev types currently available" >&2
-    echo "list-mdevs: list currently configured mdevs" >&2
-    echo "list-saved: list all persistent mdevs (including not currently active ones)" >&2
+    cat >&2 <<EOF
+Usage: $(basename $0) [options] {COMMAND} ...
+
+Available commands:
+{start-mdev|stop-mdev|remove-mdev} <mdev-UUID>: start, stop, or remove a
+                                                saved mdev
+create-mdev <mdev-UUID> <parent device> <mdev_type>: create mdev with optional
+                                                start policy override
+                                                options: [--auto] [--manual]
+set-start <mdev UUID>: change mdev start policy, if no option specified,
+                       system default policy is used
+                       options: [--auto] [--manual]
+list-all: list all possible mdev types supported in the system
+list-available: list all mdev types currently available
+list-mdevs: list currently configured mdevs
+list-saved: list all persistent mdevs (including not currently active ones)
+EOF
     exit 1
 }
 
