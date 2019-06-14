@@ -50,19 +50,19 @@ List all possible mdev types supported in the system:
   i915-GVTg_V4_2
     Available instances: 2
     Device API: vfio-pci
-    Description: low_gm_size: 256MB high_gm_size: 1024MB fence: 4 resolution: 1920x1200 weight: 8 
+    Description: low_gm_size: 256MB high_gm_size: 1024MB fence: 4 resolution: 1920x1200 weight: 8
   i915-GVTg_V4_1
     Available instances: 1
     Device API: vfio-pci
-    Description: low_gm_size: 512MB high_gm_size: 2048MB fence: 4 resolution: 1920x1200 weight: 16 
+    Description: low_gm_size: 512MB high_gm_size: 2048MB fence: 4 resolution: 1920x1200 weight: 16
   i915-GVTg_V4_8
     Available instances: 7
     Device API: vfio-pci
-    Description: low_gm_size: 64MB high_gm_size: 384MB fence: 4 resolution: 1024x768 weight: 2 
+    Description: low_gm_size: 64MB high_gm_size: 384MB fence: 4 resolution: 1024x768 weight: 2
   i915-GVTg_V4_4
     Available instances: 5
     Device API: vfio-pci
-    Description: low_gm_size: 128MB high_gm_size: 512MB fence: 4 resolution: 1920x1200 weight: 4 
+    Description: low_gm_size: 128MB high_gm_size: 512MB fence: 4 resolution: 1920x1200 weight: 4
 
 Create an mdev devices:
 
