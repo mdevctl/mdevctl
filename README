@@ -64,9 +64,11 @@ List all possible mdev types supported in the system:
     Device API: vfio-pci
     Description: low_gm_size: 128MB high_gm_size: 512MB fence: 4 resolution: 1920x1200 weight: 4
 
-Create an mdev devices:
+Create an mdev device:
 
-# mdevctl create-mdev `uuidgen` 0000:00:02.0 i915-GVTg_V4_8
+# uuidgen
+ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847
+# mdevctl create-mdev ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847 0000:00:02.0 i915-GVTg_V4_8
 
 List active mdev devices:
 
