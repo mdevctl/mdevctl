@@ -1,0 +1,578 @@
+#!/usr/bin/bash
+
+persist_base=/etc/mdevctl.d
+mdev_base=/sys/bus/mdev/devices
+parent_base=/sys/class/mdev_bus
+
+# See https://stackoverflow.com/a/29754866/4775714 for getopt usage
+getopt --test > /dev/null
+if [ $? -ne 4 ]; then
+    echo "Sorry, ${0} requires enhanced getopt support"
+    exit 1
+fi
+
+declare -A config
+
+read_config() {
+    file=${1}
+
+    if [ -s $file ]; then
+        while read line; do
+            if echo $line | grep -F = &>/dev/null; then
+                varname=$(echo "$line" | cut -d '=' -f 1)
+                config[$varname]=$(echo "$line" | cut -d '=' -f 2-)
+            fi
+        done < $file
+    fi
+}
+
+# mdev devices are created under the parent, get the absolute path of the parent, strip the
+# leading slash, append the uuid, then systemd-escape it
+get_systemd_name() {
+    uuid=${1}
+    parent=${2}
+
+    name="$(readlink -f $parent_base/$parent | sed -e 's/^\///')/$uuid"
+    echo $(systemd-escape $name)
+}
+
+valid_uuid () {
+    uuid=${1}
+
+    if [[ $uuid =~ ^\{?[A-F0-9a-f]{8}-[A-F0-9a-f]{4}-[A-F0-9a-f]{4}-[A-F0-9a-f]{4}-[A-F0-9a-f]{12}\}?$ ]]; then
+        echo $uuid
+    fi
+}
+
+create_mdev() {
+    uuid=${1}
+    parent=${2}
+    type=${3}
+
+    if [ -z "$(valid_uuid $uuid)" ]; then
+        echo "Invalid UUID $uuid" >&2
+        return 1
+    fi
+
+    if [ -L $mdev_base/$uuid ]; then
+        cur_parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+        if [ $? -ne 0 ] || [ $cur_parent != $parent ]; then
+            echo "Device exists under different parent" >&2
+            return 1
+        fi
+
+        cur_type=$(basename $(readlink -f $mdev_base/$uuid/mdev_type))
+        if [ $? -ne 0 ] || [ $cur_type != $type ]; then
+            echo "Device exists with different type" >&2
+            return 1
+        fi
+
+        return 1
+    fi
+
+    if [ ! -d $parent_base/$parent/mdev_supported_types ]; then
+        echo "Parent $parent is not currently registered for mdev support" >&2
+        return 1
+    fi
+
+    if [ ! -d $parent_base/$parent/mdev_supported_types/$type ]; then
+        echo "Parent $parent does not support mdev type $type" >&2
+        return 1
+    fi
+
+    avail=$(cat "$parent_base/$parent/mdev_supported_types/$type/available_instances")
+    if [ $? -ne 0 ] || [ $avail -eq 0 ]; then
+        echo "No available instances of $type on $parent" >&2
+        return 1
+    fi
+
+    echo $uuid > "$parent_base/$parent/mdev_supported_types/$type/create"
+    if [ $? -ne 0 ]; then
+        echo "Error creating mdev type $type on $parent" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+remove_mdev() {
+    uuid=${1}
+
+    if [ -z "$(valid_uuid $uuid)" ]; then
+        echo "Invalid UUID $uuid" >&2
+        return 1
+    fi
+
+    if [ ! -L $mdev_base/$uuid ]; then
+        return 1
+    fi
+
+    echo 1 > $mdev_base/$uuid/remove
+    if [ $? -ne 0 ]; then
+        echo "Error removing device $uuid" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+usage() {
+    cat >&2 <<EOF
+Usage: $(basename $0) {COMMAND} [options...]
+
+Available commands:
+define		Define a config for an mdev device.  Options:
+	<-u|--uuid=UUID> [<-p|--parent=PARENT> <-t|--type=TYPE>] [-a|--auto]
+		If the device specified by the UUID currently exists, parent
+		and type may be omitted to use the existing values. The auto
+		option marks the device to start on parent availability.
+		Running devices are unaffected by this command.
+undefine	Undefine, or remove a config for an mdev device.  Options:
+	<-u|--uuid=UUID> [-p|--parent=PARENT]
+		If a UUID exists for multiple parents, all will be removed
+		unless a parent is specified.  Running devices are unaffected
+		by this command.
+modify		Modify the config for a defined mdev device.  Options:
+	<-u|--uuid=UUID> [-p|--parent=PARENT] [-t|--type=TYPE] \\
+	[[-a|--auto]|[-m|--manual]]
+		The parent option further identifies a UUID if it is not
+		unique, the parent for a device cannot be modified via this
+		command, undefine and re-define should be used instead.  The
+		mdev type and startup mode can be modified.  Running devices
+		are unaffected by this command.
+start		Start an mdev device.  Options:
+	<-u|--uuid=UUID> [-p|--parent=PARENT] [-t|--type=TYPE]
+		If the UUID is previously defined and unique, the UUID is
+		sufficient to start the device (UUIDs may not collide between
+		running devices).  If a UUID is used in multiple defined
+		configs, the parent device is necessary to identify the config.
+		Specifying UUID, PARENT, and TYPE allows devices to be started
+		regardless of a previously defined config (ie. transient mdevs).
+stop		Stop an mdev device.  Options:
+	<-u|--uuid=UUID>
+list		List mdev devices.  Options:
+	[-d|--defined]|[-t|--types]
+		With no options, information about the currently running mdev
+		devices is provided.  Specifing DEFINED lists the configuration
+		of defined devices, regardless of their running state.
+		Specifying TYPES lists the mdev types provided by the currently
+		registered mdev parent devices on the system.
+EOF
+    exit 1
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+
+case ${1} in
+    #
+    # Internal commands, these are expected to be called from udev or systemd and
+    # therefore do not offer the convenience of getopt processing (typically one
+    # arg after the command) and are not listed in the usage text
+    #
+    start-systemd-mdev)
+        if [ $# -ne 2 ]; then
+            echo "Usage: ${0} ${1} <systemd mdev device path>" >&2
+            exit 1
+        fi
+        uuid=$(basename $(systemd-escape -u "${2}"))
+        parent=$(basename $(systemd-escape -u "${2}" | sed -s "s/\/$uuid//"))
+        if [ -L $mdev_base/$uuid ]; then
+            exit 0 # mdev is already running, done
+        elif [ -e $persist_base/$parent/$uuid ]; then
+            read_config $persist_base/$parent/$uuid
+            if [ -z ${config[mdev_type]} ]; then
+                echo "Invalid config for device $uuid, no mdev_type defined" >&2
+                exit 1
+            fi
+            type=${config[mdev_type]}
+        else
+            echo "Device $uuid is not defined, cannot start" >&2
+            exit 1
+        fi
+
+        create_mdev $uuid $parent $type
+        exit $?
+        ;;
+    stop-systemd-mdev)
+        if [ $# -ne 2 ]; then
+            echo "Usage: ${0} ${1} <systemd mdev device path>" >&2
+            exit 1
+        fi
+        path="/"
+        path+=$(systemd-escape -u "${2}")
+        if [ ! -d "$path" ]; then
+            exit 0
+        fi
+
+        echo 1 > $path/remove
+        exit $?
+        ;;
+    systemd-service-name)
+        if [ $# -ne 2 ]; then
+            echo "Usage: ${0} ${1} <running mdev uuid>" >&2
+            exit 1
+        fi
+
+        pidof systemd > /dev/null
+        if [ $? -ne 0 ]; then
+            exit 1 # Not systemd host
+        fi
+        uuid=${2}
+        if [ ! -L $mdev_base/$uuid ]; then
+            echo "Device $uuid is not running" >&2
+            exit 1
+        fi
+
+        parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+
+        name=$(get_systemd_name $uuid $parent)
+        if [ -z "$name" ]; then
+            exit 1
+        fi
+        echo mdev@$name.service
+        exit 0
+        ;;
+    start-parent-mdevs)
+        if [ $# -ne 2 ]; then
+            echo "Usage: $0 $1 <parent device>" >&2
+            exit 1
+        fi
+
+        parent=${2}
+        if [ ! -d $persist_base/$parent ]; then
+            # Nothing to do
+            exit 0
+        fi
+
+        for file in $(find $persist_base/$parent/ -maxdepth 1 -mindepth 1 -type f); do
+            uuid=$(basename $file)
+            if [ -n "$(valid_uuid $uuid)" ]; then
+                read_config $file
+                if [ ${config[start]} == "auto" ] && [ ! -z ${config[mdev_type]} ]; then
+                    create_mdev $uuid $parent ${config[mdev_type]}
+                    if [ $? -ne 0 ]; then
+                        echo "Failed to create mdev $uuid, type ${config[mdev_type]} on $parent" >&2
+                        # continue...
+                    fi
+                fi
+                unset config[start]
+                unset config[mdev_type]
+            fi
+        done
+        exit 0
+        ;;
+    #
+    # User commands
+    #
+    --help|-h|-?)
+        usage
+        ;;
+    define)
+        cmd=$1
+        OPTIONS=u:p:t:a
+        LONGOPTS=uuid:,parent:,type:,auto
+        shift
+        ;;
+    undefine)
+        cmd=$1
+        OPTIONS=u:p:
+        LONGOPTS=uuid:,parent:
+        shift
+        ;;
+    modify)
+        cmd=$1
+        OPTIONS=u:p:t:am
+        LONGOPTS=uuid:,parent:,type:,auto,manual
+        shift
+        ;;
+    start)
+        cmd=$1
+        OPTIONS=u:p:t:
+        LONGOPTS=uuid:,parent:,type:
+        shift
+        ;;
+    stop)
+        cmd=$1
+        OPTIONS=u:
+        LONGOPTS=uuid:
+        shift
+        ;;
+    list)
+        cmd=$1
+        OPTIONS=dt
+        LONGOPTS=defined,types
+        shift
+        ;;
+
+    *)
+        echo "Unknown command $1" >&2
+        usage
+        ;;
+esac
+
+PARSED=$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$(basename $0)" -- "$@")
+if [ $? -ne 0 ]; then
+    exit 1
+fi
+
+eval set -- "$PARSED"
+
+while true; do
+    case "$1" in
+        -u|--uuid)
+            uuid="$2"
+            shift 2
+            ;;
+        -p|--parent)
+            parent="$2"
+            shift 2
+            ;;
+        -t|--type)
+            if [ $cmd == "list" ]; then
+                types=y
+                shift
+            else
+                type="$2"
+                shift 2
+            fi
+            ;;
+        --types)
+            types=y
+            shift
+            ;;
+        -a|--auto)
+            auto=y
+            shift 1
+            ;;
+        -m|--manual)
+            manual=y
+            shift 1
+            ;;
+        -d|--defined)
+            defined=y
+            shift 1
+            ;;
+        -a|--available)
+            available=y
+            shift 1
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo "Programming error"
+            exit 1
+            ;;
+    esac
+done
+
+if [ $# -ne 0 ]; then
+    echo "$(basename $0): Unknown options: $@"
+    exit 1
+fi
+
+case $cmd in
+    define)
+        if [ -z $uuid ]; then
+            usage
+        fi
+
+        if [ -z $parent ]; then
+            if [ ! -L $mdev_base/$uuid ] || [ -n "$type" ]; then
+                usage
+            fi
+
+            parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+            type=$(basename $(readlink -f $mdev_base/$uuid/mdev_type))
+        fi
+
+        if [ -e $persist_base/$parent/$uuid ]; then
+            echo "Device $uuid on $parent already defined, try modify?" >&2
+            exit 1
+        fi
+
+        if [ -z $type ]; then
+            usage
+        fi
+
+        if [ -n "$auto" ]; then
+            start="auto"
+        else
+            start="manual"
+        fi
+
+        set -o errexit
+
+        mkdir -p $persist_base/$parent
+        echo "mdev_type=$type" > $persist_base/$parent/$uuid
+        echo "start=$start" >> $persist_base/$parent/$uuid
+        ;;
+    undefine)
+        if [ -z $uuid ]; then
+            usage
+        fi
+
+        set -o errexit
+
+        if [ -n "$parent" ]; then
+            rm -f $persist_base/$parent/$uuid
+        else
+            find $persist_base -name $uuid -type f | xargs rm -f
+        fi
+        ;;
+    modify)
+        if [ -z $uuid ]; then
+            usage
+        fi
+
+        if [ -n "$auto" ] && [ -n "$manual" ]; then
+            echo "Options --auto and --manual are mutually exclusive" >&2
+            exit 1
+        fi
+
+        set -o errexit
+
+        if [ -n "$parent" ]; then
+            if [ ! -d $persist_base/$parent/$uuid ]; then
+                echo "Config for $uuid on $parent does not exist, define it first?" >&2
+                exit 1
+            fi
+            file=$persist_base/$parent/$uuid
+        else
+            count=$(find $persist_base -name $uuid -type f | wc -l)
+            if [ $count -eq 0 ]; then
+                echo "Config for $uuid does not exist, define it first?" >&2
+                exit 1
+            elif [ $count -gt 1 ]; then
+                echo "Multiple configs found for $uuid, specify a parent" >&2
+                exit 1
+            fi
+            file=$(find $persist_base -name $uuid -type f)
+        fi
+
+        if [ -n "$type" ]; then
+            sed -i "s/^mdev_type=.*/mdev_type=$type/" $file
+        fi
+
+        if [ -n "$auto" ]; then
+            sed -i "s/^start=.*/start=auto/" $file
+        fi
+
+        if [ -n "$manual" ]; then
+            sed -i "s/^start=.*/start=manual/" $file
+        fi
+        ;;
+    start)
+        if [ -z $uuid ]; then
+            usage
+        fi
+
+        set -o errexit
+
+        if [ -z $parent ]; then
+            if [ -n "$type" ]; then
+                usage
+            fi
+
+            count=$(find $persist_base -name $uuid -type f | wc -l)
+            if [ $count -eq 0 ]; then
+                echo "Config for $uuid does not exist, define it first?" >&2
+                exit 1
+            elif [ $count -gt 1 ]; then
+                echo "Multiple configs found for $uuid, specify a parent" >&2
+                exit 1
+            fi
+            file=$(find $persist_base -name $uuid -type f)
+            read_config $file
+            parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
+            type=${config[mdev_type]}
+        fi
+
+        if [ -z $type ]; then
+            if [ -z ${config[mdev_type]} ]; then
+                echo "No type specified or available in config for $uuid" >&2
+                exit 1
+            fi
+            type=${config[mdev_type]}
+        fi
+
+        create_mdev $uuid $parent $type
+        ;;
+    stop)
+        if [ -z $uuid ]; then
+            usage
+        fi
+
+        set -o errexit
+
+        remove_mdev $uuid
+        ;;
+    list)
+        if [ -n "$defined" ] && [ -n "$types" ]; then
+            echo "Listing options cannot be combined" >&2
+            exit 1
+        fi
+
+        if [ -n "$defined" ]; then
+            for parent in $(find $persist_base/ -maxdepth 1 -mindepth 1 -type d); do
+                for mdev in $(find $parent/ -maxdepth 1 -mindepth 1 -type f); do
+                    uuid=$(basename $mdev)
+                    parent=$(basename $parent)
+                    read_config $mdev
+                    type=${config[mdev_type]}
+                    start=${config[start]}
+                    unset config[start]
+                    unset config[mdev_type]
+
+                    echo "$uuid $parent $type $start"
+                done
+            done
+        elif [ -n "$types" ]; then
+            if [ ! -d $parent_base ]; then
+                exit 0
+            fi
+
+           for parent in $(find $parent_base/ -maxdepth 1 -mindepth 1 -type l); do
+                echo "$(basename $parent)"
+                for parent_type in $(find $parent/mdev_supported_types/ -maxdepth 1 -mindepth 1 -type d); do
+                    avail=$(cat $parent_type/available_instances)
+                    echo "  $(basename $parent_type)"
+                    echo "    Available instances: $avail"
+                    echo "    Device API: $(cat $parent_type/device_api)"
+                    if [ -e $parent_type/name ]; then
+                        echo "    Name: $(cat $parent_type/name)"
+                    fi
+                    if [ -e $parent_type/description ]; then
+                        echo "    Description: $(cat $parent_type/description | tr '\n' ' ')"
+                    fi
+                done
+            done
+        else
+            if [ ! -d $mdev_base ]; then
+                exit 0
+            fi
+
+            for mdev in $(find $mdev_base/ -maxdepth 1 -mindepth 1 -type l); do
+                uuid=$(basename $mdev)
+                parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+                type=$(basename $(readlink -f $mdev/mdev_type))
+
+                echo -n "$uuid $parent $type"
+
+                if [ -f $persist_base/$parent/$uuid ]; then
+                    read_config $persist_base/$parent/$uuid
+                    if [ -n "${config[mdev_type]}" ] && [ ${config[mdev_type]} == $type ]; then
+                        echo -n " (defined)"
+                    fi
+                    unset config[mdev_type]
+                fi
+
+                echo
+
+            done
+        fi
+        ;;
+esac

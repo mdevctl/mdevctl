@@ -3,14 +3,11 @@ mdevctl is a mediated device management utility for Linux
 Description
 -----------
 
-mdevctl is a tool for creating/removing, starting/stopping, listing,
-and managing persistence of devices created within the mediated device
-framework.  mdevctl integrates with udev and systemd such that all
-mediated devices are automatically recorded for persistence and may
-be started and stopped via systemd services.
-
-This project is early in development, man pages and spec files are
-intended, but don't exist yet.  Contribute!
+mdevctl is a utility for managing and persisting devices in the
+mediated device device framework of the Linux kernel.  Mediated
+devices are sub-devices of a parent device (ex. a vGPU) which
+can be dynamically created and potentially used by drivers like
+vfio-mdev for assignment to virtual machines.
 
 License
 -------
@@ -27,70 +24,121 @@ Installation
 
 Architecture
 ------------
-mdevctl inserts udev rules to trigger when a devices is added on the
-mdev subsystem.  The device is recorded in a persistent file under
-/etc/mdevctl.d/.  Later, if a rule triggers indicating a device was
-added for which we have persistent mdev information stored, mdevctl
-provides information to have systemd start services invoking those
-persistent mdev devices.
+mdevctl stores defined mediated devices in /etc/mdevctl.d/ with
+directories matching the parent device name and config files named
+by the UUID of the mdev device itself.  The format is a simple
+key=value pair where currently defined values include
 
-The mdevctl scripts are split between libexec and sbin, the latter is
-intended for user consumption while the former is invoked by udev,
-systemd, or the sbin script.  This allows consistency in active mdevs
-being managed through systemd whether invoked from the command line
-or udev events.
+start=auto|manual
+mdev_type=$VENDOR_TYPE
+
+When a known parent device add udev event occurs (or non-yet-upstream
+change events with MDEV_STATE values), mdevctl is called by a udev
+rule to create defined devices with start=auto configured.  The add
+and remove uevents for these devices are also handled by udev rules
+to integrate optional systemd support, allowing devices to be managed
+either through systemd or via mdevctl.
+
+mdevctl defines three classes of commands, those that manage device
+config files, those that manage the device itself, and a listing
+command for showing defined, active, or potential mdev devices.
+
+Starting with the latter, mdevctl is able to manage mdev devices
+created either with mdevctl or externally, such as through direct
+sysfs interactions.  Either method will generate the systemd service
+supported noted above.  Likewise, when generating a list of currently
+active mdev devices via the 'list' command, all mdevs are included.
+When provided with the '--defined' option, the list command will show
+mdev device configs defined on the system, regardless of whether they
+are currently active.  The '--types' list option provides details of
+the mdev types supported on the system, including the number of
+instances of each that may be created, the API exposed for each, as
+well as vendor provided name and description as available.
+
+Mediated device definitions can be created with the 'define' command,
+which not only accepts a fully specified configuration via options,
+but can also create a config for a currently running mdev.  Thus a
+transient device created either through mdevctl or sysfs can be
+promoted to a defined device.  The 'undefine' command simply removes
+the config definition without modifying the running device, while
+the 'modify' command allows device config to be modified.  Config
+modifications to a running device to not take effect until the device
+is stopped and restarted.
+
+This leads to the final class of commands, which provides the 'start'
+and 'stop' functionality.  The start command can operate either on
+a previously defined mdev or the mdev can be fully specified via
+options to create a transient device, ie. a running device with no
+persistence.
 
 Usage
 -----
 
-List all possible mdev types supported in the system:
+List running mdev devices:
 
-# mdevctl list-all
+# mdevctl list
+85006552-1b4b-45ef-ad62-de05be9171df 0000:00:02.0 i915-GVTg_V4_4
+83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 (defined)
+
+List defined mdev devices:
+
+# mdevctl list -d
+83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 auto
+b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
+5cf14a12-a437-4c82-a13f-70e945782d7b 0000:00:02.0 i915-GVTg_V4_4 manual
+
+List mdev types supported on the host system:
+
+# mdevctl list -t
 0000:00:02.0
   i915-GVTg_V4_2
-    Available instances: 2
-    Device API: vfio-pci
-    Description: low_gm_size: 256MB high_gm_size: 1024MB fence: 4 resolution: 1920x1200 weight: 8
-  i915-GVTg_V4_1
     Available instances: 1
     Device API: vfio-pci
-    Description: low_gm_size: 512MB high_gm_size: 2048MB fence: 4 resolution: 1920x1200 weight: 16
+    Description: low_gm_size: 256MB high_gm_size: 1024MB fence: 4 resolution: 1920x1200 weight: 8 
+  i915-GVTg_V4_1
+    Available instances: 0
+    Device API: vfio-pci
+    Description: low_gm_size: 512MB high_gm_size: 2048MB fence: 4 resolution: 1920x1200 weight: 16 
   i915-GVTg_V4_8
-    Available instances: 7
+    Available instances: 4
     Device API: vfio-pci
-    Description: low_gm_size: 64MB high_gm_size: 384MB fence: 4 resolution: 1024x768 weight: 2
+    Description: low_gm_size: 64MB high_gm_size: 384MB fence: 4 resolution: 1024x768 weight: 2 
   i915-GVTg_V4_4
-    Available instances: 5
+    Available instances: 3
     Device API: vfio-pci
-    Description: low_gm_size: 128MB high_gm_size: 512MB fence: 4 resolution: 1920x1200 weight: 4
+    Description: low_gm_size: 128MB high_gm_size: 512MB fence: 4 resolution: 1920x1200 weight: 4 
 
-Create an mdev device:
+Modify a defined device from automatic start to manual:
+
+# mdevctl modify --uuid 83c32df7-d52e-4ec1-9668-1f3c7e4df107 --manual
+# mdevctl list -d
+83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 manual
+b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
+5cf14a12-a437-4c82-a13f-70e945782d7b 0000:00:02.0 i915-GVTg_V4_4 manual
+
+Stop a running mdev device:
+
+# mdevctl stop -u 83c32df7-d52e-4ec1-9668-1f3c7e4df107
+
+Start an mdev device that is not defined
 
 # uuidgen
-ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847
-# mdevctl create-mdev ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847 0000:00:02.0 i915-GVTg_V4_8
+6eba5b41-176e-40db-b93e-7f18e04e0b93
+# mdevctl start -u 6eba5b41-176e-40db-b93e-7f18e04e0b93 -p 0000:00:02.0 --type i915-GVTg_V4_1
+# mdevctl list
+85006552-1b4b-45ef-ad62-de05be9171df 0000:00:02.0 i915-GVTg_V4_4
+6eba5b41-176e-40db-b93e-7f18e04e0b93 0000:00:02.0 i915-GVTg_V4_1
 
-List active mdev devices:
+Promote the new created mdev to a defined device:
 
-# mdevctl list-mdevs
-ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847 0000:00:02.0 i915-GVTg_V4_8
+# mdevctl define --uuid 6eba5b41-176e-40db-b93e-7f18e04e0b93
+# mdevctl list -d
+83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 manual
+6eba5b41-176e-40db-b93e-7f18e04e0b93 0000:00:02.0 i915-GVTg_V4_1 manual
+b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
+5cf14a12-a437-4c82-a13f-70e945782d7b 0000:00:02.0 i915-GVTg_V4_4 manual
 
-Stop an mdev device (remove it, but it remains persistent):
-
-# mdevctl stop-mdev ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847
-
-Start and mdev device we already know about:
-
-# mdevctl start-mdev ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847
-
-List saved mdev devices:
-
-# mdevctl list-saved
-ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847 0000:00:02.0 i915-GVTg_V4_8
-
-Remove an mdev, stopping it if active:
-
-# mdevctl remove-mdev ad8a4ad1-32cd-4cd4-8ab1-80a0e382b847
+See 'mdevctl --help' for more
 
 TODO
 ----
