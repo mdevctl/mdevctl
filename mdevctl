@@ -32,7 +32,7 @@ get_systemd_name() {
     uuid=${1}
     parent=${2}
 
-    name="$(readlink -f $parent_base/$parent | sed -e 's/^\///')/$uuid"
+    name="$(realpath $parent_base/$parent | sed -e 's/^\///')/$uuid"
     echo $(systemd-escape $name)
 }
 
@@ -55,13 +55,13 @@ create_mdev() {
     fi
 
     if [ -L $mdev_base/$uuid ]; then
-        cur_parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+        cur_parent=$(basename $(realpath $mdev_base/$uuid | sed -s "s/\/$uuid//"))
         if [ $? -ne 0 ] || [ $cur_parent != $parent ]; then
             echo "Device exists under different parent" >&2
             return 1
         fi
 
-        cur_type=$(basename $(readlink -f $mdev_base/$uuid/mdev_type))
+        cur_type=$(basename $(realpath $mdev_base/$uuid/mdev_type))
         if [ $? -ne 0 ] || [ $cur_type != $type ]; then
             echo "Device exists with different type" >&2
             return 1
@@ -225,7 +225,7 @@ case ${1} in
             exit 1
         fi
 
-        parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+        parent=$(basename $(realpath $mdev_base/$uuid | sed -s "s/\/$uuid//"))
 
         name=$(get_systemd_name $uuid $parent)
         if [ -z "$name" ]; then
@@ -385,8 +385,8 @@ case $cmd in
                 usage
             fi
 
-            parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
-            type=$(basename $(readlink -f $mdev_base/$uuid/mdev_type))
+            parent=$(basename $(realpath $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+            type=$(basename $(realpath $mdev_base/$uuid/mdev_type))
         fi
 
         if [ -e $persist_base/$parent/$uuid ]; then
@@ -557,8 +557,8 @@ case $cmd in
 
             for mdev in $(find $mdev_base/ -maxdepth 1 -mindepth 1 -type l); do
                 uuid=$(basename $mdev)
-                parent=$(basename $(readlink -f $mdev_base/$uuid | sed -s "s/\/$uuid//"))
-                type=$(basename $(readlink -f $mdev/mdev_type))
+                parent=$(basename $(realpath $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+                type=$(basename $(realpath $mdev/mdev_type))
 
                 echo -n "$uuid $parent $type"
 
