@@ -26,7 +26,7 @@ read_config() {
     fi
 }
 
-# mdev devices are created under the parent, get the absolute path of the parent, strip the
+# get the absolute path in sysfs of the parent device for the mdev, strip the
 # leading slash, append the uuid, then systemd-escape it
 get_systemd_name() {
     uuid=${1}
@@ -167,9 +167,10 @@ fi
 
 case ${1} in
     #
-    # Internal commands, these are expected to be called from udev or systemd and
-    # therefore do not offer the convenience of getopt processing (typically one
-    # arg after the command) and are not listed in the usage text
+    # Internal commands, these are expected to be called from udev or systemd
+    # and therefore do not offer the convenience of getopt processing
+    # (they typically take one arg after the command) and are not listed in
+    # the usage text
     #
     start-systemd-mdev)
         if [ $# -ne 2 ]; then
