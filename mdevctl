@@ -166,13 +166,28 @@ remove_mdev() {
     return 0
 }
 
+# Get a UUID that's not locally defined or running
+unique_uuid() {
+    count=1
+    while [ $count -ne 0 ]; do
+        uuid=$(uuidgen)
+        count=$(find $persist_base -name $uuid -type f | wc -l)
+        if [ $count -eq 0 ] && [ -L $mdev_base/$uuid ]; then
+            count=1
+        fi
+    done
+
+    echo $uuid
+}
+
 usage() {
     cat >&2 <<EOF
 Usage: $(basename $0) {COMMAND} [options...]
 
 Available commands:
 define		Define a config for an mdev device.  Options:
-	<-u|--uuid=UUID> [<-p|--parent=PARENT> <-t|--type=TYPE>] [-a|--auto]
+	<-u|--uuid=UUID> [-a|--auto]
+	[-u|--uuid=UUID] <-p|--parent=PARENT> <-t|--type=TYPE> [-a|--auto]
 		If the device specified by the UUID currently exists, parent
 		and type may be omitted to use the existing values. The auto
 		option marks the device to start on parent availability.
@@ -191,13 +206,16 @@ modify		Modify the config for a defined mdev device.  Options:
 		mdev type and startup mode can be modified.  Running devices
 		are unaffected by this command.
 start		Start an mdev device.  Options:
-	<-u|--uuid=UUID> [-p|--parent=PARENT] [-t|--type=TYPE]
+	<-u|--uuid=UUID> [-p|--parent=PARENT]
+	[-u|--uuid=UUID] <-p|--parent=PARENT> <-t|--type=TYPE>
 		If the UUID is previously defined and unique, the UUID is
 		sufficient to start the device (UUIDs may not collide between
 		running devices).  If a UUID is used in multiple defined
 		configs, the parent device is necessary to identify the config.
-		Specifying UUID, PARENT, and TYPE allows devices to be started
-		regardless of a previously defined config (ie. transient mdevs).
+		When fully specified with PARENT and TYPE, the device is fully
+		specified and will be started based only on these parameters.
+		The UUID is optional in this case, if not provided a UUID is
+		generated and returned as output.
 stop		Stop an mdev device.  Options:
 	<-u|--uuid=UUID>
 list		List mdev devices.  Options:
@@ -429,22 +447,27 @@ fi
 
 case $cmd in
     define)
-        if [ -z "$uuid" ]; then
-            usage
+        if [ -n "$uuid" ]; then
+            if [ -z "$parent" ]; then
+                if [ ! -L $mdev_base/$uuid ] || [ -n "$type" ]; then
+                    usage
+                fi
+
+                parent=$(basename $(realpath $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+                type=$(basename $(realpath $mdev_base/$uuid/mdev_type))
+            fi
+
+            if [ -e $persist_base/$parent/$uuid ]; then
+                echo "Device $uuid on $parent already defined, try modify?" >&2
+                exit 1
+            fi
+        else
+            uuid=$(unique_uuid)
+            print_uuid="echo $uuid"
         fi
 
         if [ -z "$parent" ]; then
-            if [ ! -L $mdev_base/$uuid ] || [ -n "$type" ]; then
-                usage
-            fi
-
-            parent=$(basename $(realpath $mdev_base/$uuid | sed -s "s/\/$uuid//"))
-            type=$(basename $(realpath $mdev_base/$uuid/mdev_type))
-        fi
-
-        if [ -e $persist_base/$parent/$uuid ]; then
-            echo "Device $uuid on $parent already defined, try modify?" >&2
-            exit 1
+            usage
         fi
 
         if [ -z "$type" ]; then
@@ -463,6 +486,9 @@ case $cmd in
         set_key "mdev_type" "$type"
         set_key "start" "$start"
         write_config $persist_base/$parent/$uuid
+        if [ $? -eq 0 ]; then
+            $print_uuid
+        fi
         ;;
     undefine)
         if [ -z "$uuid" ]; then
@@ -528,40 +554,64 @@ case $cmd in
         write_config $file
         ;;
     start)
-        if [ -z "$uuid" ]; then
-            usage
-        fi
-
         set -o errexit
 
-        if [ -z "$type" ] && [ -n "$parent" ]; then
+        # We don't implement a placement policy
+        if [ -n "$type" ] && [ -z "$parent" ]; then
             usage
         fi
 
-        if [ -z "$parent" ]; then
-            if [ -n "$type" ]; then
-                usage
-            fi
-
+        # The device is not fully specified without TYPE, we must find
+        # a config file, with optional PARENT for disambiguation
+        if [ -z "$type" ] && [ -n "$uuid" ]; then
             count=$(find $persist_base -name $uuid -type f | wc -l)
             if [ $count -eq 0 ]; then
                 echo "Config for $uuid does not exist, define it first?" >&2
                 exit 1
             elif [ $count -gt 1 ]; then
-                echo "Multiple configs found for $uuid, specify a parent" >&2
-                exit 1
+                if [ -z "$parent" ] || [ ! -e $persist_base/$parent/$uuid ]; then
+                    echo "Multiple configs found for $uuid, specify a parent" >&2
+                    exit 1
+                fi
+                file=$persist_base/$parent/$uuid
+            else
+                file=$(find $persist_base -name $uuid -type f)
+                if [ -n "$parent" ]; then
+                    cur_parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
+                    if [ "$cur_parent" != "$parent" ]; then
+                        echo "Config for $parent/$uuid does not exist, define it first?" >&2
+                        exit 1
+                    fi
+                fi
             fi
-            file=$(find $persist_base -name $uuid -type f)
+
             read_config $file
             if [ $? -ne 0 ]; then
                 echo "Config file $file invalid" >&2
                 exit 1
             fi
-            parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
+
+            if [ -z "$parent" ]; then
+                parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
+            fi
+
             type=$(get_key "mdev_type")
         fi
 
+        if [ -z "$uuid" ]; then
+            # Device must be full specified otherwise for generated UUID
+            if [ -z "$parent" ] || [ -z "$type" ]; then
+                echo "Device is insufficiently specified" >&2
+                usage
+            fi
+            uuid=$(unique_uuid)
+            print_uuid="echo $uuid"
+        fi
+
         create_mdev $uuid $parent $type
+        if [ $? -eq 0 ]; then
+            $print_uuid
+        fi
         ;;
     stop)
         if [ -z "$uuid" ]; then
@@ -590,7 +640,20 @@ case $cmd in
                     type=$(get_key "mdev_type")
                     start=$(get_key "start");
 
-                    echo "$uuid $parent $type $start"
+                    echo -n "$uuid $parent $type $start"
+
+                    if [ -L $mdev_base/$uuid ]; then
+                        cur_parent=$(basename $(realpath $mdev_base/$uuid | sed -s "s/\/$uuid//"))
+                        if [ "$cur_parent" == "$parent" ]; then
+                            cur_type=$(basename $(realpath $mdev_base/$uuid/mdev_type))
+                            if [ "$cur_type" == "$type" ]; then
+                                echo -n " (active)"
+                            fi
+                        fi
+                    fi
+
+                    echo
+
                 done
             done
         elif [ -n "$types" ]; then
