@@ -12,12 +12,7 @@ if [ $? -ne 4 ]; then
 fi
 
 config={}
-
-del_key() {
-    key=${1}
-
-    config=$(echo $config | jq -c -M --arg key "$key" 'del(."$key")')
-}
+attrs=[]
 
 jsonify() {
     if [ $(echo ${1} | awk -F "," '{print NF-1}') -eq 0 ]; then
@@ -28,16 +23,22 @@ jsonify() {
    fi
 }
 
-set_key() {
+del_config_key() {
+    key=${1}
+
+    config=$(echo $config | jq -c -M --arg key "$key" 'del(."$key")')
+}
+
+set_config_key() {
     key=$(jsonify ${1})
     value=$(jsonify ${2})
 
-    del_key $key
+    del_config_key $key
 
     config=$(echo $config | jq -c -M --argjson obj "{$key:$value}" '. + $obj')
 }
 
-has_key() {
+has_config_key() {
     key=${1}
 
     if [ $(echo $config | jq -M --arg key "$key" 'has($key)') == "true" ]; then
@@ -47,7 +48,7 @@ has_key() {
     fi
 }
 
-get_key() {
+get_config_key() {
     key=${1}
 
     type=$(echo $config | jq -r -M --arg key "$key" '.[$key] | type')
@@ -58,14 +59,83 @@ get_key() {
     fi
 }
 
+get_attr_length() {
+    echo $attrs | jq -M '. | length'
+}
+
+add_attr_index() {
+    key=$(jsonify ${1})
+    value=$(jsonify ${2})
+
+    if [ -z "${3}" ]; then
+        index=$(get_attr_length)
+    else
+        index=${3}
+    fi
+
+    attrs=$(echo $attrs | jq -c -M --argjson obj "{$key:$value}" \
+            --argjson i $index '.[0:$i] + [$obj] + .[$i:]')
+}
+
+del_attr_index() {
+    if [ -z "${1}" ]; then
+        index=$(( $(get_attr_length) - 1 ))
+    else
+        index=${1}
+    fi
+
+    attrs=$(echo $attrs | jq -c -M --argjson i $index '.[0:$i] + .[$i+1:]')
+}
+
+get_attr_index_key() {
+    if [ -z "${1}" ]; then
+        index=0
+    else
+        index=${1}
+    fi
+
+    echo $attrs | jq -r -M --argjson i $index '.[$i] | keys | .[]'
+}
+
+get_attr_index_value() {
+    if [ -z "${1}" ]; then
+        index=0
+    else
+        index=${1}
+    fi
+
+    type=$(echo $attrs | jq -r -M --argjson i $index '.[$i] | .[] | type')
+    if [ $type == "string" ]; then
+        echo $attrs | jq -r -M --argjson i $index '.[$i] | .[]'
+    elif [ $type == "array" ]; then
+        echo $attrs | jq -r -M --argjson i $index '.[$i] | .[][]'
+    fi
+}
+
+get_attr_index_raw() {
+    if [ -z "${1}" ]; then
+        index=0
+    else
+        index=${1}
+    fi
+
+    echo $attrs | jq -c -M --argjson i $index '.[$i]'
+}
+
 read_config() {
     file=${1}
 
     config=$(jq -c -M '.' $file)
-    if [ $? -eq 0 ] && has_key "mdev_type" && has_key "start"; then
+    if [ $? -eq 0 ] && has_config_key "mdev_type" && has_config_key "start"; then
+        attrs=$(echo $config | jq -c -M '.attrs')
+        if [ "$attrs" == null ]; then
+            attrs=[]
+        fi
+        config=$(echo $config | jq -c -M 'del(.attrs)')
         return 0
     else
         config={}
+        attrs=[]
         return 1
     fi
 }
@@ -73,7 +143,8 @@ read_config() {
 write_config() {
     file=${1}
 
-    echo $config | jq -M '.' > $file
+    echo $config | jq -M --argjson attrs "{\"attrs\":$attrs}" \
+                                                  '. + $attrs' > $file
 }
 
 # get the absolute path in sysfs of the parent device for the mdev, strip the
@@ -199,12 +270,20 @@ undefine	Undefine, or remove a config for an mdev device.  Options:
 		by this command.
 modify		Modify the config for a defined mdev device.  Options:
 	<-u|--uuid=UUID> [-p|--parent=PARENT] [-t|--type=TYPE] \\
-	[[-a|--auto]|[-m|--manual]]
+	[--addattr=ATTRIBUTE] [--delattr] [--index=INDEX] [--value=VALUE] \\
+	[-a|--auto|-m|--manual]
 		The parent option further identifies a UUID if it is not
 		unique, the parent for a device cannot be modified via this
-		command, undefine and re-define should be used instead.  The
-		mdev type and startup mode can be modified.  Running devices
-		are unaffected by this command.
+		command, undefine and re-define should be used instead.  An
+		ATTRIBUTE can be added or removed, which correlates to a
+		sysfs attribute under the created device.  Unless an INDEX
+		value is provided, operations are performed at the end of
+		the attribute list.  VALUE may be specified as singly or
+		seprated by commas.  Upon device start, mdevctl will through
+		each value of each attribute in order, writing the value into
+		the corresponding sysfs attribute for the device.  The startup
+		mode of the device can also be selected, auto or manual.
+		Running devices are unaffected by this command.
 start		Start an mdev device.  Options:
 	<-u|--uuid=UUID> [-p|--parent=PARENT]
 	[-u|--uuid=UUID] <-p|--parent=PARENT> <-t|--type=TYPE>
@@ -255,7 +334,7 @@ case ${1} in
                 echo "Invalid config for device $uuid" >&2
                 exit 1
             fi
-            type=$(get_key "mdev_type")
+            type=$(get_config_key "mdev_type")
         else
             echo "Device $uuid is not defined, cannot start" >&2
             exit 1
@@ -323,10 +402,10 @@ case ${1} in
                     continue
                 fi
 
-                if [ $(get_key "start") == "auto" ]; then
-                    create_mdev $uuid $parent $(get_key "mdev_type")
+                if [ $(get_config_key "start") == "auto" ]; then
+                    create_mdev $uuid $parent $(get_config_key "mdev_type")
                     if [ $? -ne 0 ]; then
-                        echo "Failed to create mdev $uuid, type $(get_key "mdev_type") on $parent" >&2
+                        echo "Failed to create mdev $uuid, type $(get_config_key "mdev_type") on $parent" >&2
                         # continue...
                     fi
                 fi
@@ -355,7 +434,7 @@ case ${1} in
     modify)
         cmd=$1
         OPTIONS=u:p:t:am
-        LONGOPTS=uuid:,parent:,type:,auto,manual
+        LONGOPTS=uuid:,parent:,type:,auto,manual,addattr:,delattr,index:,value:
         shift
         ;;
     start)
@@ -408,6 +487,22 @@ while true; do
                 type="$2"
                 shift 2
             fi
+            ;;
+        --addattr)
+            addattr="$2"
+            shift 2
+            ;;
+        --index)
+            index="$2"
+            shift 2
+            ;;
+        --value)
+            value="$2"
+            shift 2
+            ;;
+        --delattr)
+            delattr=y
+            shift 1
             ;;
         --types)
             types=y
@@ -483,8 +578,8 @@ case $cmd in
         set -o errexit
 
         mkdir -p $persist_base/$parent
-        set_key "mdev_type" "$type"
-        set_key "start" "$start"
+        set_config_key "mdev_type" "$type"
+        set_config_key "start" "$start"
         write_config $persist_base/$parent/$uuid
         if [ $? -eq 0 ]; then
             $print_uuid
@@ -540,15 +635,50 @@ case $cmd in
         fi
 
         if [ -n "$type" ]; then
-            set_key "mdev_type" "$type"
+            set_config_key "mdev_type" "$type"
         fi
 
         if [ -n "$auto" ]; then
-            set_key "start" "auto"
+            set_config_key "start" "auto"
         fi
 
         if [ -n "$manual" ]; then
-            set_key "start" "manual"
+            set_config_key "start" "manual"
+        fi
+
+        if [ -n "$addattr" ] && [ -n "$delattr" ]; then
+            usage
+        fi
+
+        if [ -n "$addattr" ]; then
+            if [ -n "$index" ]; then
+                if [ "$index" -eq "$index" ] 2>/dev/null; then
+                    :
+                else
+                    echo "Provided index is not a number" >&2
+                    usage
+                fi
+            fi
+
+            if [ -z "$value" ]; then
+                echo "No attribute value provided" >&2
+                usage
+            fi
+
+            add_attr_index $addattr $value $index
+        fi
+
+        if [ -n "$delattr" ]; then
+            if [ -n "$index" ]; then
+                if [ "$index" -eq "$index" ] 2>/dev/null; then
+                    :
+                else
+                    echo "Provided index is not a number" >&2
+                    usage
+                fi
+            fi
+
+            del_attr_index $index
         fi
 
         write_config $file
@@ -595,7 +725,7 @@ case $cmd in
                 parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
             fi
 
-            type=$(get_key "mdev_type")
+            type=$(get_config_key "mdev_type")
         fi
 
         if [ -z "$uuid" ]; then
@@ -610,6 +740,25 @@ case $cmd in
 
         create_mdev $uuid $parent $type
         if [ $? -eq 0 ]; then
+            count=$(( $(get_attr_length) - 1 ))
+            if [ $count -ge 0 ]; then
+                for i in $(seq 0 $count); do
+                    attr=$(get_attr_index_key $i)
+                    if [ ! -w $mdev_base/$uuid/$attr ]; then
+                        echo "Attribute $attr cannot be set" >&2
+                        remove_mdev $uuid
+                        exit 1
+                    fi
+                    for val in $(get_attr_index_value $i); do
+                        echo $val > $mdev_base/$uuid/$attr
+                        if [ $? -ne 0 ]; then
+                            echo "Failed to write $val to attribute $attr" >&2
+                            remove_mdev $uuid
+                            exit 1
+                        fi
+                    done
+                done
+            fi
             $print_uuid
         fi
         ;;
@@ -637,8 +786,8 @@ case $cmd in
                     if [ $? -ne 0 ]; then
                         continue
                     fi
-                    type=$(get_key "mdev_type")
-                    start=$(get_key "start");
+                    type=$(get_config_key "mdev_type")
+                    start=$(get_config_key "start");
 
                     echo -n "$uuid $parent $type $start"
 
@@ -654,6 +803,14 @@ case $cmd in
 
                     echo
 
+                    count=$(( $(get_attr_length) - 1 ))
+                    if [ $count -ge 0 ]; then
+                        echo -n "  Attrs: "
+                        for i in $(seq 0 $count); do
+                            echo -n "$(get_attr_index_raw $i) "
+                        done
+                        echo
+                    fi
                 done
             done
         elif [ -n "$types" ]; then
@@ -690,7 +847,7 @@ case $cmd in
 
                 if [ -f $persist_base/$parent/$uuid ]; then
                     read_config $persist_base/$parent/$uuid
-                    if [ $? -eq 0 ] && [ $(get_key "mdev_type") == "$type" ]; then
+                    if [ $? -eq 0 ] && [ $(get_config_key "mdev_type") == "$type" ]; then
                         echo -n " (defined)"
                     fi
                 fi
