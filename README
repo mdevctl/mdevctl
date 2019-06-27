@@ -20,7 +20,8 @@ https://github.com/mdevctl/mdevctl
 
 Installation
 ------------
-'make install' for now, packaging coming.
+On RPM based systems, 'make rpm' then install the resulting package.
+Otherwise, 'make install'
 
 Architecture
 ------------
