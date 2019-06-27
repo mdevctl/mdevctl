@@ -11,19 +11,69 @@ if [ $? -ne 4 ]; then
     exit 1
 fi
 
-declare -A config
+config={}
+
+del_key() {
+    key=${1}
+
+    config=$(echo $config | jq -c -M --arg key "$key" 'del(."$key")')
+}
+
+jsonify() {
+    if [ $(echo ${1} | awk -F "," '{print NF-1}') -eq 0 ]; then
+        echo \"${1}\"
+    else
+        echo [$( echo ${1} | tr ',' '\n' | xargs -i echo \"{}\" | \
+              tr '\n' ',' | sed -e 's/,$//')]
+   fi
+}
+
+set_key() {
+    key=$(jsonify ${1})
+    value=$(jsonify ${2})
+
+    del_key $key
+
+    config=$(echo $config | jq -c -M --argjson obj "{$key:$value}" '. + $obj')
+}
+
+has_key() {
+    key=${1}
+
+    if [ $(echo $config | jq -M --arg key "$key" 'has($key)') == "true" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+get_key() {
+    key=${1}
+
+    type=$(echo $config | jq -r -M --arg key "$key" '.[$key] | type')
+    if [ $type == "string" ]; then
+        echo $config | jq -r -M --arg key "$key" '.[$key]'
+    elif [ $type == "array" ]; then
+        echo $config | jq -r -M --arg key "$key" '.[$key][]'
+    fi
+}
 
 read_config() {
     file=${1}
 
-    if [ -s $file ]; then
-        while read line; do
-            if echo $line | grep -F = &>/dev/null; then
-                varname=$(echo "$line" | cut -d '=' -f 1)
-                config[$varname]=$(echo "$line" | cut -d '=' -f 2-)
-            fi
-        done < $file
+    config=$(jq -c -M '.' $file)
+    if [ $? -eq 0 ] && has_key "mdev_type" && has_key "start"; then
+        return 0
+    else
+        config={}
+        return 1
     fi
+}
+
+write_config() {
+    file=${1}
+
+    echo $config | jq -M '.' > $file
 }
 
 # get the absolute path in sysfs of the parent device for the mdev, strip the
@@ -153,7 +203,7 @@ stop		Stop an mdev device.  Options:
 list		List mdev devices.  Options:
 	[-d|--defined]|[-t|--types]
 		With no options, information about the currently running mdev
-		devices is provided.  Specifing DEFINED lists the configuration
+		devices is provided.  Specifying DEFINED lists the configuration
 		of defined devices, regardless of their running state.
 		Specifying TYPES lists the mdev types provided by the currently
 		registered mdev parent devices on the system.
@@ -183,11 +233,11 @@ case ${1} in
             exit 0 # mdev is already running, done
         elif [ -e $persist_base/$parent/$uuid ]; then
             read_config $persist_base/$parent/$uuid
-            if [ -z ${config[mdev_type]} ]; then
-                echo "Invalid config for device $uuid, no mdev_type defined" >&2
+            if [ $? -ne 0 ]; then
+                echo "Invalid config for device $uuid" >&2
                 exit 1
             fi
-            type=${config[mdev_type]}
+            type=$(get_key "mdev_type")
         else
             echo "Device $uuid is not defined, cannot start" >&2
             exit 1
@@ -251,15 +301,17 @@ case ${1} in
             uuid=$(basename $file)
             if [ -n "$(valid_uuid $uuid)" ]; then
                 read_config $file
-                if [ ${config[start]} == "auto" ] && [ ! -z ${config[mdev_type]} ]; then
-                    create_mdev $uuid $parent ${config[mdev_type]}
+                if [ $? -ne 0 ]; then
+                    continue
+                fi
+
+                if [ $(get_key "start") == "auto" ]; then
+                    create_mdev $uuid $parent $(get_key "mdev_type")
                     if [ $? -ne 0 ]; then
-                        echo "Failed to create mdev $uuid, type ${config[mdev_type]} on $parent" >&2
+                        echo "Failed to create mdev $uuid, type $(get_key "mdev_type") on $parent" >&2
                         # continue...
                     fi
                 fi
-                unset config[start]
-                unset config[mdev_type]
             fi
         done
         exit 0
@@ -377,11 +429,11 @@ fi
 
 case $cmd in
     define)
-        if [ -z $uuid ]; then
+        if [ -z "$uuid" ]; then
             usage
         fi
 
-        if [ -z $parent ]; then
+        if [ -z "$parent" ]; then
             if [ ! -L $mdev_base/$uuid ] || [ -n "$type" ]; then
                 usage
             fi
@@ -395,7 +447,7 @@ case $cmd in
             exit 1
         fi
 
-        if [ -z $type ]; then
+        if [ -z "$type" ]; then
             usage
         fi
 
@@ -408,11 +460,12 @@ case $cmd in
         set -o errexit
 
         mkdir -p $persist_base/$parent
-        echo "mdev_type=$type" > $persist_base/$parent/$uuid
-        echo "start=$start" >> $persist_base/$parent/$uuid
+        set_key "mdev_type" "$type"
+        set_key "start" "$start"
+        write_config $persist_base/$parent/$uuid
         ;;
     undefine)
-        if [ -z $uuid ]; then
+        if [ -z "$uuid" ]; then
             usage
         fi
 
@@ -425,7 +478,7 @@ case $cmd in
         fi
         ;;
     modify)
-        if [ -z $uuid ]; then
+        if [ -z "$uuid" ]; then
             usage
         fi
 
@@ -437,7 +490,7 @@ case $cmd in
         set -o errexit
 
         if [ -n "$parent" ]; then
-            if [ ! -d $persist_base/$parent/$uuid ]; then
+            if [ ! -e $persist_base/$parent/$uuid ]; then
                 echo "Config for $uuid on $parent does not exist, define it first?" >&2
                 exit 1
             fi
@@ -454,26 +507,38 @@ case $cmd in
             file=$(find $persist_base -name $uuid -type f)
         fi
 
+        read_config $file
+        if [ $? -ne 0 ]; then
+            echo "Config file $file invalid" >&2
+            exit 1
+        fi
+
         if [ -n "$type" ]; then
-            sed -i "s/^mdev_type=.*/mdev_type=$type/" $file
+            set_key "mdev_type" "$type"
         fi
 
         if [ -n "$auto" ]; then
-            sed -i "s/^start=.*/start=auto/" $file
+            set_key "start" "auto"
         fi
 
         if [ -n "$manual" ]; then
-            sed -i "s/^start=.*/start=manual/" $file
+            set_key "start" "manual"
         fi
+
+        write_config $file
         ;;
     start)
-        if [ -z $uuid ]; then
+        if [ -z "$uuid" ]; then
             usage
         fi
 
         set -o errexit
 
-        if [ -z $parent ]; then
+        if [ -z "$type" ] && [ -n "$parent" ]; then
+            usage
+        fi
+
+        if [ -z "$parent" ]; then
             if [ -n "$type" ]; then
                 usage
             fi
@@ -488,22 +553,18 @@ case $cmd in
             fi
             file=$(find $persist_base -name $uuid -type f)
             read_config $file
-            parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
-            type=${config[mdev_type]}
-        fi
-
-        if [ -z $type ]; then
-            if [ -z ${config[mdev_type]} ]; then
-                echo "No type specified or available in config for $uuid" >&2
+            if [ $? -ne 0 ]; then
+                echo "Config file $file invalid" >&2
                 exit 1
             fi
-            type=${config[mdev_type]}
+            parent=$(basename $(echo $file | sed -s "s/\/$uuid//"))
+            type=$(get_key "mdev_type")
         fi
 
         create_mdev $uuid $parent $type
         ;;
     stop)
-        if [ -z $uuid ]; then
+        if [ -z "$uuid" ]; then
             usage
         fi
 
@@ -523,10 +584,11 @@ case $cmd in
                     uuid=$(basename $mdev)
                     parent=$(basename $parent)
                     read_config $mdev
-                    type=${config[mdev_type]}
-                    start=${config[start]}
-                    unset config[start]
-                    unset config[mdev_type]
+                    if [ $? -ne 0 ]; then
+                        continue
+                    fi
+                    type=$(get_key "mdev_type")
+                    start=$(get_key "start");
 
                     echo "$uuid $parent $type $start"
                 done
@@ -565,10 +627,9 @@ case $cmd in
 
                 if [ -f $persist_base/$parent/$uuid ]; then
                     read_config $persist_base/$parent/$uuid
-                    if [ -n "${config[mdev_type]}" ] && [ ${config[mdev_type]} == $type ]; then
+                    if [ $? -eq 0 ] && [ $(get_key "mdev_type") == "$type" ]; then
                         echo -n " (defined)"
                     fi
-                    unset config[mdev_type]
                 fi
 
                 echo

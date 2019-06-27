@@ -14,7 +14,7 @@ BuildArch:	noarch
 Source0:	https://github.com/mdevctl/mdevctl/archive/%{name}-%{version}-%{commit}.tar.gz
 
 Requires(post,postun): %{_sbindir}/udevadm
-Requires: coreutils udev
+Requires: coreutils udev jq
 
 %description
 mdevctl is a utility for managing and persisting devices in the
