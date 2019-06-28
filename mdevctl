@@ -805,11 +805,10 @@ case $cmd in
 
                     count=$(( $(get_attr_length) - 1 ))
                     if [ $count -ge 0 ]; then
-                        echo -n "  Attrs: "
+                        echo "  Attrs: "
                         for i in $(seq 0 $count); do
-                            echo -n "$(get_attr_index_raw $i) "
+                            echo "    @{$i}: $(get_attr_index_raw $i)"
                         done
-                        echo
                     fi
                 done
             done
