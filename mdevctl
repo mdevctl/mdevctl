@@ -750,7 +750,7 @@ case $cmd in
                         exit 1
                     fi
                     for val in $(get_attr_index_value $i); do
-                        echo $val > $mdev_base/$uuid/$attr
+                        echo -e $val > $mdev_base/$uuid/$attr
                         if [ $? -ne 0 ]; then
                             echo "Failed to write $val to attribute $attr" >&2
                             remove_mdev $uuid
