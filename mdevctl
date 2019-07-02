@@ -376,10 +376,10 @@ list		List mdev devices.  Options:
 		single parent device.  Specifying DEFINED lists the
 		configuration of defined devices, regardless of their running
 		state.  This may be further reduced by specifying specific
-		UUID or PARENT devices to list.  When redunced to a single
+		UUID or PARENT devices to list.  When reduced to a single
 		listed device, the dumpjson option can be used to print the
 		JSON configuration of the device, for either defined or
-		active devices (active listing may only provided a minimal
+		active devices (active listing may only provide a minimal
 		configuration, ie. the base device type).
 EOF
     exit 1

@@ -27,18 +27,23 @@ Architecture
 ------------
 mdevctl stores defined mediated devices in /etc/mdevctl.d/ with
 directories matching the parent device name and config files named
-by the UUID of the mdev device itself.  The format is a simple
-key=value pair where currently defined values include
+by the UUID of the mdev device itself.  The format used is JSON; a
+configuration file for an mdev device looks like follows:
 
-start=auto|manual
-mdev_type=$VENDOR_TYPE
+{
+ "mdev_type": "$VENDOR_TYPE",
+ "start": "auto|manual",
+ "attrs": [
+  ...optional list of device-specific attributes...
+ ]
+}
 
-When a known parent device add udev event occurs (or non-yet-upstream
-change events with MDEV_STATE values), mdevctl is called by a udev
-rule to create defined devices with start=auto configured.  The add
-and remove uevents for these devices are also handled by udev rules
-to integrate optional systemd support, allowing devices to be managed
-either through systemd or via mdevctl.
+When a known parent device add udev event occurs (or, for more recent
+kernels, change events with MDEV_STATE values), mdevctl is called by
+a udev rule to create defined devices with "start": "auto" configured.
+The add and remove uevents for these devices are also handled by udev
+rules to integrate optional systemd support, allowing devices to be
+managed either through systemd or via mdevctl.
 
 mdevctl defines three classes of commands, those that manage device
 config files, those that manage the device itself, and a listing
@@ -139,7 +144,98 @@ Promote the new created mdev to a defined device:
 b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
 5cf14a12-a437-4c82-a13f-70e945782d7b 0000:00:02.0 i915-GVTg_V4_4 manual
 
-See 'mdevctl --help' for more
+Advanced usage (attributes and JSON)
+------------------------------------
+
+mdevctl provides support for specifying additional configuration via
+device-specific attributes. It also provides support for inspecting
+and modifying its internal JSON representation of the configuration
+directly.
+
+Example:
+
+# mdevctl list -d
+783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
+
+Add some attributes:
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_adapter --value=5,6
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_domain --value=4,0xab
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_control_domain --value=4,0xab
+# mdevctl list -d
+783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
+  Attrs:
+    @{0}: {"assign_adapter":["5","6"]}
+    @{1}: {"assign_domain":["4","0xab"]}
+    @{2}: {"assign_control_domain":["4","0xab"]}
+
+Dump the JSON configuration:
+# mdevctl list -d -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --dumpjson
+{
+  "mdev_type": "vfio_ap-passthrough",
+  "start": "manual",
+  "attrs": [
+    {
+      "assign_adapter": [
+        "5",
+        "6"
+      ]
+    },
+    {
+      "assign_domain": [
+        "4",
+        "0xab"
+      ]
+    },
+    {
+      "assign_control_domain": [
+        "4",
+        "0xab"
+      ]
+    }
+  ]
+}
+
+Remove an attribute:
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --delattr --index=2
+# mdevctl list -d
+783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
+  Attrs:
+    @{0}: {"assign_adapter":["5","6"]}
+    @{1}: {"assign_domain":["4","0xab"]}
+
+Define an mdev device from a file:
+# cat vfio_ap_device.json
+{
+  "mdev_type": "vfio_ap-passthrough",
+  "start": "manual",
+  "attrs": [
+    {
+      "assign_adapter": [
+        "5"
+      ]
+    },
+    {
+      "assign_domain": [
+        "0x47",
+        "0xff"
+      ]
+    }
+  ]
+}
+# mdevctl define -p matrix --jsonfile vfio_ap_device.json
+e2e73122-cc39-40ee-89eb-b0a47d334cae
+# mdevctl list -d
+783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
+  Attrs:
+    @{0}: {"assign_adapter":["5","6"]}
+    @{1}: {"assign_domain":["4","0xab"]}
+e2e73122-cc39-40ee-89eb-b0a47d334cae matrix vfio_ap-passthrough manual
+  Attrs:
+    @{0}: {"assign_adapter":["5"]}
+    @{1}: {"assign_domain":["0x47","0xff"]}
+
+
+See 'mdevctl --help' for more information.
 
 TODO
 ----
