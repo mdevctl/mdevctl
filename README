@@ -158,16 +158,21 @@ Example:
 783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
 
 Add some attributes:
-# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_adapter --value=5,6
-# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_domain --value=4,0xab
-# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_control_domain --value=4,0xab
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_adapter --value=5
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_adapter --value=6
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_domain --value=0xab
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_control_domain --value=0xab
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_domain --value=4
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_control_domain --value=4
 # mdevctl list -d
 783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
   Attrs:
-    @{0}: {"assign_adapter":["5","6"]}
-    @{1}: {"assign_domain":["4","0xab"]}
-    @{2}: {"assign_control_domain":["4","0xab"]}
-
+    @{0}: {"assign_adapter":"5"}
+    @{1}: {"assign_adapter":"6"}
+    @{2}: {"assign_domain":"0xab"}
+    @{3}: {"assign_control_domain":"0xab"}
+    @{4}: {"assign_domain":"4"}
+    @{5}: {"assign_control_domain":"4"}
 Dump the JSON configuration:
 # mdevctl list -d -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --dumpjson
 {
@@ -175,33 +180,36 @@ Dump the JSON configuration:
   "start": "manual",
   "attrs": [
     {
-      "assign_adapter": [
-        "5",
-        "6"
-      ]
+      "assign_adapter": "5"
     },
     {
-      "assign_domain": [
-        "4",
-        "0xab"
-      ]
+      "assign_adapter": "6"
     },
     {
-      "assign_control_domain": [
-        "4",
-        "0xab"
-      ]
+      "assign_domain": "0xab"
+    },
+    {
+      "assign_control_domain": "0xab"
+    },
+    {
+      "assign_domain": "4"
+    },
+    {
+      "assign_control_domain": "4"
     }
   ]
 }
 
-Remove an attribute:
-# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --delattr --index=2
+Remove some attributes:
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --delattr --index=5
+# mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --delattr --index=4
 # mdevctl list -d
 783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
   Attrs:
-    @{0}: {"assign_adapter":["5","6"]}
-    @{1}: {"assign_domain":["4","0xab"]}
+    @{0}: {"assign_adapter":"5"}
+    @{1}: {"assign_adapter":"6"}
+    @{2}: {"assign_domain":"0xab"}
+    @{3}: {"assign_control_domain":"0xab"}
 
 Define an mdev device from a file:
 # cat vfio_ap_device.json
@@ -210,15 +218,13 @@ Define an mdev device from a file:
   "start": "manual",
   "attrs": [
     {
-      "assign_adapter": [
-        "5"
-      ]
+      "assign_adapter": "5"
     },
     {
-      "assign_domain": [
-        "0x47",
-        "0xff"
-      ]
+      "assign_domain": "0x47"
+    },
+    {
+      "assign_domain": "0xff"
     }
   ]
 }
@@ -227,13 +233,15 @@ e2e73122-cc39-40ee-89eb-b0a47d334cae
 # mdevctl list -d
 783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
   Attrs:
-    @{0}: {"assign_adapter":["5","6"]}
-    @{1}: {"assign_domain":["4","0xab"]}
+    @{0}: {"assign_adapter":"5"}
+    @{1}: {"assign_adapter":"6"}
+    @{2}: {"assign_domain":"0xab"}
+    @{3}: {"assign_control_domain":"0xab"}
 e2e73122-cc39-40ee-89eb-b0a47d334cae matrix vfio_ap-passthrough manual
   Attrs:
-    @{0}: {"assign_adapter":["5"]}
-    @{1}: {"assign_domain":["0x47","0xff"]}
-
+    @{0}: {"assign_adapter":"5"}
+    @{1}: {"assign_domain":"0x47"}
+    @{2}: {"assign_domain":"0xff"}
 
 See 'mdevctl --help' for more information.
 
