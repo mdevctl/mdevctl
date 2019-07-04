@@ -3,6 +3,7 @@ UDEVDIR=$(shell pkg-config --variable=udevdir udev)
 UNITDIR=$(shell pkg-config --variable=systemdsystemunitdir systemd)
 SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
+MANDIR=$(PREFIX)/share/man
 NAME=mdevctl
 VERSION=0.$(shell git rev-list --count HEAD)
 COMMIT=$(shell git rev-list --max-count 1 HEAD)
@@ -34,6 +35,8 @@ install:
 	install -m 644 mdev@.service $(DESTDIR)$(UNITDIR)/
 	mkdir -p $(DESTDIR)$(SBINDIR)
 	install -m 755 mdevctl $(DESTDIR)$(SBINDIR)/
+	mkdir -p $(DESTDIR)$(MANDIR)/man8
+	install -m 644 mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
 
 clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz
