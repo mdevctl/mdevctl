@@ -36,6 +36,7 @@ vfio-mdev for assignment to virtual machines.
 %{_udevrulesdir}/60-mdevctl.rules
 %{_unitdir}/mdev@.service
 %dir %{_sysconfdir}/mdevctl.d
+%{_mandir}/man8/mdevctl.8*
 
 %post
 %udev_rules_update

@@ -9,7 +9,7 @@ VERSION=0.$(shell git rev-list --count HEAD)
 COMMIT=$(shell git rev-list --max-count 1 HEAD)
 NVFMT=$(NAME)-$(VERSION)-$(COMMIT)
 
-files: mdevctl mdev@.service 60-mdevctl.rules \
+files: mdevctl mdev@.service 60-mdevctl.rules mdevctl.8 \
 	Makefile COPYING README mdevctl.spec.in
 
 archive: files tag mdevctl.spec
