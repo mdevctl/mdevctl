@@ -1,100 +1,209 @@
-mdevctl is a mediated device management utility for Linux
+.\" mdevctl - Mediated device management utility
+.TH mdevctl 8
+.SH NAME
+mdevctl - Mediated device management utility
+.SH SYNOPSIS
+\fBmdevctl\fR {COMMAND} [OPTIONS...]\fR
 
-Description
------------
+.SH DESCRIPTION
 
-mdevctl is a utility for managing and persisting devices in the
+\fBmdevctl\fR is a utility for managing and persisting devices in the
 mediated device device framework of the Linux kernel.  Mediated
 devices are sub-devices of a parent device (ex. a vGPU) which
 can be dynamically created and potentially used by drivers like
 vfio-mdev for assignment to virtual machines.
 
-License
--------
-Licensed under the GNU Lesser General Public License aka LGPL v2.1.
-See COPYING for details.
+.SH OPTIONS
 
-Source repository
------------------
-https://github.com/mdevctl/mdevctl
+.PP
+The following options are understood:
 
-Installation
-------------
-On RPM based systems, 'make rpm' then install the resulting package.
-Otherwise, 'make install'
+.PP
+\fB--addattr=ATTRIBUTE\fR
+.RS 4
+Add an attribute \fIATTRIBUTE\fR. Valid for the \fBmodify\fR
+command.
+.RE
 
-Architecture
-------------
-mdevctl stores defined mediated devices in /etc/mdevctl.d/ with
-directories matching the parent device name and config files named
-by the UUID of the mdev device itself.  The format used is JSON; a
-configuration file for an mdev device looks like follows:
+.PP
+\fB-a|--auto\fR
+.RS 4
+Automatically start the device on parent availability. Valid for
+\fBdefine\fR and \fBmodify\fR commands.
+.RE
 
-{
- "mdev_type": "$VENDOR_TYPE",
- "start": "auto|manual",
- "attrs": [
-  ...optional list of device-specific attributes...
- ]
-}
+.PP
+\fB-d|--defined\fR
+.RS 4
+List all defined devices, even if not active. Valid for the \fBlist\fR
+command.
+.RE
 
-When a known parent device add udev event occurs (or, for more recent
-kernels, change events with MDEV_STATE values), mdevctl is called by
-a udev rule to create defined devices with "start": "auto" configured.
-The add and remove uevents for these devices are also handled by udev
-rules to integrate optional systemd support, allowing devices to be
-managed either through systemd or via mdevctl.
+.PP
+\fB--delattr\fR
+.RS 4
+Delete an attribute entry. Valid for the \fBmodify\fR command.
+.RE
 
-mdevctl defines three classes of commands, those that manage device
-config files, those that manage the device itself, and a listing
-command for showing defined, active, or potential mdev devices.
+.PP
+\fB--dumpjson\fR
+.RS 4
+Dump the configuration for a device in JSON format. Valid for the
+\fBlist\fR command.
+.RE
 
-Starting with the latter, mdevctl is able to manage mdev devices
-created either with mdevctl or externally, such as through direct
-sysfs interactions.  Either method will generate the systemd service
-supported noted above.  Likewise, when generating a list of currently
-active mdev devices via the 'list' command, all mdevs are included.
-When provided with the '--defined' option, the list command will show
-mdev device configs defined on the system, regardless of whether they
-are currently active.  The '--types' list option provides details of
-the mdev types supported on the system, including the number of
-instances of each that may be created, the API exposed for each, as
-well as vendor provided name and description as available.
+.PP
+\fB--index=INDEX\fR
+.RS 4
+Act on the attribute \fIINDEX\fR. Valid for the \fBmodify\fR command.
+.RE
 
-Mediated device definitions can be created with the 'define' command,
-which not only accepts a fully specified configuration via options,
-but can also create a config for a currently running mdev.  Thus a
-transient device created either through mdevctl or sysfs can be
-promoted to a defined device.  The 'undefine' command simply removes
-the config definition without modifying the running device, while
-the 'modify' command allows device config to be modified.  Config
-modifications to a running device to not take effect until the device
-is stopped and restarted.
+.PP
+\fB--jsonfile=FILE\fR
+.RS 4
+Read the configuration for a device from a JSON file \fIFILE\fR.
+Valid for the \fBdefine\fR and \fBstart\fR commands.
+.RE
 
-This leads to the final class of commands, which provides the 'start'
-and 'stop' functionality.  The start command can operate either on
-a previously defined mdev or the mdev can be fully specified via
-options to create a transient device, ie. a running device with no
-persistence.
+.PP
+\fB-m|--manual\fR
+.RS 4
+Do not start a device automatically on parent availability. Valid
+for the \fBmodify\fR command.
+.RE
 
-Usage
------
+.PP
+\fB-p|--parent=PARENT\fR
+.RS 4
+Specify or identify the device by its parent device.
+.RE
 
+.PP
+\fB-t|--type=TYPE\fR
+.RS 4
+Specify or identify the device by its type.
+.RE
+
+.PP
+\fB-t|--types\fR
+.RS 4
+List the mdev types. Valid for the \fBlist\fR command.
+.RE
+
+.PP
+\fB-u|--uuid=UUID\fR
+.RS 4
+Specify or identify the device by its UUID.
+.RE
+
+.PP
+\fB--value=VALUE\fR
+.RS 4
+Set an attribute to \fIVALUE\fR, in the format accepted by the attribute.
+Valid for the \fBmodify\fR command.
+.RE
+
+.SH COMMANDS
+
+.PP
+The following commands are understood:
+
+.PP
+\fBdefine\fR \fIDEVICESPEC\fR
+.RS 4
+Define a config for an mdev device, identified either by an UUID (if
+the device already exists), or by the parent device and either the type
+or a JSON configuration file, and, optionally, the UUID. If no UUID is
+specified, one is autogenerated and printed. If no file is used,
+\fI-a|--auto\fR may be used to specify that the device should be started
+automatically.
+.RE
+
+.PP
+\fBlist\fR
+.RS 4
+List mdev devices. With no options, currently running devices are listed.
+With \fB-d|--defined\fR, deviced devices are listed.
+Can be restricted to list only devices for a given parent or UUID. If
+restricted to a single device, the device configuration in JSON format
+can be dumped via \fB--dumpjson\fR.
+With the \fB-t|--types\fR option, the mdev types provided by the currently
+registered parent devices are listed. Can be restricted to a single
+parent device.
+.RE
+
+.PP
+\fBmodify\fR \fIDEVICESPEC\fR
+.RS 4
+Modify the configuration for an mdev device, identified via its UUID
+and optionally its parent.
+Type and startup mode (auto or manual) can be modified by this command.
+Attributes can be added or deleted. Attributes to be deleted must be
+specified by their index; if an attribute is specified without an
+index, it is appended at the end of the attribute list.
+Running devices are unaffected by this command; changes in the configuration
+are applied the next time the device is started.
+.RE
+
+.PP
+\fBstart\fR \fIDEVICESPEC\fR
+.RS 4
+Start an mdev device, identified by its UUID and optionally its parent,
+or its parent and type and optionally its UUID, which is generated if
+not given.
+If specified via its parent and optionally its UUID, the type may be
+specified in a JSON configuration file, alongside additional parameters.
+.RE
+
+.PP
+\fBstop\fR \fIDEVICESPEC\fR
+.RS 4
+Stop an mdev device, specified via its UUID.
+.RE
+
+.PP
+\fBundefine\fR \fIDEVICESPEC\fR
+.RS 4
+Undefine, or remove the configuration for an mdev device, specified by
+its UUID and optionally its parent. If a UUID exists for multiple
+parents, all of them will be removed unless restricted to a single parent.
+Running devices are unaffected by this command.
+.RE
+
+.SH "NOTE ON DEVICE SPECIFICATION"
+
+For a given UUID, only one device with that UUID may be running at the
+same time. However, it is possible to define multiple devices with the
+same UUID under different parent devices. Therefore, it is sometimes
+necessary to specify the parent device alongside the UUID to uniquely
+identify a device.
+
+.SH "EXIT STATUS"
+On success, 0 is returned, a non-zero failure code otherwise.
+
+.SH EXAMPLES
+
+.nf
 List running mdev devices:
 
+.EX
 # mdevctl list
 85006552-1b4b-45ef-ad62-de05be9171df 0000:00:02.0 i915-GVTg_V4_4
 83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 (defined)
+.EE
 
 List defined mdev devices:
 
+.EX
 # mdevctl list -d
 83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 auto
 b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
 5cf14a12-a437-4c82-a13f-70e945782d7b 0000:00:02.0 i915-GVTg_V4_4 manual
+.EE
 
 List mdev types supported on the host system:
 
+.EX
 # mdevctl list -t
 0000:00:02.0
   i915-GVTg_V4_2
@@ -113,51 +222,56 @@ List mdev types supported on the host system:
     Available instances: 3
     Device API: vfio-pci
     Description: low_gm_size: 128MB high_gm_size: 512MB fence: 4 resolution: 1920x1200 weight: 4 
+.EE
 
 Modify a defined device from automatic start to manual:
 
+.EX
 # mdevctl modify --uuid 83c32df7-d52e-4ec1-9668-1f3c7e4df107 --manual
 # mdevctl list -d
 83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 manual
 b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
 5cf14a12-a437-4c82-a13f-70e945782d7b 0000:00:02.0 i915-GVTg_V4_4 manual
+.EE
 
 Stop a running mdev device:
 
+.EX
 # mdevctl stop -u 83c32df7-d52e-4ec1-9668-1f3c7e4df107
+.EE
 
-Start an mdev device that is not defined
+Start an mdev device that is not defined:
 
+.EX
 # uuidgen
 6eba5b41-176e-40db-b93e-7f18e04e0b93
 # mdevctl start -u 6eba5b41-176e-40db-b93e-7f18e04e0b93 -p 0000:00:02.0 --type i915-GVTg_V4_1
 # mdevctl list
 85006552-1b4b-45ef-ad62-de05be9171df 0000:00:02.0 i915-GVTg_V4_4
 6eba5b41-176e-40db-b93e-7f18e04e0b93 0000:00:02.0 i915-GVTg_V4_1
+.EE
 
 Promote the new created mdev to a defined device:
 
+.EX
 # mdevctl define --uuid 6eba5b41-176e-40db-b93e-7f18e04e0b93
 # mdevctl list -d
 83c32df7-d52e-4ec1-9668-1f3c7e4df107 0000:00:02.0 i915-GVTg_V4_8 manual
 6eba5b41-176e-40db-b93e-7f18e04e0b93 0000:00:02.0 i915-GVTg_V4_1 manual
 b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
 5cf14a12-a437-4c82-a13f-70e945782d7b 0000:00:02.0 i915-GVTg_V4_4 manual
+.EE
 
-Advanced usage (attributes and JSON)
-------------------------------------
+.SS "ADVANCED EXAMPLES (ATTRIBUTES AND JSON)"
 
-mdevctl provides support for specifying additional configuration via
-device-specific attributes. It also provides support for inspecting
-and modifying its internal JSON representation of the configuration
-directly.
-
-Example:
-
+.EX
 # mdevctl list -d
 783e6dbb-ea0e-411f-94e2-717eaad438bf matrix vfio_ap-passthrough manual
+.EE
 
 Add some attributes:
+
+.EX
 # mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_adapter --value=5
 # mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_adapter --value=6
 # mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --addattr=assign_domain --value=0xab
@@ -173,7 +287,11 @@ Add some attributes:
     @{3}: {"assign_control_domain":"0xab"}
     @{4}: {"assign_domain":"4"}
     @{5}: {"assign_control_domain":"4"}
+.EE
+
 Dump the JSON configuration:
+
+.EX
 # mdevctl list -d -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --dumpjson
 {
   "mdev_type": "vfio_ap-passthrough",
@@ -199,8 +317,11 @@ Dump the JSON configuration:
     }
   ]
 }
+.EE
 
 Remove some attributes:
+
+.EX
 # mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --delattr --index=5
 # mdevctl modify -u 783e6dbb-ea0e-411f-94e2-717eaad438bf --delattr --index=4
 # mdevctl list -d
@@ -210,8 +331,11 @@ Remove some attributes:
     @{1}: {"assign_adapter":"6"}
     @{2}: {"assign_domain":"0xab"}
     @{3}: {"assign_control_domain":"0xab"}
+.EE
 
 Define an mdev device from a file:
+
+.EX
 # cat vfio_ap_device.json
 {
   "mdev_type": "vfio_ap-passthrough",
@@ -242,5 +366,34 @@ e2e73122-cc39-40ee-89eb-b0a47d334cae matrix vfio_ap-passthrough manual
     @{0}: {"assign_adapter":"5"}
     @{1}: {"assign_domain":"0x47"}
     @{2}: {"assign_domain":"0xff"}
+.EE
 
-See 'mdevctl --help' or the manpage for more information.
+.SH FILES
+\fI/etc/mdevctl.d/*\fR
+
+Configuration files are in one subdirectory per parent device and named
+by UUID.
+
+.SH "CONFIGURATION FILE FORMAT"
+
+Configuration files are in JSON. Attributes in \fB"attrs"\fR are optional.
+
+.EX
+{
+  "mdev_type": \fI"TYPE"\fR,
+  "start": \fI"auto|manual"\fR,
+  "attrs": [
+    {
+      \fI"attribute0"\fR: \fI"VALUE"\fR
+    },
+    {
+      \fI"attribute1"\fR: \fI"VALUE"\fR
+    }
+  ]
+}
+.EE
+
+.SH "SEE ALSO"
+\fBudev\fR(7)
+\fBudevadm\fR(8)
+\fBdriverctl\fR(8)

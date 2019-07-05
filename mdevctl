@@ -15,12 +15,7 @@ config={}
 attrs=[]
 
 jsonify() {
-    if [ $(echo ${1} | awk -F "," '{print NF-1}') -eq 0 ]; then
-        echo \"${1}\"
-    else
-        echo [$( echo ${1} | tr ',' '\n' | xargs -i echo \"{}\" | \
-              tr '\n' ',' | sed -e 's/,$//')]
-   fi
+    echo \"${1}\"
 }
 
 del_config_key() {
@@ -51,12 +46,7 @@ has_config_key() {
 get_config_key() {
     key=${1}
 
-    type=$(echo $config | jq -r -M --arg key "$key" '.[$key] | type')
-    if [ $type == "string" ]; then
-        echo $config | jq -r -M --arg key "$key" '.[$key]'
-    elif [ $type == "array" ]; then
-        echo $config | jq -r -M --arg key "$key" '.[$key][]'
-    fi
+    echo $config | jq -r -M --arg key "$key" '.[$key]'
 }
 
 config_file() {
@@ -129,12 +119,7 @@ get_attr_index_value() {
         index=${1}
     fi
 
-    type=$(echo $attrs | jq -r -M --argjson i $index '.[$i] | .[] | type')
-    if [ $type == "string" ]; then
-        echo $attrs | jq -r -M --argjson i $index '.[$i] | .[]'
-    elif [ $type == "array" ]; then
-        echo $attrs | jq -r -M --argjson i $index '.[$i] | .[][]'
-    fi
+    echo $attrs | jq -r -M --argjson i $index '.[$i] | .[]'
 }
 
 get_attr_index_raw() {
@@ -263,14 +248,13 @@ start_mdev() {
                     remove_mdev $uuid
                     return 1
                 fi
-                for val in $(get_attr_index_value $i); do
-                    echo -e $val > $mdev_base/$uuid/$attr
-                    if [ $? -ne 0 ]; then
-                        echo "Failed to write $val to attribute $attr" >&2
-                        remove_mdev $uuid
-                        return 1
-                    fi
-                done
+                val=$(get_attr_index_value $i)
+                echo -e $val > $mdev_base/$uuid/$attr
+                if [ $? -ne 0 ]; then
+                    echo "Failed to write $val to attribute $attr" >&2
+                    remove_mdev $uuid
+                    return 1
+                fi
             done
         fi
         $print_uuid
@@ -344,9 +328,9 @@ modify		Modify the config for a defined mdev device.  Options:
 		ATTRIBUTE can be added or removed, which correlates to a
 		sysfs attribute under the created device.  Unless an INDEX
 		value is provided, operations are performed at the end of
-		the attribute list.  VALUE may be specified as singly or
-		seprated by commas.  Upon device start, mdevctl will through
-		each value of each attribute in order, writing the value into
+		the attribute list.  VALUE is to be specified in the format
+		that is accepted by the attribute.  Upon device start, mdevctl
+		will go through each attribute in order, writing the value into
 		the corresponding sysfs attribute for the device.  The startup
 		mode of the device can also be selected, auto or manual.
 		Running devices are unaffected by this command.
