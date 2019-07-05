@@ -48,8 +48,9 @@ Delete an attribute entry. Valid for the \fBmodify\fR command.
 .PP
 \fB--dumpjson\fR
 .RS 4
-Dump the configuration for a device in JSON format. Valid for the
-\fBlist\fR command.
+Dump the configuration for a device in JSON format when filtered to
+as single device and used with the \fBlist\fR command.  When used
+with the \fBtypes\fR command, output machine readable type information.
 .RE
 
 .PP
@@ -85,12 +86,6 @@ Specify or identify the device by its type.
 .RE
 
 .PP
-\fB-t|--types\fR
-.RS 4
-List the mdev types. Valid for the \fBlist\fR command.
-.RE
-
-.PP
 \fB-u|--uuid=UUID\fR
 .RS 4
 Specify or identify the device by its UUID.
@@ -101,6 +96,13 @@ Specify or identify the device by its UUID.
 .RS 4
 Set an attribute to \fIVALUE\fR, in the format accepted by the attribute.
 Valid for the \fBmodify\fR command.
+.RE
+
+.PP
+\fB-v|--verbose\fR
+.RS 4
+Increase output verbosity, currently only adds attribute output to the
+\fBtypes\fR command.
 .RE
 
 .SH COMMANDS
@@ -162,6 +164,14 @@ Stop an mdev device, specified via its UUID.
 .RE
 
 .PP
+\fBtypes\fR
+.RS 4
+List the mdev device types known to the system by parent device.  Output
+may be limited to a single parent device with the \fB-p|--parent\fR option.
+JSON output format is used with the \fB--dumpjson\fR option.
+.RE
+
+.PP
 \fBundefine\fR \fIDEVICESPEC\fR
 .RS 4
 Undefine, or remove the configuration for an mdev device, specified by
@@ -204,7 +214,7 @@ b0a3989f-8138-4d49-b63a-59db28ec8b48 0000:00:02.0 i915-GVTg_V4_8 auto
 List mdev types supported on the host system:
 
 .EX
-# mdevctl list -t
+# mdevctl types
 0000:00:02.0
   i915-GVTg_V4_2
     Available instances: 1

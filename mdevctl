@@ -351,20 +351,24 @@ start		Start an mdev device.  Options:
 stop		Stop an mdev device.  Options:
 	<-u|--uuid=UUID>
 list		List mdev devices.  Options:
-	[-t|--types] [-p|--parent=PARENT]
-	[-d|--defined] [-u|--uuid=UUID] [-p|--parent=PARENT] [--dumpjson]
+	[-d|--defined] [-u|--uuid=UUID] [-p|--parent=PARENT] \\
+	[--dumpjson] [-v|--verbose]
 		With no options, information about the currently running mdev
-		devices is provided.  Specifying TYPES lists the mdev types
-		provided by the currently registered mdev parent devices on
-		the system.  This may be further reduced by specifying a
-		single parent device.  Specifying DEFINED lists the
+		devices is provided.  Specifying DEFINED lists the
 		configuration of defined devices, regardless of their running
 		state.  This may be further reduced by specifying specific
 		UUID or PARENT devices to list.  When reduced to a single
 		listed device, the dumpjson option can be used to print the
 		JSON configuration of the device, for either defined or
 		active devices (active listing may only provide a minimal
-		configuration, ie. the base device type).
+		configuration, ie. the base device type).  When the verbose
+		option is provided, the human readable listing will include
+		attributes for the device(s).
+types		List mdev types.  Options:
+	[-p|--parent=PARENT] [--dumpjson]
+		Specifying a PARENT lists only the types provided by the given
+		parent device.  The dumpjson option provides output in machine
+		readable JSON format.
 EOF
     exit 1
 }
@@ -512,11 +516,16 @@ case ${1} in
         ;;
     list)
         cmd="$1"
-        OPTIONS="dtu:p:"
-        LONGOPTS="defined,types,uuid:,dumpjson,parent:"
+        OPTIONS="du:p:v"
+        LONGOPTS="defined,uuid:,dumpjson,parent:,verbose"
         shift
         ;;
-
+    types)
+        cmd="$1"
+        OPTIONS="p:"
+        LONGOPTS="parent:,dumpjson"
+        shift
+        ;;
     *)
         echo "Unknown command $1" >&2
         usage
@@ -541,13 +550,8 @@ while true; do
             shift 2
             ;;
         -t|--type)
-            if [ "$cmd" == "list" ]; then
-                types=y
-                shift
-            else
-                type="$2"
-                shift 2
-            fi
+            type="$2"
+            shift 2
             ;;
         --jsonfile)
             jsonfile="$2"
@@ -569,10 +573,6 @@ while true; do
             delattr=y
             shift 1
             ;;
-        --types)
-            types=y
-            shift
-            ;;
         --dumpjson)
             dumpjson=y
             shift
@@ -591,6 +591,10 @@ while true; do
             ;;
         -a|--available)
             available=y
+            shift 1
+            ;;
+        -v|--verbose)
+            verbose=y
             shift 1
             ;;
         --)
@@ -883,11 +887,6 @@ case "$cmd" in
         remove_mdev "$uuid"
         ;;
     list)
-        if [ -n "$defined" ] && [ -n "$types" ]; then
-            echo "Listing options cannot be combined" >&2
-            exit 1
-        fi
-
         if [ -n "$dumpjson" ]; then
             if [ -z "$uuid" ]; then
                 echo "Must specify a UUID" >&2
@@ -908,9 +907,6 @@ case "$cmd" in
 
                 dump_config
                 exit 0
-            elif [ -n "$types" ]; then
-                echo "Invalid option, cannot dumpjson for mdev types" >&2
-                exit 1
             else
                 if [ -z "$uuid" ]; then
                     echo "Must specify a UUID" >&2
@@ -940,7 +936,7 @@ case "$cmd" in
         fi
 
         if [ -n "$defined" ]; then
-            for dir in $(find "$persist_base/" -maxdepth 1 -mindepth 1 -type d); do
+            for dir in $(find "$persist_base/" -maxdepth 1 -mindepth 1 -type d | sort); do
                 p=$(basename "$dir")
                 if [ -n "$parent" ] && [ "$parent" != "$p" ]; then
                     continue
@@ -973,42 +969,14 @@ case "$cmd" in
 
                     echo
 
-                    count=$(( $(get_attr_length) - 1 ))
-                    if [ $count -ge 0 ]; then
-                        echo "  Attrs: "
-                        for i in $(seq 0 "$count"); do
-                            echo "    @{$i}: $(get_attr_index_raw $i)"
-                        done
-                    fi
-                done
-            done
-        elif [ -n "$types" ]; then
-            if [ ! -d "$parent_base" ]; then
-                exit 0
-            fi
-
-            if [ -n "$uuid" ]; then
-                echo "Invalid option UUID" >&2
-                exit 1
-            fi
-
-           for dir in $(find "$parent_base/" -maxdepth 1 -mindepth 1 -type l); do
-                p=$(basename "$dir")
-                if [ -n "$parent" ] && [ "$parent" != "$p" ]; then
-                    continue
-                fi
-
-                echo "$p"
-                for parent_type in $(find "$dir/mdev_supported_types/" -maxdepth 1 -mindepth 1 -type d); do
-                    avail=$(cat "$parent_type/available_instances")
-                    echo "  $(basename $parent_type)"
-                    echo "    Available instances: $avail"
-                    echo "    Device API: $(cat $parent_type/device_api)"
-                    if [ -e "$parent_type/name" ]; then
-                        echo "    Name: $(cat $parent_type/name)"
-                    fi
-                    if [ -e "$parent_type/description" ]; then
-                        echo "    Description: $(cat $parent_type/description | tr '\n' ' ')"
+                    if [ -n "$verbose" ]; then
+                        count=$(( $(get_attr_length) - 1 ))
+                        if [ $count -ge 0 ]; then
+                            echo "  Attrs: "
+                            for i in $(seq 0 "$count"); do
+                                echo "    @{$i}: $(get_attr_index_raw $i)"
+                            done
+                        fi
                     fi
                 done
             done
@@ -1042,6 +1010,73 @@ case "$cmd" in
                 echo
 
             done
+        fi
+        ;;
+    types)
+        if [ ! -d "$parent_base" ]; then
+            if [ -n "$dumpjson" ]; then
+                echo "[]" | jq -M '.'
+            fi
+            exit 0
+        fi
+
+        json="["
+        txt=""
+        num_parent=0
+        for dir in $(find "$parent_base/" -maxdepth 1 -mindepth 1 -type l | sort); do
+            p=$(basename "$dir")
+            if [ -n "$parent" ] && [ "$parent" != "$p" ]; then
+                continue
+            fi
+
+            if [ "$num_parent" -ne 0 ]; then
+                json+=","
+            fi
+            num_parent=$(( $num_parent + 1 ))
+            num_type=0
+
+            json+="{\"$p\":["
+            txt+="$p\n"
+
+            for parent_type in $(find "$dir/mdev_supported_types/" -maxdepth 1 -mindepth 1 -type d | sort); do
+                if [ "$num_type" -ne 0 ]; then
+                    json+=","
+                fi
+                num_type=$(( $num_type + 1 ))
+
+                type=$(basename "$parent_type")
+                json+="{\"$type\":{"
+                txt+="  $type\n"
+
+                avail=$(cat "$parent_type/available_instances" | tr -d '\n')
+                json+="\"available_instances\":\"$avail\""
+                txt+="    Available instances: $avail\n"
+
+                api=$(cat "$parent_type/device_api" | tr -d '\n')
+                json+=",\"device_api\":\"$api\""
+                txt+="    Device API: $api\n"
+
+                if [ -e "$parent_type/name" ]; then
+                    name=$(cat "$parent_type/name" | tr -d '\n')
+                    json+=",\"name\":\"$name\""
+                    txt+="    Name: $name\n"
+                fi
+
+                if [ -e "$parent_type/description" ]; then
+                    descr=$(cat "$parent_type/description" | tr '\n' ',' | sed -e 's/,$//')
+                    json+=",\"description\":\"$descr\""
+                    txt+="    Description: $descr\n"
+                fi
+                json+="}}"
+            done
+            json+="]}"
+        done
+        json+="]"
+
+        if [ -n "$dumpjson" ]; then
+            echo "$json" | jq -M '.'
+        else
+            echo -en "$txt"
         fi
         ;;
 esac
