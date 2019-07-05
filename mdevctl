@@ -320,7 +320,7 @@ undefine	Undefine, or remove a config for an mdev device.  Options:
 		by this command.
 modify		Modify the config for a defined mdev device.  Options:
 	<-u|--uuid=UUID> [-p|--parent=PARENT] [-t|--type=TYPE] \\
-	[--addattr=ATTRIBUTE] [--delattr] [--index=INDEX] [--value=VALUE] \\
+	[--addattr=ATTRIBUTE] [--delattr] [-i|--index=INDEX] [--value=VALUE] \\
 	[-a|--auto|-m|--manual]
 		The parent option further identifies a UUID if it is not
 		unique, the parent for a device cannot be modified via this
@@ -498,7 +498,7 @@ case ${1} in
         ;;
     modify)
         cmd="$1"
-        OPTIONS="u:p:t:am"
+        OPTIONS="u:p:t:ami:"
         LONGOPTS="uuid:,parent:,type:,auto,manual,addattr:,delattr,index:,value:"
         shift
         ;;
@@ -561,7 +561,7 @@ while true; do
             addattr="$2"
             shift 2
             ;;
-        --index)
+        -i|--index)
             index="$2"
             shift 2
             ;;
