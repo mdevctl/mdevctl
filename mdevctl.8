@@ -125,13 +125,11 @@ automatically.
 \fBlist\fR
 .RS 4
 List mdev devices. With no options, currently running devices are listed.
-With \fB-d|--defined\fR, deviced devices are listed.
-Can be restricted to list only devices for a given parent or UUID. If
-restricted to a single device, the device configuration in JSON format
-can be dumped via \fB--dumpjson\fR.
-With the \fB-t|--types\fR option, the mdev types provided by the currently
-registered parent devices are listed. Can be restricted to a single
-parent device.
+With \fB-d|--defined\fR, previously defined devices are listed.
+Can be restricted to list only devices for a given parent or UUID. With
+\fB--dumpjson\fR output is provided in machine readable JSON format.
+When a UUID is provided and the output results in a single device, the
+JSON output format is compatible with the configuration file format.
 .RE
 
 .PP

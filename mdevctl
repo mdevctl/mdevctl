@@ -78,6 +78,10 @@ get_attr_length() {
     echo "$attrs" | jq -M '. | length'
 }
 
+get_attrs_raw() {
+    echo "$attrs"
+}
+
 add_attr_index() {
     key=$(jsonify "$1")
     value=$(jsonify "$2")
@@ -357,13 +361,14 @@ list		List mdev devices.  Options:
 		devices is provided.  Specifying DEFINED lists the
 		configuration of defined devices, regardless of their running
 		state.  This may be further reduced by specifying specific
-		UUID or PARENT devices to list.  When reduced to a single
-		listed device, the dumpjson option can be used to print the
-		JSON configuration of the device, for either defined or
-		active devices (active listing may only provide a minimal
-		configuration, ie. the base device type).  When the verbose
-		option is provided, the human readable listing will include
-		attributes for the device(s).
+		UUID or PARENT devices to list.  The dumpjson option provides
+		output listing in machine readable JSON format.  When a UUID
+		option is provided and the result is a single device, the
+		output contains only the JSON fields necessary to recreate a
+		config file for the device (minus attributes for listings of
+		running devices).  When the verbose option is provided, the
+		human readable listing will include attributes for the
+		device(s).
 types		List mdev types.  Options:
 	[-p|--parent=PARENT] [--dumpjson]
 		Specifying a PARENT lists only the types provided by the given
@@ -887,53 +892,8 @@ case "$cmd" in
         remove_mdev "$uuid"
         ;;
     list)
-        if [ -n "$dumpjson" ]; then
-            if [ -z "$uuid" ]; then
-                echo "Must specify a UUID" >&2
-                exit 1
-            fi
-
-            if [ -n "$defined" ]; then
-                file=$(config_file "$uuid" "$parent")
-                if [ $? -ne 0 ]; then
-                    exit 1
-                fi
-
-                read_config "$file"
-                if [ $? -ne 0 ]; then
-                    echo "Config file $file invalid" >&2
-                    exit 1
-                fi
-
-                dump_config
-                exit 0
-            else
-                if [ -z "$uuid" ]; then
-                    echo "Must specify a UUID" >&2
-                    exit 1
-                fi
-
-                if [ ! -L "$mdev_base/$uuid" ]; then
-                    echo "Active UUID not found" >&2
-                    exit 1
-                fi
-
-                if [ -n "$parent" ]; then
-                    p=$(basename $(realpath "$mdev_base/$uuid" | sed -s "s/\/$uuid//"))
-                    if [ "$p" != "$parent" ]; then
-                        echo "Active UUID does not match provided parent" >&2
-                        exit 1
-                    fi
-                fi
-
-                type=$(basename $(realpath "$mdev_base/$uuid/mdev_type"))
-
-                set_config_key mdev_type "$type"
-                set_config_key start manual
-                dump_config
-                exit 0
-            fi
-        fi
+        json="[]"
+        txt=""
 
         if [ -n "$defined" ]; then
             for dir in $(find "$persist_base/" -maxdepth 1 -mindepth 1 -type d | sort); do
@@ -952,32 +912,37 @@ case "$cmd" in
                     if [ $? -ne 0 ]; then
                         continue
                     fi
+
                     type="$(get_config_key mdev_type)"
                     start="$(get_config_key start)"
 
-                    echo -n "$u $p $type $start"
+                    txt+="$u $p $type $start"
 
                     if [ -L "$mdev_base/$u" ]; then
                         cur_parent=$(basename $(realpath "$mdev_base/$u" | sed -s "s/\/$u//"))
                         if [ "$cur_parent" == "$p" ]; then
                             cur_type=$(basename $(realpath "$mdev_base/$u/mdev_type"))
                             if [ "$cur_type" == "$type" ]; then
-                                echo -n " (active)"
+                                txt+=" (active)"
                             fi
                         fi
                     fi
 
-                    echo
+                    json_tmp="{\"$p\":[{\"$u\":{"\"mdev_type\":\"$type\"",\"start\":\"$start\""
+                    txt+="\n"
 
-                    if [ -n "$verbose" ]; then
+                    if [ -n "$verbose" ] || [ -n "$dumpjson" ]; then
                         count=$(( $(get_attr_length) - 1 ))
                         if [ $count -ge 0 ]; then
-                            echo "  Attrs: "
+                            json_tmp+=",\"attrs\":$(get_attrs_raw)"
+                            txt+="  Attrs:\n"
                             for i in $(seq 0 "$count"); do
-                                echo "    @{$i}: $(get_attr_index_raw $i)"
+                                txt+="    @{$i}: $(get_attr_index_raw $i)\n"
                             done
                         fi
                     fi
+                    json_tmp+="}}]}"
+                    json=$(echo "$json" | jq -c -M --argjson obj "$json_tmp" '. + [$obj]')
                 done
             done
         else
@@ -998,18 +963,41 @@ case "$cmd" in
 
                 type=$(basename $(realpath "$mdev/mdev_type"))
 
-                echo -n "$u $p $type"
+                json_tmp="{\"$p\":[{\"$u\":{\"mdev_type\":\"$type\"}}]}"
+                txt+="$u $p $type"
 
                 if [ -f "$persist_base/$p/$u" ]; then
                     read_config "$persist_base/$p/$u"
                     if [ $? -eq 0 ] && [ "$(get_config_key mdev_type)" == "$type" ]; then
-                        echo -n " (defined)"
+                        txt+=" (defined)"
                     fi
                 fi
 
-                echo
+                txt+="\n"
+                json=$(echo "$json" | jq -c -M --argjson obj "$json_tmp" '. + [$obj]')
 
             done
+        fi
+
+        if [ -n "$dumpjson" ]; then
+            if [ $(echo "$json" | jq 'length') -gt 0 ]; then
+                # https://stackoverflow.com/a/43337323/4775714
+                json=$(echo "$json" | jq -c -M '[reduce .[] as $o ({}; reduce ($o|keys)[] as $key (.; .[$key] += $o[$key] ))]')
+            fi
+
+            # If specified to a single device, output such that it can be
+            # piped into a config file, else print entire hierarchy
+            if [ -n "$uuid" ] && [ $(echo "$json" | jq -M 'length') -eq 1 ] &&
+               [ $(echo "$json" | jq -M '.[] | length') -eq 1 ] &&
+               [ $(echo "$json" | jq -M '.[] | .[] | length') -eq 1 ]; then
+                key=$(echo "$json" | jq -r -M '.[] | .[] | .[] | keys | .[]')
+                key=$(jsonify $key)
+                echo "$json" | jq -M --argjson key "$key" '.[] | .[] | .[] | .[$key]'
+            else
+                echo "$json" | jq -M '.'
+            fi
+        else
+            echo -en "$txt"
         fi
         ;;
     types)
@@ -1020,60 +1008,52 @@ case "$cmd" in
             exit 0
         fi
 
-        json="["
+        json="[]"
         txt=""
-        num_parent=0
+
         for dir in $(find "$parent_base/" -maxdepth 1 -mindepth 1 -type l | sort); do
             p=$(basename "$dir")
             if [ -n "$parent" ] && [ "$parent" != "$p" ]; then
                 continue
             fi
 
-            if [ "$num_parent" -ne 0 ]; then
-                json+=","
-            fi
-            num_parent=$(( $num_parent + 1 ))
-            num_type=0
-
-            json+="{\"$p\":["
             txt+="$p\n"
 
             for parent_type in $(find "$dir/mdev_supported_types/" -maxdepth 1 -mindepth 1 -type d | sort); do
-                if [ "$num_type" -ne 0 ]; then
-                    json+=","
-                fi
-                num_type=$(( $num_type + 1 ))
-
                 type=$(basename "$parent_type")
-                json+="{\"$type\":{"
                 txt+="  $type\n"
 
-                avail=$(cat "$parent_type/available_instances" | tr -d '\n')
-                json+="\"available_instances\":\"$avail\""
+                avail=$(cat "$parent_type/available_instances")
                 txt+="    Available instances: $avail\n"
 
-                api=$(cat "$parent_type/device_api" | tr -d '\n')
-                json+=",\"device_api\":\"$api\""
+                api=$(cat "$parent_type/device_api")
                 txt+="    Device API: $api\n"
 
+                json_tmp="{\"$p\":[{\"$type\":{\"available_instances\":$avail,\"device_api\":\"$api\""
+
                 if [ -e "$parent_type/name" ]; then
-                    name=$(cat "$parent_type/name" | tr -d '\n')
-                    json+=",\"name\":\"$name\""
+                    name=$(cat "$parent_type/name")
+                    json_tmp+=",\"name\":\"$name\""
                     txt+="    Name: $name\n"
                 fi
 
                 if [ -e "$parent_type/description" ]; then
-                    descr=$(cat "$parent_type/description" | tr '\n' ',' | sed -e 's/,$//')
-                    json+=",\"description\":\"$descr\""
+                    descr=$(cat "$parent_type/description" | sed -e ':a;N;$!ba;s/\n/, /g')
+                    json_tmp+=",\"description\":\"$descr\""
                     txt+="    Description: $descr\n"
                 fi
-                json+="}}"
+
+                json_tmp+="}}]}"
+                json=$(echo "$json" | jq -c -M --argjson obj "$json_tmp" '. + [$obj]')
             done
-            json+="]}"
         done
-        json+="]"
 
         if [ -n "$dumpjson" ]; then
+            if [ $(echo "$json" | jq 'length') -gt 0 ]; then
+                # https://stackoverflow.com/a/43337323/4775714
+                json=$(echo "$json" | jq -c -M '[reduce .[] as $o ({}; reduce ($o|keys)[] as $key (.; .[$key] += $o[$key] ))]')
+            fi
+
             echo "$json" | jq -M '.'
         else
             echo -en "$txt"
