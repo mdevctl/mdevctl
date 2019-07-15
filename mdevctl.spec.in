@@ -13,6 +13,7 @@ BuildArch:	noarch
 # Probably wrong
 Source0:	https://github.com/mdevctl/mdevctl/archive/%{name}-%{version}-%{commit}.tar.gz
 
+BuildRequires: systemd
 Requires(post,postun): %{_sbindir}/udevadm
 Requires: coreutils udev jq
 
