@@ -10,8 +10,7 @@ License:	LGPLv2
 URL:		https://github.com/mdevctl/mdevctl
 BuildArch:	noarch
 
-# Probably wrong
-Source0:	https://github.com/mdevctl/mdevctl/archive/%{name}-%{version}-%{commit}.tar.gz
+Source0:	https://github.com/mdevctl/mdevctl/archive/%{version}/%{name}-%{version}-%{commit}.tar.gz
 
 BuildRequires: systemd
 Requires(post,postun): %{_sbindir}/udevadm
