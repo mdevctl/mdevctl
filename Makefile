@@ -35,6 +35,7 @@ install:
 	install -m 644 mdev@.service $(DESTDIR)$(UNITDIR)/
 	mkdir -p $(DESTDIR)$(SBINDIR)
 	install -m 755 mdevctl $(DESTDIR)$(SBINDIR)/
+	ln -s mdevctl $(DESTDIR)$(SBINDIR)/lsmdev
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
 	install -m 644 mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
 

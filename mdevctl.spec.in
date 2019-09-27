@@ -33,6 +33,7 @@ vfio-mdev for assignment to virtual machines.
 %license COPYING
 %doc README.md
 %{_sbindir}/mdevctl
+%{_sbindir}/lsmdev
 %{_udevrulesdir}/60-mdevctl.rules
 %{_unitdir}/mdev@.service
 %dir %{_sysconfdir}/mdevctl.d
