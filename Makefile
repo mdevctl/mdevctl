@@ -6,8 +6,7 @@ CONFDIR=/etc/mdevctl.d
 MANDIR=$(PREFIX)/share/man
 NAME=mdevctl
 VERSION=0.$(shell git rev-list --count HEAD)
-COMMIT=$(shell git rev-list --max-count 1 HEAD)
-NVFMT=$(NAME)-$(VERSION)-$(COMMIT)
+NVFMT=$(NAME)-$(VERSION)
 
 files: mdevctl mdev@.service 60-mdevctl.rules mdevctl.8 \
 	Makefile COPYING README.md mdevctl.spec.in
@@ -17,9 +16,16 @@ archive: files tag mdevctl.spec
 	gzip -f -9 $(NVFMT).tar
 
 mdevctl.spec: mdevctl.spec.in files
-	sed -e 's:#VERSION#:$(VERSION):g' \
-	    -e 's:#COMMIT#:$(COMMIT):g'  < mdevctl.spec.in > mdevctl.spec
-	git log --format="* %cd %aN <%ae>%n%B" --date=local mdevctl.spec.in | sed -r -e 's/%/%%/g' -e 's/[0-9]+:[0-9]+:[0-9]+ //' >> mdevctl.spec
+	sed -e 's:#VERSION#:$(VERSION):g' < mdevctl.spec.in > mdevctl.spec
+	PREV=""; \
+	for TAG in `git tag --sort=version:refname | tac`; do \
+	    if [ -n "$$PREV" ]; then \
+	        git log --format="- %s" $$TAG..$$PREV >> mdevctl.spec; \
+	    fi; \
+	    git log -1 --format="%n* %cd %aN <%ae> - $$TAG-1" --date="format:%a %b %d %Y" $$TAG >> mdevctl.spec; \
+	    PREV=$$TAG; \
+	done; \
+	git log --format="- %s" $$TAG >> mdevctl.spec
 
 srpm: mdevctl.spec archive
 	rpmbuild -bs --define "_sourcedir $(PWD)" --define "_specdir $(PWD)" --define "_builddir $(PWD)" --define "_srcrpmdir $(PWD)" --define "_rpmdir $(PWD)" mdevctl.spec

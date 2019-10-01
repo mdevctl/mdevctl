@@ -1,0 +1,4 @@
+mdevctl.spec
+*.tar.gz
+*.rpm
+*/
