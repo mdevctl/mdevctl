@@ -20,12 +20,12 @@ mdevctl.spec: mdevctl.spec.in files
 	PREV=""; \
 	for TAG in `git tag --sort=version:refname | tac`; do \
 	    if [ -n "$$PREV" ]; then \
-	        git log --format="- %s" $$TAG..$$PREV >> mdevctl.spec; \
+	    git log --format="- %h (\"%s\")" $$TAG..$$PREV >> mdevctl.spec; \
 	    fi; \
 	    git log -1 --format="%n* %cd %aN <%ae> - $$TAG-1" --date="format:%a %b %d %Y" $$TAG >> mdevctl.spec; \
 	    PREV=$$TAG; \
 	done; \
-	git log --format="- %s" $$TAG >> mdevctl.spec
+	git log --format="- %h (\"%s\")" $$TAG >> mdevctl.spec
 
 srpm: mdevctl.spec archive
 	rpmbuild -bs --define "_sourcedir $(PWD)" --define "_specdir $(PWD)" --define "_builddir $(PWD)" --define "_srcrpmdir $(PWD)" --define "_rpmdir $(PWD)" mdevctl.spec
