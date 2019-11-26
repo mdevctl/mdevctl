@@ -44,6 +44,7 @@ install:
 	ln -s mdevctl $(DESTDIR)$(SBINDIR)/lsmdev
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
 	install -m 644 mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
+	ln -s mdevctl.8  $(DESTDIR)$(MANDIR)/man8/lsmdev.8
 
 clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz
