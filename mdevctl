@@ -169,16 +169,6 @@ write_config() {
     dump_config > "$file"
 }
 
-# get the absolute path in sysfs of the parent device for the mdev, strip the
-# leading slash, append the uuid, then systemd-escape it
-get_systemd_name() {
-    uuid="$1"
-    parent="$2"
-
-    name="$(realpath "$parent_base/$parent" | sed -e 's/^\///')/$uuid"
-    echo $(systemd-escape "$name")
-}
-
 valid_uuid () {
     uuid="$1"
 
@@ -431,31 +421,6 @@ case ${1} in
 
         echo 1 > "$path/remove"
         exit $?
-        ;;
-    systemd-service-name)
-        if [ $# -ne 2 ]; then
-            echo "Usage: $0 $1 <running mdev uuid>" >&2
-            exit 1
-        fi
-
-        pidof systemd > /dev/null
-        if [ $? -ne 0 ]; then
-            exit 1 # Not systemd host
-        fi
-        uuid="$2"
-        if [ ! -L "$mdev_base/$uuid" ]; then
-            echo "Device $uuid is not running" >&2
-            exit 1
-        fi
-
-        parent=$(basename $(realpath "$mdev_base/$uuid" | sed -s "s/\/$uuid//"))
-
-        name=$(get_systemd_name "$uuid" "$parent")
-        if [ -z "$name" ]; then
-            exit 1
-        fi
-        echo "mdev@$name.service"
-        exit 0
         ;;
     start-parent-mdevs)
         if [ $# -ne 2 ]; then
