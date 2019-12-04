@@ -36,5 +36,6 @@ vfio-mdev for assignment to virtual machines.
 %{_unitdir}/mdev@.service
 %dir %{_sysconfdir}/mdevctl.d
 %{_mandir}/man8/mdevctl.8*
+%{_mandir}/man8/lsmdev.8*
 
 %changelog
