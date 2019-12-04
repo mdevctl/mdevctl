@@ -11,11 +11,11 @@ NVFMT=$(NAME)-$(VERSION)
 files: mdevctl mdev@.service 60-mdevctl.rules mdevctl.8 \
 	Makefile COPYING README.md mdevctl.spec.in
 
-archive: files tag mdevctl.spec
+archive: files mdevctl.spec
 	git archive --prefix=$(NVFMT)/ HEAD > $(NVFMT).tar
 	gzip -f -9 $(NVFMT).tar
 
-mdevctl.spec: mdevctl.spec.in files
+mdevctl.spec: tag mdevctl.spec.in files
 	sed -e 's:#VERSION#:$(VERSION):g' < mdevctl.spec.in > mdevctl.spec
 	PREV=""; \
 	for TAG in `git tag --sort=version:refname | tac`; do \
