@@ -1,9 +1,8 @@
-# Add systemd tags to all mdev devices added or removed, this allows the
-# BindsTo= in the mdev unit template to track the device.  Additionally
-# indicate SYSTEMD_WANTS to start this service, allowing mdev devices to
-# be stopped via systemctl.
-ACTION=="add", SUBSYSTEM=="mdev", TAG+="systemd", ENV{SYSTEMD_WANTS}="mdev@.service"
-ACTION=="remove", SUBSYSTEM=="mdev", TAG+="systemd"
+# Add systemd tags to all mdev devices, this allows the BindsTo= in the
+# mdev unit template to track the device.  Additionally indicate
+# SYSTEMD_WANTS to start this service, allowing mdev devices to be
+# stopped via systemctl.
+ACTION!="remove", SUBSYSTEM=="mdev", TAG+="systemd", ENV{SYSTEMD_WANTS}="mdev@.service"
 
 # When registered with mdev, try to start any persistent devices. Note that
 # this uevent is not triggered on older kernels.
