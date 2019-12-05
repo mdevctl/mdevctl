@@ -10,7 +10,6 @@ BuildArch:	noarch
 
 Source0:	https://github.com/mdevctl/mdevctl/archive/%{version}/%{name}-%{version}.tar.gz
 
-BuildRequires: systemd
 Requires(post,postun): %{_sbindir}/udevadm
 Requires: coreutils udev jq
 
@@ -33,7 +32,6 @@ vfio-mdev for assignment to virtual machines.
 %{_sbindir}/mdevctl
 %{_sbindir}/lsmdev
 %{_udevrulesdir}/60-mdevctl.rules
-%{_unitdir}/mdev@.service
 %dir %{_sysconfdir}/mdevctl.d
 %{_mandir}/man8/mdevctl.8*
 %{_mandir}/man8/lsmdev.8*

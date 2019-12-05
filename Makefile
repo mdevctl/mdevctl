@@ -1,6 +1,5 @@
 PREFIX=/usr
 UDEVDIR=$(shell pkg-config --variable=udevdir udev)
-UNITDIR=$(shell pkg-config --variable=systemdsystemunitdir systemd)
 SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
 MANDIR=$(PREFIX)/share/man
@@ -8,7 +7,7 @@ NAME=mdevctl
 VERSION=0.$(shell git rev-list --count HEAD)
 NVFMT=$(NAME)-$(VERSION)
 
-files: mdevctl mdev@.service 60-mdevctl.rules mdevctl.8 \
+files: mdevctl 60-mdevctl.rules mdevctl.8 \
 	Makefile COPYING README.md mdevctl.spec.in
 
 archive: files mdevctl.spec
@@ -37,8 +36,6 @@ install:
 	mkdir -p $(DESTDIR)$(CONFDIR)
 	mkdir -p $(DESTDIR)$(UDEVDIR)/rules.d/
 	install -m 644 60-mdevctl.rules $(DESTDIR)$(UDEVDIR)/rules.d/
-	mkdir -p $(DESTDIR)$(UNITDIR)
-	install -m 644 mdev@.service $(DESTDIR)$(UNITDIR)/
 	mkdir -p $(DESTDIR)$(SBINDIR)
 	install -m 755 mdevctl $(DESTDIR)$(SBINDIR)/
 	ln -s mdevctl $(DESTDIR)$(SBINDIR)/lsmdev

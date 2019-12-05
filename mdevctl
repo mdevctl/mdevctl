@@ -379,49 +379,11 @@ fi
 
 case ${1} in
     #
-    # Internal commands, these are expected to be called from udev or systemd
+    # Internal commands, these are expected to be called from other scripts
     # and therefore do not offer the convenience of getopt processing
     # (they typically take one arg after the command) and are not listed in
     # the usage text
     #
-    start-systemd-mdev)
-        if [ $# -ne 2 ]; then
-            echo "Usage: $0 $1 <systemd mdev device path>" >&2
-            exit 1
-        fi
-        uuid=$(basename $(systemd-escape -u "$2"))
-        parent=$(basename $(systemd-escape -u "$2" | sed -s "s/\/$uuid//"))
-        if [ -L "$mdev_base/$uuid" ]; then
-            exit 0 # mdev is already running, done
-        elif [ -e "$persist_base/$parent/$uuid" ]; then
-            read_config "$persist_base/$parent/$uuid"
-            if [ $? -ne 0 ]; then
-                echo "Invalid config for device $uuid" >&2
-                exit 1
-            fi
-            type="$(get_config_key mdev_type)"
-        else
-            echo "Device $uuid is not defined, cannot start" >&2
-            exit 1
-        fi
-
-        create_mdev "$uuid" "$parent" "$type"
-        exit $?
-        ;;
-    stop-systemd-mdev)
-        if [ $# -ne 2 ]; then
-            echo "Usage: $0 $1 <systemd mdev device path>" >&2
-            exit 1
-        fi
-        path="/"
-        path+=$(systemd-escape -u "$2")
-        if [ ! -d "$path" ]; then
-            exit 0
-        fi
-
-        echo 1 > "$path/remove"
-        exit $?
-        ;;
     start-parent-mdevs)
         if [ $# -ne 2 ]; then
             echo "Usage: $0 $1 <parent device>" >&2
