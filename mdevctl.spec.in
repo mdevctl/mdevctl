@@ -10,6 +10,7 @@ BuildArch:	noarch
 
 Source0:	https://github.com/mdevctl/mdevctl/archive/%{version}/%{name}-%{version}.tar.gz
 
+BuildRequires: systemd
 Requires(post,postun): %{_sbindir}/udevadm
 Requires: coreutils udev jq
 
