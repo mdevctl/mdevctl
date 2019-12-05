@@ -42,9 +42,6 @@ configuration file for an mdev device looks like follows:
 When a known parent device add udev event occurs (or, for more recent
 kernels, change events with MDEV_STATE values), mdevctl is called by
 a udev rule to create defined devices with "start": "auto" configured.
-The add and remove uevents for these devices are also handled by udev
-rules to integrate optional systemd support, allowing devices to be
-managed either through systemd or via mdevctl.
 
 mdevctl defines three classes of commands, those that manage device
 config files, those that manage the device itself, and listing
@@ -52,8 +49,7 @@ commands for showing defined, active, or potential mdev devices.
 
 Starting with the latter, mdevctl is able to manage mdev devices
 created either with mdevctl or externally, such as through direct
-sysfs interactions.  Either method will generate the systemd service
-supported noted above.  Likewise, when generating a list of currently
+sysfs interactions.  Likewise, when generating a list of currently
 active mdev devices via the `list` command, all mdevs are included.
 When provided with the `--defined` option, the list command will show
 mdev device configs defined on the system, regardless of whether they
