@@ -23,6 +23,20 @@ jsonify() {
     echo "\"$1\""
 }
 
+validate_attr() {
+    # first arg: expected root, second arg: attr to check
+    if [ ! -w "$1/$2" ]; then
+       echo "Attribute $2 cannot be set" >&2
+       return 1
+    fi
+    if [ $(realpath --relative-base "$1" "$1/$2") == "$2" ]; then
+        return 0
+    else
+        echo "Invalid attribute $2" >&2
+        return 1
+    fi
+}
+
 del_config_key() {
     key="$1"
 
@@ -242,8 +256,8 @@ start_mdev() {
         if [ "$count" -ge 0 ]; then
             for i in $(seq 0 "$count"); do
                 attr=$(get_attr_index_key $i)
-                if [ ! -w "$mdev_base/$uuid/$attr" ]; then
-                    echo "Attribute $attr cannot be set" >&2
+                validate_attr "$mdev_base/$uuid" "$attr"
+                if [ $? -ne 0 ]; then
                     remove_mdev "$uuid"
                     return 1
                 fi
