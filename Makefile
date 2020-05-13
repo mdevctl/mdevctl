@@ -38,10 +38,10 @@ install:
 	install -m 644 60-mdevctl.rules $(DESTDIR)$(UDEVDIR)/rules.d/
 	mkdir -p $(DESTDIR)$(SBINDIR)
 	install -m 755 mdevctl $(DESTDIR)$(SBINDIR)/
-	ln -s mdevctl $(DESTDIR)$(SBINDIR)/lsmdev
+	ln -sf mdevctl $(DESTDIR)$(SBINDIR)/lsmdev
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
 	install -m 644 mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
-	ln -s mdevctl.8  $(DESTDIR)$(MANDIR)/man8/lsmdev.8
+	ln -sf mdevctl.8  $(DESTDIR)$(MANDIR)/man8/lsmdev.8
 
 clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz
