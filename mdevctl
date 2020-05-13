@@ -27,13 +27,12 @@ validate_attr() {
     # first arg: expected root, second arg: attr to check
     if [ ! -w "$1/$2" ]; then
        echo "Attribute $2 cannot be set" >&2
-       return 1
-    fi
-    if [ $(realpath --relative-base "$1" "$1/$2") == "$2" ]; then
-        return 0
+       echo 1
+    elif [ $(realpath --relative-base "$1" "$1/$2") == "$2" ]; then
+        echo 0
     else
         echo "Invalid attribute $2" >&2
-        return 1
+        echo 1
     fi
 }
 
@@ -256,8 +255,8 @@ start_mdev() {
         if [ "$count" -ge 0 ]; then
             for i in $(seq 0 "$count"); do
                 attr=$(get_attr_index_key $i)
-                validate_attr "$mdev_base/$uuid" "$attr"
-                if [ $? -ne 0 ]; then
+                valid=$(validate_attr "$mdev_base/$uuid" "$attr")
+                if [ $valid -ne 0 ]; then
                     remove_mdev "$uuid"
                     return 1
                 fi
