@@ -17,7 +17,7 @@ archive: files mdevctl.spec
 mdevctl.spec: tag mdevctl.spec.in files
 	sed -e 's:#VERSION#:$(VERSION):g' < mdevctl.spec.in > mdevctl.spec
 	PREV=""; \
-	for TAG in `git tag --sort=version:refname | tac`; do \
+	for TAG in `git tag | sort -Vr`; do \
 	    if [ -n "$$PREV" ]; then \
 	    git log --format="- %h (\"%s\")" $$TAG..$$PREV >> mdevctl.spec; \
 	    fi; \
