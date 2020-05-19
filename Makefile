@@ -21,7 +21,9 @@ mdevctl.spec: tag mdevctl.spec.in files
 	    if [ -n "$$PREV" ]; then \
 	    git log --format="- %h (\"%s\")" $$TAG..$$PREV >> mdevctl.spec; \
 	    fi; \
-	    git log -1 --format="%n* %cd %aN <%ae> - $$TAG-1" --date="format:%a %b %d %Y" $$TAG >> mdevctl.spec; \
+	    isodate=`git log -1 --format="%cd" --date=iso`; \
+	    changelog_date=`date --date="$$isodate" +"%a %b %d %Y"`; \
+	    git log -1 --format="%n* $$changelog_date %aN <%ae> - $$TAG-1" $$TAG >> mdevctl.spec; \
 	    PREV=$$TAG; \
 	done; \
 	git log --format="- %h (\"%s\")" $$TAG >> mdevctl.spec
