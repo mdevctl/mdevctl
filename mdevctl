@@ -540,10 +540,6 @@ while true; do
             defined=y
             shift 1
             ;;
-        -a|--available)
-            available=y
-            shift 1
-            ;;
         -v|--verbose)
             verbose=y
             shift 1
