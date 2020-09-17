@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/bash
 
 persist_base=/etc/mdevctl.d
 mdev_base=/sys/bus/mdev/devices
