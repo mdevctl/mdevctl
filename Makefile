@@ -48,4 +48,14 @@ clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz
 
 tag:
-	git tag -l $(VERSION) | grep -q $(VERSION) || git tag $(VERSION)
+	@if git describe --exact-match 2>/dev/null 1>&2; then \
+		echo "Current commit is already tagged as:"; \
+		git describe --exact-match; \
+		false; \
+	else \
+		if ! git tag -l $(VERSION) | grep $(VERSION); then \
+			sed -i -e 's/\(^\s*echo "\$$0 version \)[0-9]*\.[0-9]*/\1$(VERSION)/g' mdevctl; \
+			git commit -s -m "update version" mdevctl; \
+			git tag $(VERSION) -a -m "$(VERSION)"; \
+		fi; \
+	fi

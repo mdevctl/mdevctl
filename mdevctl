@@ -312,7 +312,7 @@ unique_uuid() {
 
 usage() {
     cat >&2 <<EOF
-Usage: $(basename $0) {COMMAND} [options...]
+Usage: $(basename $0) [--help || --version] {COMMAND} [options...]
 
 Available commands:
 define		Define a config for an mdev device.  Options:
@@ -382,6 +382,9 @@ types		List mdev types.  Options:
 		Specifying a PARENT lists only the types provided by the given
 		parent device.  The dumpjson option provides output in machine
 		readable JSON format.
+
+--help		this help
+--version	report mdevctl version
 EOF
     exit 1
 }
@@ -431,6 +434,10 @@ case ${1} in
     #
     # User commands
     #
+    --version|-v)
+        echo "$0 version 0.69"
+        exit 0
+        ;;
     --help|-h|-?)
         usage
         ;;
