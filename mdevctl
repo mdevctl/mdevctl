@@ -435,6 +435,9 @@ case ${1} in
     # User commands
     #
     --version|-v)
+        # This will be auto-replaced on 'make tag' or 'make archive'
+        # If you change the following line please adapt the sed rule
+        # in the Makefile to keep matching.
         echo "$0 version 0.69"
         exit 0
         ;;
