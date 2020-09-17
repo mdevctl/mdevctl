@@ -4,7 +4,8 @@ SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
 MANDIR=$(PREFIX)/share/man
 NAME=mdevctl
-VERSION=0.$(shell git rev-list --count HEAD)
+LASTVERSION:=$(shell git tag --sort=version:refname --merged| tail -n 1 | sed 's/\([0-9]*\.\)\([0-9]*\)/\2/g')
+VERSION:=0.$(shell echo $$(($(LASTVERSION)+1)))
 NVFMT=$(NAME)-$(VERSION)
 
 files: mdevctl 60-mdevctl.rules mdevctl.8 \
