@@ -314,6 +314,163 @@ unique_uuid() {
     echo "$uuid"
 }
 
+callout_script="$persist_base/callouts/scripts.d"
+callout_notification="$persist_base/notification/notifiers.d"
+
+state="none"
+
+dir_is_empty() {
+    path="$1"
+
+    if [ -n "$(ls "$path")" ]; then
+        return 1
+    fi
+
+    return 0
+}
+
+# Not all commands provide all necessary info for the callouts
+# Some sysfs devices need some extra work
+load_device_parameters() {
+    uuid="$1"
+    parent="$2"
+    type="$3"
+    cmd="$4"
+
+    set +o errexit
+
+    if [ -z "$uuid" ]; then
+        return
+    fi
+
+    # Populate $parent for modify, start, and stop.
+    # Define will always have $parent populated prior to this function.
+    if [ -z "$parent" ]; then
+        if [ "$cmd" == "stop" ]; then
+            if [ -d "$mdev_base/$uuid" ]; then
+                parent=$(basename $(realpath "$mdev_base/$uuid" | sed -s "s/\/$uuid//"))
+                type=$(basename $(realpath "$mdev_base/$uuid/mdev_type"))
+            fi
+        else
+            # We arrive here when populating $parent for start or modify.
+            # There must be only one config file exists for $uuid.
+            # Otherwise error will occur if no config or multiple configs for $uuid.
+            file_path=$(echo $(find "$persist_base" -name "$uuid" -type f))
+            parent=$(basename $(realpath "$file_path" | sed -s "s/\/$uuid//"))
+        fi
+
+        # Can't continue this function without populating $parent
+        if [ -z "$parent" ]; then
+            return 1
+        fi
+    fi
+
+    if [ $(echo "$config" | jq 'length') -eq 0 ]; then
+        # We arrive here when starting or stopping a device that does
+        # not have a defined config file.
+        # In that case, $config has not yet been populated before the initial
+        # callout, and we need to populate it with the parameters that were
+        # passed by the user.
+        if [ ! -e "$persist_base/$parent/$uuid" ]; then
+            set_config_key mdev_type "$type"
+            set_config_key start 'manual'
+        else
+        # We arrive here when stopping a device.
+        # Again, $config has not yet been populated before the
+        # initial callout, but we can simply read the existing
+        # config file to populate it.
+            read_config "$persist_base/$parent/$uuid"
+        fi
+    fi
+
+    if [ -z "$type" ]; then
+        type="$(get_config_key mdev_type)"
+    fi
+
+    return 0
+}
+
+callout() {
+    event="$1"
+    action="$2"
+    uuid="$3"
+    parent="$4"
+    type="$5"
+
+    set +o errexit
+
+    if [ -z "$uuid" ]; then
+        return
+    fi
+
+    if dir_is_empty "$callout_script"; then
+        return 0
+    fi
+
+    if [ -z "$type" ]; then
+        return 0
+    fi
+
+    # Save content of $config to $conf variable
+    # Allow scripts to check the device configuration
+    # even after the device removed from the system
+    if [ -z "$conf" ]; then
+        conf=$(dump_config)
+    fi
+
+    set -o pipefail
+
+    if [ -z "$script" ]; then
+        for s in $callout_script/*; do
+            echo "$conf" | $s -t "$type" -e "$event" -a "$action" -s "$state" -u "$uuid" -p "$parent" 2>&1 > /dev/null |
+            sed "s/^/$(basename $(realpath "$s")): /" >&2
+            rc=$?
+            if [ $rc -ne 95 ]; then
+                script=$s
+                break
+            fi
+        done
+    else
+        echo "$conf" | $script -t "$type" -e "$event" -a "$action" -s "$state" -u "$uuid" -p "$parent" 2>&1 > /dev/null |
+        sed "s/^/$(basename $(realpath "$script")): /" >&2
+        rc=$?
+    fi
+
+    return $rc
+}
+
+callout_notify() {
+    action="$1"
+    uuid="$2"
+    parent="$3"
+
+    set +o errexit
+
+    if [ -z "$uuid" ]; then
+        return
+    fi
+
+    if dir_is_empty "$callout_notification"; then
+        return 0
+    fi
+
+    # Save content of $config to $conf variable
+    # Allow scripts to check the device configuration
+    # even after the device removed from the system
+    if [ -z "$conf" ]; then
+        conf=$(dump_config)
+    fi
+
+    set -o pipefail
+
+    for n in $callout_notification/*; do
+        echo "$conf" | $n -e "notify" -a "$action" -s "$state" -u "$uuid" -p "$parent" 2>&1 |
+        sed "s/^/$(basename $(realpath "$n")): /"
+    done
+
+    return 0
+}
+
 usage() {
     cat >&2 <<EOF
 Usage: $(basename $0) {COMMAND} [options...]
@@ -1000,6 +1157,14 @@ case "$cmd" in
         ;;
 esac
 
+load_device_parameters "$uuid" "$parent" "$type" "$cmd"
+
+callout "pre" "$cmd" "$uuid" "$parent" "$type"
+if [ $? -ne 0 ]; then
+    callout_notify "$cmd" "$uuid" "$parent" "$type"
+    exit 0
+fi
+
 case "$cmd" in
     define)
         write_config "$persist_base/$parent/$uuid"
@@ -1011,8 +1176,19 @@ case "$cmd" in
         write_config "$file"
         ;;
     stop)
-        set -o errexit
-
         remove_mdev "$uuid"
         ;;
 esac
+if [ $? -eq 0 ]; then
+    state="success"
+    ec=0
+else
+    state="failure"
+    ec=1
+fi
+
+callout "post" "$cmd" "$uuid" "$parent" "$type"
+
+callout_notify "$cmd" "$uuid" "$parent" "$type"
+
+exit $ec

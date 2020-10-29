@@ -2,6 +2,8 @@ PREFIX=/usr
 UDEVDIR=$(shell pkg-config --variable=udevdir udev)
 SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
+CALLOUT_CMD_DIR=$(CONFDIR)/callouts/scripts.d
+CALLOUT_NOTIFIER_DIR=$(CONFDIR)/notification/notifiers.d
 MANDIR=$(PREFIX)/share/man
 NAME=mdevctl
 MDEVCTL_VER=$(shell ./mdevctl version)
@@ -44,6 +46,8 @@ install:
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
 	install -m 644 mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
 	ln -sf mdevctl.8  $(DESTDIR)$(MANDIR)/man8/lsmdev.8
+	mkdir -p $(DESTDIR)$(CALLOUT_CMD_DIR)
+	mkdir -p $(DESTDIR)$(CALLOUT_NOTIFIER_DIR)
 
 clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz
