@@ -261,8 +261,9 @@ start_mdev() {
                     return 1
                 fi
                 val=$(get_attr_index_value $i)
-                echo -e "$val" > "$mdev_base/$uuid/$attr"
-                if [ $? -ne 0 ]; then
+                wret=0
+                echo -e "$val" > "$mdev_base/$uuid/$attr" || wret=$?
+                if [ $wret -ne 0 ]; then
                     echo "Failed to write $val to attribute $attr" >&2
                     remove_mdev "$uuid"
                     return 1
