@@ -418,7 +418,7 @@ case ${1} in
                 fi
 
                 if [ "$(get_config_key start)" == "auto" ]; then
-                    create_mdev "$uuid" "$parent" "$(get_config_key mdev_type)"
+                    start_mdev "$uuid" "$parent" "$(get_config_key mdev_type)"
                     if [ $? -ne 0 ]; then
                         echo "Failed to create mdev $uuid, type $(get_config_key mdev_type) on $parent" >&2
                         # continue...
