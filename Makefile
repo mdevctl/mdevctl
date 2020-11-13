@@ -4,8 +4,10 @@ SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
 MANDIR=$(PREFIX)/share/man
 NAME=mdevctl
-VERSION=0.$(shell git rev-list --count HEAD)
-NVFMT=$(NAME)-$(VERSION)
+MDEVCTL_VER=$(shell ./mdevctl version)
+REVLIST_VER=0.$(shell git rev-list --count HEAD)
+NEXT_VER=0.$(shell echo $$(( $(shell git rev-list --count HEAD) + 1 )) )
+NVFMT=$(NAME)-$(REVLIST_VER)
 
 files: mdevctl 60-mdevctl.rules mdevctl.8 \
 	Makefile COPYING README.md mdevctl.spec.in
@@ -15,7 +17,7 @@ archive: files mdevctl.spec
 	gzip -f -9 $(NVFMT).tar
 
 mdevctl.spec: tag mdevctl.spec.in files
-	sed -e 's:#VERSION#:$(VERSION):g' < mdevctl.spec.in > mdevctl.spec
+	sed -e 's:#VERSION#:$(shell ./mdevctl version):g' < mdevctl.spec.in > mdevctl.spec
 	PREV=""; \
 	for TAG in `git tag --sort=version:refname | tac`; do \
 	    if [ -n "$$PREV" ]; then \
@@ -47,4 +49,4 @@ clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz
 
 tag:
-	git tag -l $(VERSION) | grep -q $(VERSION) || git tag $(VERSION)
+	[ $(MDEVCTL_VER) == $(REVLIST_VER) ] || (sed -i "s/^version=.*/version=\"$(NEXT_VER)\"/" mdevctl && git add mdevctl && git commit -m "Automatic version commit for tag $(NEXT_VER)" && git tag $(NEXT_VER))
