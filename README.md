@@ -268,3 +268,212 @@ e2e73122-cc39-40ee-89eb-b0a47d334cae matrix vfio_ap-passthrough manual
 ```
 
 See `mdevctl --help` or the manpage for more information.
+
+# Invoking External Scripts for Device Events
+
+Certain mediated devices may require additional operations or functionality,
+such as configuration checking or event reporting, before or after mdevctl
+executes a command. In order to remain device-type agnostic, mdevctl will
+"call-out" to external scripts to handle the extraneous work. These scripts
+are associated with a specific device type to perform any operations or
+additional functionality not handled within mdevctl. Additionally, external
+programs may wish to receive notifications of any action performed by mdevctl
+to e.g. respond to any device changes or keep device management in parallel.
+
+A call-out script is invoked at various points during an mdevctl command
+process and are categorized by an "event" paired with an "action", along
+with information regarding the mediated device. Two main event types are
+"pre" and "post", which are invoked before and after primary command
+execution respectively. The same call-out script is invoked for both events.
+
+A "notify" event script is invoked to report the status of mdevctl's
+command results. This may be used to signal external programs of changes
+made to a mediated device, or simply to assist with debugging efforts.
+
+A "get" event script is invoked for the define and list commands to acquire
+device attributes from sysfs.
+
+Essentially, the procedure in mdevctl looks like this:
+
+1. command-line parsing & setup
+2. invoke pre-command call-out
+3. primary command execution (e.g. start mdev / write device config)\*
+4. invoke post-command call-out\*
+5. invoke notifier\*
+
+\* step is skipped if 2 fails.
+
+## Script Parameters
+
+Each call-out and notifier script is invoked by mdevctl with the following
+parameters:
+
+**-e EVENT**
+: denotes the specific call-out or notification event
+- "pre" for pre-command call-out
+- "post" for post-command call-out
+- "notify" for notification scripts
+- "get" for acquiring device data
+
+**-a ACTION**
+: denotes what specific action the script is asked to do
+- for pre/post/notify events, this will be synonymous with an mdevctl command
+ (e.g. define, start)
+- for a get events, this will be "attributes"
+
+**-s STATE**
+: a trinary value defining the current state of mdevctl's command
+execution
+- none: mdevctl has yet to execute the command, or the pre-command
+call-out failed
+- success: mdevctl has completed the command successfully
+- failure: mdevctl has completed the command with an error
+
+**-u UUID & -p PARENT**
+: UUID and parent of the device.
+
+**stdin**
+: as standard input, the device's JSON configuration will be provided. This may
+represent:
+- a persistent device config created by the define command
+- a transient device config representing a sysfs device
+- an "in progress" config imposed by the modify command
+- a device config passed by the `--jsonfile` parameter.
+
+A script does not need to handle every action. As such, the script
+should take care to ignore any unrecognized / unsupported actions
+and allow mdevctl to carry on as normal.
+
+## Pre-command Event
+
+A pre-command event is invoked by mdevctl after any command-line parsing and
+setup, but before a command's execution (such as prior to writing the
+persistent device configuration, or prior to starting a device). For example,
+a script for a vfio_ap-passthrough device may check if the requested matrix is
+already in use before mdevctl can start the device.
+
+Errors reported by pre-command event scripts are disruptive. If a script
+reports an error, then mdevctl will exit early with an appropriate message
+and the command execution will not be performed (e.g. the device will not be
+defined or started). A notifier event will still be invoked in this case.
+
+This call-out will invoke a script with the "pre" `EVENT`, an `ACTION`
+reflecting the mdevctl command, a "none" `STATUS`, and a `UUID` and `PARENT`
+of the device.
+
+```
+echo $config | $script -e "pre" -a "start" -s "none" -u "f0bb71ac-9b72-4d2d-bbdb-67f41d3cd26e" -p "matrix"
+```
+
+## Post-command Event
+
+A post-command event is invoked by mdevctl after a command has executed (such
+as after a device configuration is written, or after a device has been started)
+to perform any additional steps that may be required for a device
+configuration. *The same script invoked for the pre-command call-out is also
+invoked for this call-out.*
+
+Errors reported by scripts during a post-command event are non-disruptive.
+
+This call-out will invoke a script with the "post" `EVENT`, an `ACTION`
+reflecting the mdevctl command, a `STATUS` reflecting the success/failure
+of mdevctl's primary command execution,and a `UUID` and `PARENT` of the
+device.
+
+```
+echo $config | $script -e "post" -a "start" -s "success" -u "f0bb71ac-9b72-4d2d-bbdb-67f41d3cd26e" -p "matrix"
+```
+
+## Notifier Events
+
+Notifier events are invoked by mdevctl to convey information to external
+listeners. For example, a script may signal to another program that an mdevctl
+command has executed successfully. A notifier always follows either a
+pre or post-command event.
+
+Errors reported by scripts during a notifier event are non-disruptive.
+
+A notifier call-out will invoke a script with the "notify" `EVENT`, an `ACTION`
+reflecting the mdevctl command, a `STATUS` reflecting the success/failure
+of mdevctl's primary command execution, or "none" if the pre-command
+call-out failed, and a `UUID` and `PARENT` of the device.
+
+```
+echo $config | $script -e "notify" -a "start" -s "success" -u "f0bb71ac-9b72-4d2d-bbdb-67f41d3cd26e" -p "matrix"
+```
+
+## Get Attributes Event
+
+Get events are invoked to the script as a "get" `EVENT` to request extraneous
+data from the mediated device in the case where mdevctl cannot easily acquire
+them (e.g. from a sysfs device, or an active mdev started by mdevctl). This
+event is always paired with the "attributes" `ACTION`.
+
+This call-out is made during the define and list commands. For define,
+this will acquire the device attributes when creating a device configuration
+by providing the UUID for an existing device that was not previously defined
+by mdevctl. When list is provided the `--dumpjson` option, this will acquire
+the device attributes when providing an active mdev that is queried from sysfs.
+
+A get call-out will invoke a script with the "get" `EVENT`, an "attributes"
+`ACTION`, a "none" `STATUS`, and a `UUID` and `PARENT` of the device.
+
+```
+echo $config | $script -e "get" -a "attributes" -s "none" -u "f0bb71ac-9b72-4d2d-bbdb-67f41d3cd26e" -p "matrix"
+```
+
+The expected output from the script is a JSON formatted array of device
+attributes that may be easily plugged into the device configuration:
+
+```
+[
+    {
+        "assign_adapter": "2"
+    },
+    {
+        "assign_domain": "0x3b"
+    }
+]
+```
+
+## Auto Start
+
+It is worth mentioning that for auto start devices, a pre/post call-out and
+notifier is invoked for each device. The parameters are the same as for a
+start command. The pre-command event is non-disruptive in this case as
+to allow mdevctl to attempt each device.
+
+All errors reported by the pre/post events are redirected to systemd.
+
+Note: if a notification script is used to convey information to another
+program or daemon, it is not guaranteed that the program will be started
+prior to mdevctl's invocation.
+
+## Script Installation
+
+For pre/post/get events, it may be the case that a script can be used to
+satisfy various device types. As such, a special "locator" script is required
+for mdevctl to find the appropriate script to execute. The locator script must
+accept a device type as a parameter and return via standard output either a
+valid path to the script or an empty string if the device type is not
+supported.
+
+For pre/post events, the locator scripts must reside within
+`/etc/mdevctl/callouts/command.d`, and for get events the locator scripts
+must reside within `/etc/mdevctl/callouts/get.d`. mdevctl will execute all
+locator scripts in the respective directory until either a valid path is
+returned or all scripts have returned an empty path.
+
+It is the responsibility of the call-out script to install its locator script
+to the appropriate directory.
+
+An example execution of a locator script:
+`/etc/mdevctl/callouts/command.d/ap_command.sh -t vfio_ap-passthrough`
+
+An example output from the locator script:
+`/usr/sbin/ap_check`
+
+Notifier event scripts must reside within
+`/etc/mdevctl/notification/notifiers.d/`. This event type does not require a
+locator script, and all scripts within this directory will be executed
+regardless of device type.
