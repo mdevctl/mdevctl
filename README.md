@@ -267,4 +267,28 @@ e2e73122-cc39-40ee-89eb-b0a47d334cae matrix vfio_ap-passthrough manual
     @{2}: {"assign_domain":"0xff"}
 ```
 
+# Invoking External Scripts for Device Events
+
+Certain mediated devices may require additional operations or functionality,
+such as configuration checking or event reporting, before or after mdevctl
+executes a command. In order to remain device-type agnostic, mdevctl will
+"call-out" to external scripts to handle the extraneous work. These scripts
+are associated with a specific device type to perform any operations or
+additional functionality not handled within mdevctl. Additionally, external
+programs may wish to receive notifications of any action performed by mdevctl
+to e.g. respond to any device changes or keep device management in parallel.
+
+A call-out script is invoked at various points during an mdevctl command
+process and are categorized by an "event" paired with an "action", along
+with information regarding the mediated device. Two main event types are
+"pre" and "post", which are invoked before and after primary command
+execution respectively. The same call-out script is invoked for both events.
+
+A "notify" event script is invoked to report the status of mdevctl's
+command results. This may be used to signal external programs of changes
+made to a mediated device, or simply to assist with debugging efforts.
+
+A "get" event script is invoked for the define and list commands to acquire
+device attributes from sysfs.
+
 See `mdevctl --help` or the manpage for more information.
