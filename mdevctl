@@ -3,7 +3,7 @@
 persist_base=/etc/mdevctl.d
 mdev_base=/sys/bus/mdev/devices
 parent_base=/sys/class/mdev_bus
-version="0.69"
+version="0.78"
 
 # Alias 'lsmdev' to 'mdevctl list'
 if [ $(basename $0) == "lsmdev" ]; then
