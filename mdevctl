@@ -232,8 +232,9 @@ create_mdev() {
         return 1
     fi
 
-    echo "$uuid" > "$parent_base/$parent/mdev_supported_types/$type/create"
-    if [ $? -ne 0 ]; then
+    cret=0
+    echo "$uuid" > "$parent_base/$parent/mdev_supported_types/$type/create" || cret=$?
+    if [ $cret -ne 0 ]; then
         echo "Error creating mdev type $type on $parent" >&2
         return 1
     fi
@@ -261,8 +262,9 @@ start_mdev() {
                     return 1
                 fi
                 val=$(get_attr_index_value $i)
-                echo -e "$val" > "$mdev_base/$uuid/$attr"
-                if [ $? -ne 0 ]; then
+                wret=0
+                echo -e "$val" > "$mdev_base/$uuid/$attr" || wret=$?
+                if [ $wret -ne 0 ]; then
                     echo "Failed to write $val to attribute $attr" >&2
                     remove_mdev "$uuid"
                     return 1
@@ -287,8 +289,9 @@ remove_mdev() {
         return 1
     fi
 
-    echo 1 > "$mdev_base/$uuid/remove"
-    if [ $? -ne 0 ]; then
+    rret=0
+    echo 1 > "$mdev_base/$uuid/remove" || rret=$?
+    if [ $rret -ne 0 ]; then
         echo "Error removing device $uuid" >&2
         return 1
     fi
