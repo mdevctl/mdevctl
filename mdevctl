@@ -3,6 +3,7 @@
 persist_base=/etc/mdevctl.d
 mdev_base=/sys/bus/mdev/devices
 parent_base=/sys/class/mdev_bus
+version="0.69"
 
 # Alias 'lsmdev' to 'mdevctl list'
 if [ $(basename $0) == "lsmdev" ]; then
@@ -385,6 +386,7 @@ types		List mdev types.  Options:
 		Specifying a PARENT lists only the types provided by the given
 		parent device.  The dumpjson option provides output in machine
 		readable JSON format.
+version		Print mdevctl version.
 EOF
     exit 1
 }
@@ -421,7 +423,7 @@ case ${1} in
                 fi
 
                 if [ "$(get_config_key start)" == "auto" ]; then
-                    create_mdev "$uuid" "$parent" "$(get_config_key mdev_type)"
+                    start_mdev "$uuid" "$parent" "$(get_config_key mdev_type)"
                     if [ $? -ne 0 ]; then
                         echo "Failed to create mdev $uuid, type $(get_config_key mdev_type) on $parent" >&2
                         # continue...
@@ -437,6 +439,12 @@ case ${1} in
     --help|-h|-?)
         usage
         ;;
+    version)
+        cmd="$1"
+        OPTIONS=""
+        LONGOPTS=""
+        shift
+	;;
     define)
         cmd="$1"
         OPTIONS="u:p:t:a"
@@ -563,6 +571,9 @@ if [ $# -ne 0 ]; then
 fi
 
 case "$cmd" in
+    version)
+        echo $version
+        ;;
     define)
         if [ -n "$jsonfile" ]; then
             if [ ! -r "$jsonfile" ]; then
