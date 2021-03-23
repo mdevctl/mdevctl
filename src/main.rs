@@ -1,8 +1,12 @@
 use anyhow::{anyhow, Result};
-use log::debug;
-use std::path::PathBuf;
+use log::{debug, warn};
+use std::fs;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 use uuid::Uuid;
+
+const MDEV_BASE: &str = "/sys/bus/mdev/devices";
+const PERSIST_BASE: &str = "/etc/mdevctl.d";
 
 // command-line argument definitions.
 #[derive(StructOpt)]
@@ -86,6 +90,88 @@ enum Cli {
     },
 }
 
+fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String> {
+    let path = fs::canonicalize(path)?;
+    let fname = path.file_name();
+    if fname.is_none() {
+        return Err(anyhow!("Invalid path"));
+    }
+    let fname = fname.unwrap().to_str();
+    match fname {
+        Some(x) => Ok(x.to_string()),
+        None => Err(anyhow!("Invalid file name")),
+    }
+}
+
+#[derive(Debug)]
+struct MdevInfo {
+    uuid: Uuid,
+    active: bool,
+    defined: bool,
+    autostart: bool,
+    path: PathBuf,
+    parent: String,
+    mdev_type: String,
+}
+
+impl MdevInfo {
+    pub fn new(uuid: Uuid) -> MdevInfo {
+        MdevInfo {
+            uuid: uuid,
+            active: false,
+            defined: false,
+            autostart: false,
+            path: PathBuf::new(),
+            parent: String::new(),
+            mdev_type: String::new(),
+        }
+    }
+
+    pub fn load_from_sysfs(&mut self) -> Result<()> {
+        debug!("Loading device '{:?}' from sysfs", self.uuid);
+        self.path = PathBuf::from(MDEV_BASE);
+        self.path.push(self.uuid.to_hyphenated().to_string());
+        self.active = match self.path.symlink_metadata() {
+            Ok(attr) => attr.file_type().is_symlink(),
+            _ => false,
+        };
+
+        if !self.active {
+            debug!("loaded device {:?}", self);
+            return Ok(());
+        }
+
+        let canonpath = self.path.canonicalize()?;
+        let sysfsparent = canonpath.parent().unwrap();
+        let parentname = canonical_basename(sysfsparent)?;
+        if !self.parent.is_empty() && self.parent != parentname {
+            warn!(
+                "Overwriting parent for mdev {:?}: {} => {}",
+                self.uuid, self.parent, parentname
+            );
+        }
+        self.parent = parentname;
+        let mut typepath = self.path.to_owned();
+        typepath.push("mdev_type");
+        let mdev_type = canonical_basename(typepath)?;
+        if !self.mdev_type.is_empty() && self.mdev_type != mdev_type {
+            warn!(
+                "Overwriting mdev type for mdev {:?}: {} => {}",
+                self.uuid, self.mdev_type, mdev_type
+            );
+        }
+        self.mdev_type = mdev_type;
+
+        let mut persist_path = PathBuf::from(PERSIST_BASE);
+        persist_path.push(self.parent.to_owned());
+        persist_path.push(self.uuid.to_hyphenated().to_string());
+        self.defined = persist_path.is_file();
+
+        debug!("loaded device {:?}", self);
+        Ok(())
+    }
+}
+
 fn define_command(
     _uuid: Option<Uuid>,
     _auto: bool,
@@ -123,8 +209,15 @@ fn start_command(
     return Err(anyhow!("Not implemented"));
 }
 
-fn stop_command(_uuid: Uuid) -> Result<()> {
-    return Err(anyhow!("Not implemented"));
+fn stop_command(uuid: Uuid) -> Result<()> {
+    debug!("Stopping '{}'", uuid);
+    let mut info = MdevInfo::new(uuid);
+    info.load_from_sysfs()?;
+    let mut remove_path = PathBuf::from(info.path);
+    remove_path.push("remove");
+    debug!("remove path '{:?}'", remove_path);
+    fs::write(remove_path, "1")?;
+    Ok(())
 }
 
 fn list_command(
