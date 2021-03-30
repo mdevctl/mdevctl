@@ -4,6 +4,7 @@ SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
 CALLOUT_CMD_DIR=$(CONFDIR)/callouts/command.d
 CALLOUT_NOTIFIER_DIR=$(CONFDIR)/notification/notifiers.d
+CALLOUT_GET_DIR=$(CONFDIR)/callouts/get.d
 MANDIR=$(PREFIX)/share/man
 NAME=mdevctl
 MDEVCTL_VER=$(shell ./mdevctl version)
@@ -48,6 +49,7 @@ install:
 	ln -sf mdevctl.8  $(DESTDIR)$(MANDIR)/man8/lsmdev.8
 	mkdir -p $(DESTDIR)$(CALLOUT_CMD_DIR)
 	mkdir -p $(DESTDIR)$(CALLOUT_NOTIFIER_DIR)
+	mkdir -p $(DESTDIR)$(CALLOUT_GET_DIR)
 
 clean:
 	rm -f mdevctl.spec *.src.rpm noarch/*.rpm *.tar.gz

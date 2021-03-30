@@ -316,8 +316,26 @@ unique_uuid() {
 
 callout_script="$persist_base/callouts/command.d"
 callout_notification="$persist_base/notification/notifiers.d"
+callout_get_attr="$persist_base/callouts/get.d"
 
 state="none"
+get_attr=[]
+
+build_config() {
+    uuid="$1"
+    parent="$2"
+    type="$3"
+
+    set_config_key mdev_type "$type"
+    set_config_key start 'manual'
+
+    callout_get "get" "attributes" "$uuid" "$parent" "$type"
+    if [ $? -eq 0 ]; then
+        if [ "$get_attr" != [{}] ]; then
+            attrs=$get_attr
+        fi
+    fi
+}
 
 dir_is_empty() {
     path="$1"
@@ -375,8 +393,7 @@ get_device_parameters() {
         # $config was not assigned before initial callout and config file does not exists
         # We need to assigned $config with parameters passed by the user
         if [ ! -e "$persist_base/$parent/$uuid" ]; then
-            set_config_key mdev_type "$type"
-            set_config_key start 'manual'
+            build_config "$uuid" "$parent" "$type"
         else
         # Undefine and stop a device
         # $config was not assigned before initial callout and config file exists
@@ -424,6 +441,35 @@ callout() {
     
     echo "$conf" | $script -e "$event" -a "$action" -s "$state" -u "$uuid" -p "$parent" 2>&1 > /dev/null |
     (sed "s/^/$(basename $(realpath "$script")): /" >&2)
+
+    return $?
+}
+
+callout_get() {
+    local event="$1"
+    local action="$2"
+    local uuid="$3"
+    local parent="$4"
+    local type="$5"
+    local script=""
+
+    set +o errexit
+
+    if [ -z "$uuid" ]; then
+        return
+    fi
+
+    if dir_is_empty "$callout_get_attr"; then
+        return 0
+    fi
+
+    if ! get_callout_script "$callout_get_attr"; then
+        return 0
+    fi
+
+    set -o pipefail
+
+    get_attr=$($script -e "$event" -a "$action" -s "none" -u "$uuid" -p "$parent")
 
     return $?
 }
@@ -804,6 +850,17 @@ case "$cmd" in
             mkdir -p "$persist_base/$parent"
             set_config_key mdev_type "$type"
             set_config_key start "$start"
+
+            if [ -e "$mdev_base/$uuid" ]; then
+                callout_get "get" "attributes" "$uuid" "$parent" "$type"
+                if [ $? -eq 0 ]; then
+                    if [ "$get_attr" != [{}] ]; then
+                        attrs=$get_attr
+                    fi
+                else
+                    exit 1
+                fi
+            fi
         fi
         ;;
     undefine)
@@ -1047,6 +1104,20 @@ case "$cmd" in
 
                 json_tmp="{\"$p\":[{\"$u\":{\"mdev_type\":\"$type\"}}]}"
                 txt+="$u $p $type"
+
+                if [ -n "$dumpjson" ]; then
+                    callout_get "get" "attributes" "$u" "$p" "$type"
+                    if [ $? -eq 0 ]; then
+                        if [ "$get_attr" != [] ]; then # callout_get script has been invoked
+                            if [ "$get_attr" == [{}] ]; then
+                                get_attr=[]
+                            fi
+
+                            json_tmp=$(echo "$json_tmp" | jq --argjson att "{\"attrs\":$get_attr}" \
+                                    '(.matrix | .[] | .[] | .) += $att')
+                        fi
+                    fi
+                fi
 
                 if [ -f "$persist_base/$p/$u" ]; then
                     read_config "$persist_base/$p/$u"
