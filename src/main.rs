@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
 use serde_json;
 use std::collections::BTreeMap;
@@ -307,6 +307,20 @@ impl MdevInfo {
             false => Ok(partial),
         }
     }
+
+    pub fn stop(&mut self) -> Result<()> {
+        debug!("Removing mdev {:?}", self.uuid);
+        let mut remove_path = self.path.clone();
+        remove_path.push("remove");
+        debug!("remove path '{:?}'", remove_path);
+        match fs::write(remove_path, "1") {
+            Ok(_) => {
+                self.active = false;
+                Ok(())
+            }
+            Err(e) => Err(e).with_context(|| format!("Error removing device {:?}", self.uuid)),
+        }
+    }
 }
 
 fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
@@ -367,11 +381,7 @@ fn stop_command(uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut info = MdevInfo::new(uuid);
     info.load_from_sysfs()?;
-    let mut remove_path = PathBuf::from(info.path);
-    remove_path.push("remove");
-    debug!("remove path '{:?}'", remove_path);
-    fs::write(remove_path, "1")?;
-    Ok(())
+    info.stop()
 }
 
 fn list_command(
