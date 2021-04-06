@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use faccess::PathExt;
 use log::{debug, warn};
 use serde_json;
 use std::collections::BTreeMap;
@@ -10,6 +11,7 @@ use uuid::Uuid;
 
 const MDEV_BASE: &str = "/sys/bus/mdev/devices";
 const PERSIST_BASE: &str = "/etc/mdevctl.d";
+const PARENT_BASE: &str = "/sys/class/mdev_bus";
 
 // command-line argument definitions.
 #[derive(StructOpt)]
@@ -111,7 +113,7 @@ enum FormatType {
     Defined,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MdevInfo {
     uuid: Uuid,
     active: bool,
@@ -321,6 +323,94 @@ impl MdevInfo {
             Err(e) => Err(e).with_context(|| format!("Error removing device {:?}", self.uuid)),
         }
     }
+
+    pub fn create(&mut self) -> Result<()> {
+        debug!("Creating mdev {:?}", self.uuid);
+        let mut existing = MdevInfo::new(self.uuid);
+
+        if existing.load_from_sysfs().is_ok() && existing.active {
+            if existing.parent != self.parent {
+                return Err(anyhow!("Device exists under different parent"));
+            }
+            if existing.mdev_type != self.mdev_type {
+                return Err(anyhow!("Device exists with different type"));
+            }
+            return Err(anyhow!("Device already exists"));
+        }
+
+        let mut path: PathBuf = [PARENT_BASE, &self.parent, "mdev_supported_types"]
+            .iter()
+            .collect();
+        debug!("Checking parent for mdev support: {:?}", path);
+        if !path.is_dir() {
+            return Err(anyhow!(
+                "Parent {} is not currently registered for mdev support",
+                self.parent
+            ));
+        }
+        path.push(&self.mdev_type);
+        debug!(
+            "Checking parent for mdev type {}: {:?}",
+            self.mdev_type, path
+        );
+        if !path.is_dir() {
+            return Err(anyhow!(
+                "Parent {} does not support mdev type {}",
+                self.parent,
+                self.mdev_type
+            ));
+        }
+        path.push("available_instances");
+        debug!("Checking available instances: {:?}", path);
+        let avail: i32 = fs::read_to_string(&path)?.trim().parse()?;
+
+        debug!("Available instances: {}", avail);
+        if avail == 0 {
+            return Err(anyhow!(
+                "No available instances of {} on {}",
+                self.mdev_type,
+                self.parent
+            ));
+        }
+        path.pop();
+        path.push("create");
+        debug!("Creating mediated device: {:?} -> {:?}", self.uuid, path);
+        match fs::write(path, self.uuid.to_hyphenated().to_string()) {
+            Ok(_) => {
+                self.active = true;
+                Ok(())
+            }
+            Err(e) => Err(e).with_context(|| {
+                format!(
+                    "Failed to create mdev {}, type {} on {}",
+                    self.uuid.to_hyphenated().to_string(),
+                    self.mdev_type,
+                    self.parent
+                )
+            }),
+        }
+    }
+
+    pub fn start(&mut self, print_uuid: bool) -> Result<()> {
+        self.create()?;
+
+        debug!("Setting attributes for mdev {:?}", self.uuid);
+        for (k, v) in self.attrs.iter() {
+            match write_attr(&self.path, &k, &v) {
+                Err(e) => {
+                    self.stop()?;
+                    return Err(e);
+                }
+                _ => {}
+            }
+        }
+
+        if print_uuid {
+            println!("{}", self.uuid.to_hyphenated().to_string());
+        }
+
+        Ok(())
+    }
 }
 
 fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
@@ -368,13 +458,119 @@ fn modify_command(
     return Err(anyhow!("Not implemented"));
 }
 
+fn write_attr(basepath: &PathBuf, attr: &String, val: &String) -> Result<()> {
+    debug!("Writing attribute '{}' -> '{}'", attr, val);
+    let mut path = basepath.clone();
+    path.push(attr);
+    if !path.exists() {
+        return Err(anyhow!("Invalid attribute '{}'", val));
+    } else if !path.writable() {
+        return Err(anyhow!("Attribute '{}' cannot be set", val));
+    }
+    fs::write(path, val).with_context(|| format!("Failed to write {} to attribute {}", val, attr))
+}
+
+fn start_command_helper(
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    jsonfile: Option<PathBuf>,
+) -> Result<MdevInfo> {
+    debug!("Starting device '{:?}'", uuid);
+    let mut dev: Option<MdevInfo> = None;
+    match jsonfile {
+        Some(fname) => {
+            let contents = fs::read_to_string(&fname)
+                .with_context(|| format!("Unable to read jsonfile {:?}", fname))?;
+            let val: serde_json::Value = serde_json::from_str(&contents)?;
+
+            if mdev_type.is_some() {
+                return Err(anyhow!(
+                    "Device type cannot be specified separately from json file"
+                ));
+            }
+
+            if parent.is_none() {
+                return Err(anyhow!(
+                    "Parent device required to start device via json file"
+                ));
+            }
+
+            let mut d = MdevInfo::new(uuid.unwrap_or_else(|| Uuid::new_v4()));
+            d.load_from_json(parent.unwrap(), &val)?;
+            dev = Some(d);
+        }
+        _ => {
+            if mdev_type.is_some() && parent.is_none() {
+                return Err(anyhow!("can't provide type without parent"));
+            }
+
+            /* The device is not fully specified without TYPE, we must find a config file, with optional
+             * PARENT for disambiguation */
+            if mdev_type.is_none() && uuid.is_some() {
+                let devs = defined_devices(&uuid, &parent)?;
+                let uuid = uuid.unwrap();
+                if devs.is_empty() {
+                    return match parent {
+                        None => Err(anyhow!(
+                            "Config for {} does not exist, define it first?",
+                            uuid.to_hyphenated().to_string()
+                        )),
+                        Some(p) => Err(anyhow!(
+                            "Config for {}/{} does not exist, define it first?",
+                            p,
+                            uuid.to_hyphenated().to_string()
+                        )),
+                    };
+                } else if devs.len() > 1 {
+                    return match parent {
+                        None => Err(anyhow!(
+                            "Multiple configs found for {}, specify a parent",
+                            uuid.to_hyphenated().to_string()
+                        )),
+                        Some(p) => Err(anyhow!(
+                            "Multiple configs found for {}/{}",
+                            p,
+                            uuid.to_hyphenated().to_string()
+                        )),
+                    };
+                } else {
+                    let (parent, children) = devs.iter().next().unwrap();
+                    if children.len() > 1 {
+                        return Err(anyhow!(
+                            "Multiple configs found for {}/{}",
+                            parent,
+                            uuid.to_hyphenated().to_string()
+                        ));
+                    }
+                    dev = Some(children.get(0).unwrap().clone());
+                }
+            }
+            if uuid.is_none() {
+                if parent.is_none() || mdev_type.is_none() {
+                    return Err(anyhow!("Device is insufficiently specified"));
+                }
+            }
+
+            if dev.is_none() {
+                let mut d = MdevInfo::new(uuid.unwrap_or_else(|| Uuid::new_v4()));
+                d.parent = parent.unwrap();
+                d.mdev_type = mdev_type.unwrap();
+                dev = Some(d);
+            }
+        }
+    }
+    Ok(dev.unwrap())
+}
+
 fn start_command(
-    _uuid: Option<Uuid>,
-    _parent: Option<String>,
-    _mdev_type: Option<String>,
-    _jsonfile: Option<PathBuf>,
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    jsonfile: Option<PathBuf>,
 ) -> Result<()> {
-    return Err(anyhow!("Not implemented"));
+    let mut dev = start_command_helper(uuid, parent, mdev_type, jsonfile)?;
+    dev.start(uuid.is_none())
 }
 
 fn stop_command(uuid: Uuid) -> Result<()> {
