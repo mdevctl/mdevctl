@@ -384,6 +384,59 @@ fn stop_command(uuid: Uuid) -> Result<()> {
     info.stop()
 }
 
+fn defined_devices(
+    uuid: &Option<Uuid>,
+    parent: &Option<String>,
+) -> Result<BTreeMap<String, Vec<MdevInfo>>> {
+    let mut devices: BTreeMap<String, Vec<MdevInfo>> = BTreeMap::new();
+    debug!("Looking up defined mdevs");
+    for parentpath in PathBuf::from(PERSIST_BASE).read_dir()? {
+        let parentpath = parentpath?;
+        let parentname = parentpath.file_name();
+        let parentname = parentname.to_str().unwrap();
+        if (parent.is_some() && parent.as_ref().unwrap() != parentname)
+            || !parentpath.metadata()?.is_dir()
+        {
+            debug!("Ignoring child devices for parent {}", parentname);
+            continue;
+        }
+
+        let mut childdevices = Vec::new();
+
+        for child in parentpath.path().read_dir()? {
+            let child = child?;
+            if !child.metadata()?.is_file() {
+                continue;
+            }
+
+            let path = child.path();
+            let basename = path.file_name().unwrap().to_str().unwrap();
+            let u = Uuid::parse_str(basename).unwrap();
+            debug!("found mdev {:?}", u);
+            if uuid.is_some() && uuid.as_ref().unwrap() != &u {
+                debug!(
+                    "Ignoring device {} because it doesn't match uuid {}",
+                    u,
+                    uuid.unwrap()
+                );
+                continue;
+            }
+
+            let mut f = fs::File::open(path)?;
+            let mut contents = String::new();
+            f.read_to_string(&mut contents)?;
+            let val: serde_json::Value = serde_json::from_str(&contents)?;
+            let mut dev = MdevInfo::new(u);
+            dev.load_from_json(parentname.to_string(), &val)?;
+            dev.load_from_sysfs()?;
+
+            childdevices.push(dev);
+        }
+        devices.insert(parentname.to_string(), childdevices);
+    }
+    Ok(devices)
+}
+
 fn list_command(
     defined: bool,
     dumpjson: bool,
@@ -393,51 +446,7 @@ fn list_command(
 ) -> Result<()> {
     let mut devices: BTreeMap<String, Vec<MdevInfo>> = BTreeMap::new();
     if defined {
-        debug!("Looking up defined mdevs");
-        for parentpath in PathBuf::from(PERSIST_BASE).read_dir()? {
-            let parentpath = parentpath?;
-            let parentname = parentpath.file_name();
-            let parentname = parentname.to_str().unwrap();
-            if (parent.is_some() && parent.as_ref().unwrap() != parentname)
-                || !parentpath.metadata()?.is_dir()
-            {
-                debug!("Ignoring child devices for parent {}", parentname);
-                continue;
-            }
-
-            let mut childdevices = Vec::new();
-
-            for child in parentpath.path().read_dir()? {
-                let child = child?;
-                if !child.metadata()?.is_file() {
-                    continue;
-                }
-
-                let path = child.path();
-                let basename = path.file_name().unwrap().to_str().unwrap();
-                let u = Uuid::parse_str(basename).unwrap();
-                debug!("found mdev {:?}", u);
-                if uuid.is_some() && uuid.as_ref().unwrap() != &u {
-                    debug!(
-                        "Ignoring device {} because it doesn't match uuid {}",
-                        u,
-                        uuid.unwrap()
-                    );
-                    continue;
-                }
-
-                let mut f = fs::File::open(path)?;
-                let mut contents = String::new();
-                f.read_to_string(&mut contents)?;
-                let val: serde_json::Value = serde_json::from_str(&contents)?;
-                let mut dev = MdevInfo::new(u);
-                dev.load_from_json(parentname.to_string(), &val)?;
-                dev.load_from_sysfs()?;
-
-                childdevices.push(dev);
-            }
-            devices.insert(parentname.to_string(), childdevices);
-        }
+        devices = defined_devices(&uuid, &parent)?;
     } else {
         debug!("Looking up active mdevs");
         for dev in PathBuf::from(MDEV_BASE).read_dir()? {
