@@ -629,7 +629,10 @@ fn defined_devices(
     parent: &Option<String>,
 ) -> Result<BTreeMap<String, Vec<MdevInfo>>> {
     let mut devices: BTreeMap<String, Vec<MdevInfo>> = BTreeMap::new();
-    debug!("Looking up defined mdevs");
+    debug!(
+        "Looking up defined mdevs: uuid={:?}, parent={:?}",
+        uuid, parent
+    );
     for parentpath in PathBuf::from(PERSIST_BASE).read_dir()? {
         let parentpath = parentpath?;
         let parentname = parentpath.file_name();
@@ -672,7 +675,9 @@ fn defined_devices(
 
             childdevices.push(dev);
         }
-        devices.insert(parentname.to_string(), childdevices);
+        if !childdevices.is_empty() {
+            devices.insert(parentname.to_string(), childdevices);
+        }
     }
     Ok(devices)
 }
