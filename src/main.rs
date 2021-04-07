@@ -114,6 +114,50 @@ enum FormatType {
 }
 
 #[derive(Debug, Clone)]
+struct MdevTypeInfo {
+    parent: String,
+    typename: String,
+    available_instances: i32,
+    device_api: String,
+    name: String,
+    description: String,
+}
+
+impl MdevTypeInfo {
+    pub fn new() -> MdevTypeInfo {
+        MdevTypeInfo {
+            parent: String::new(),
+            typename: String::new(),
+            available_instances: 0,
+            device_api: String::new(),
+            name: String::new(),
+            description: String::new(),
+        }
+    }
+
+    pub fn to_json(&self) -> Result<serde_json::Value> {
+        let mut jsonobj: serde_json::Value = serde_json::json!({
+            "available_instances": self.available_instances,
+            "device_api": self.device_api,
+        });
+        if !self.name.is_empty() {
+            jsonobj.as_object_mut().unwrap().insert(
+                "name".to_string(),
+                serde_json::Value::String(self.name.clone()),
+            );
+        }
+        if !self.description.is_empty() {
+            jsonobj.as_object_mut().unwrap().insert(
+                "description".to_string(),
+                serde_json::Value::String(self.description.clone()),
+            );
+        }
+
+        Ok(serde_json::json!({ &self.typename: jsonobj }))
+    }
+}
+
+#[derive(Debug, Clone)]
 struct MdevInfo {
     uuid: Uuid,
     active: bool,
@@ -710,8 +754,97 @@ fn list_command(
     Ok(())
 }
 
-fn types_command(_parent: Option<String>, _dumpjson: bool) -> Result<()> {
-    return Err(anyhow!("Not implemented"));
+fn supported_types(parent: Option<String>) -> Result<BTreeMap<String, Vec<MdevTypeInfo>>> {
+    debug!("Finding supported mdev types");
+    let mut types: BTreeMap<String, Vec<MdevTypeInfo>> = BTreeMap::new();
+
+    for parentpath in PathBuf::from(PARENT_BASE).read_dir()? {
+        let parentpath = parentpath?;
+        let parentname = parentpath.file_name();
+        let parentname = parentname.to_str().unwrap();
+        debug!("Looking for supported types for device {}", parentname);
+        if parent.is_some() && parent.as_ref().unwrap() != parentname {
+            debug!("Ignoring types for parent {}", parentname);
+            continue;
+        }
+
+        let mut childtypes = Vec::new();
+        let mut parentpath = parentpath.path();
+        parentpath.push("mdev_supported_types");
+        for child in parentpath.read_dir()? {
+            let child = child?;
+            if !child.metadata()?.is_dir() {
+                continue;
+            }
+
+            let mut t = MdevTypeInfo::new();
+            t.parent = parentname.to_string();
+
+            let mut path = child.path();
+            t.typename = path.file_name().unwrap().to_str().unwrap().to_string();
+            debug!("found mdev type {}", t.typename);
+
+            path.push("available_instances");
+            debug!("Checking available instances: {:?}", path);
+            t.available_instances = fs::read_to_string(&path)?.trim().parse()?;
+
+            path.pop();
+            path.push("device_api");
+            t.device_api = fs::read_to_string(&path)?.trim().to_string();
+
+            path.pop();
+            path.push("name");
+            if path.exists() {
+                t.name = fs::read_to_string(&path)?.trim().to_string();
+            }
+
+            path.pop();
+            path.push("description");
+            if path.exists() {
+                t.description = fs::read_to_string(&path)?
+                    .trim()
+                    .replace("\n", ", ")
+                    .to_string();
+            }
+
+            childtypes.push(t);
+        }
+        types.insert(parentname.to_string(), childtypes);
+    }
+    Ok(types)
+}
+
+fn types_command(parent: Option<String>, dumpjson: bool) -> Result<()> {
+    let types = supported_types(parent)?;
+    debug!("{:?}", types);
+    if dumpjson {
+        let mut jsontypes: serde_json::Value = serde_json::json!([]);
+        for (parent, children) in types {
+            let mut jsonchildren: serde_json::Value = serde_json::json!([]);
+            for child in children {
+                jsonchildren.as_array_mut().unwrap().push(child.to_json()?);
+            }
+            let jsonparent = serde_json::json!({ parent: jsonchildren });
+            jsontypes.as_array_mut().unwrap().push(jsonparent);
+        }
+        println!("{}", serde_json::to_string_pretty(&jsontypes)?);
+    } else {
+        for (parent, children) in types {
+            println!("{}", parent);
+            for child in children {
+                println!("  {}", child.typename);
+                println!("    Available instances: {}", child.available_instances);
+                println!("    Device API: {}", child.device_api);
+                if !child.name.is_empty() {
+                    println!("    Name: {}", child.name);
+                }
+                if !child.description.is_empty() {
+                    println!("    Description: {}", child.description);
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn main() -> Result<()> {
