@@ -282,7 +282,7 @@ impl MdevInfo {
         Ok(output)
     }
 
-    pub fn to_json(&self) -> Result<serde_json::Value> {
+    pub fn to_json(&self, include_uuid: bool) -> Result<serde_json::Value> {
         let autostart = match self.autostart {
             true => "auto",
             false => "manual",
@@ -294,15 +294,18 @@ impl MdevInfo {
                 jsonattrs.as_array_mut().unwrap().push(attr);
             }
         }
-        let jsonval: serde_json::Value = serde_json::json!({
-            self.uuid.to_hyphenated().to_string(): {
+        let partial: serde_json::Value = serde_json::json!({
                 "mdev_type": self.mdev_type,
                 "start": autostart,
                 "attrs": jsonattrs
-            }
         });
+        let full: serde_json::Value =
+            serde_json::json!({ self.uuid.to_hyphenated().to_string(): partial });
 
-        Ok(jsonval)
+        match include_uuid {
+            true => Ok(full),
+            false => Ok(partial),
+        }
     }
 }
 
@@ -311,7 +314,7 @@ fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
     for (parentname, children) in devices {
         let mut childrenarray = Vec::new();
         for child in children {
-            childrenarray.push(child.to_json()?);
+            childrenarray.push(child.to_json(true)?);
         }
         parents.insert(parentname, childrenarray.into());
     }
