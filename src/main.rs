@@ -183,6 +183,17 @@ impl MdevInfo {
         }
     }
 
+    pub fn persist_path(&self) -> Option<PathBuf> {
+        if self.parent.is_empty() {
+            return None;
+        }
+
+        let mut path = PathBuf::from(PERSIST_BASE);
+        path.push(&self.parent);
+        path.push(self.uuid.to_hyphenated().to_string());
+        Some(path)
+    }
+
     pub fn load_from_sysfs(&mut self) -> Result<()> {
         debug!("Loading device '{:?}' from sysfs", self.uuid);
         self.path = PathBuf::from(MDEV_BASE);
@@ -218,10 +229,7 @@ impl MdevInfo {
         }
         self.mdev_type = mdev_type;
 
-        let mut persist_path = PathBuf::from(PERSIST_BASE);
-        persist_path.push(self.parent.to_owned());
-        persist_path.push(self.uuid.to_hyphenated().to_string());
-        self.defined = persist_path.is_file();
+        self.defined = self.persist_path().unwrap().exists();
 
         debug!("loaded device {:?}", self);
         Ok(())
