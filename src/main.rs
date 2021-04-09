@@ -468,6 +468,21 @@ impl MdevInfo {
 
         Ok(())
     }
+
+    pub fn write_config(&self) -> Result<()> {
+        let jsonstring = serde_json::to_string_pretty(&self.to_json(false)?)?;
+        let path = self.persist_path().unwrap();
+        let parentdir = path.parent().unwrap();
+        debug!("Ensuring parent directory {:?} exists", parentdir);
+        fs::create_dir_all(parentdir)?;
+        debug!("Writing config for {:?} to {:?}", self.uuid, path);
+        fs::write(path, jsonstring.as_bytes())
+            .with_context(|| format!("Failed to write config for device {:?}", self.uuid))
+    }
+
+    pub fn define(&self) -> Result<()> {
+        self.write_config()
+    }
 }
 
 fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
@@ -487,14 +502,104 @@ fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
     serde_json::to_string_pretty(&jsonval).map_err(|_e| anyhow!("Unable to serialize json"))
 }
 
+// convert 'define' command arguments into a MdevInfo struct
+fn define_command_helper(
+    uuid: Option<Uuid>,
+    auto: bool,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    jsonfile: Option<PathBuf>,
+) -> Result<MdevInfo> {
+    let uuid_provided = uuid.is_some();
+    let uuid = uuid.unwrap_or_else(|| Uuid::new_v4());
+    let mut dev = MdevInfo::new(uuid);
+
+    if jsonfile.is_some() {
+        let jsonfile = jsonfile.unwrap();
+        if !jsonfile.readable() {
+            return Err(anyhow!("Unable to read file {:?}", jsonfile));
+        }
+
+        if mdev_type.is_some() {
+            return Err(anyhow!(
+                "Device type cannot be specified separately from {:?}",
+                jsonfile
+            ));
+        }
+
+        if parent.is_none() {
+            return Err(anyhow!(
+                "Parent device required to define device via {:?}",
+                jsonfile
+            ));
+        }
+
+        let devs = defined_devices(&Some(uuid), &parent)?;
+        if !devs.is_empty() {
+            return Err(anyhow!(
+                "Cowardly refusing to overwrite existing config for {}/{}",
+                parent.unwrap(),
+                uuid.to_hyphenated().to_string()
+            ));
+        }
+
+        let filecontents = fs::read_to_string(&jsonfile)
+            .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
+        let jsonval: serde_json::Value = serde_json::from_str(&filecontents)?;
+        dev.load_from_json(parent.unwrap(), &jsonval)?;
+    } else {
+        if uuid_provided {
+            dev.load_from_sysfs()?;
+            if parent.is_none() {
+                if !dev.active || mdev_type.is_some() {
+                    return Err(anyhow!("No parent specified"));
+                }
+            }
+        }
+
+        dev.autostart = auto;
+        if parent.is_some() {
+            dev.parent = parent.unwrap();
+        }
+        if mdev_type.is_some() {
+            dev.mdev_type = mdev_type.unwrap();
+        }
+
+        if dev.parent.is_empty() {
+            return Err(anyhow!("No parent specified"));
+        }
+        if dev.mdev_type.is_empty() {
+            return Err(anyhow!("No type specified"));
+        }
+
+        if dev.is_defined() {
+            return Err(anyhow!(
+                "Device {} on {} already defined, try modify?",
+                dev.uuid.to_hyphenated().to_string(),
+                dev.parent
+            ));
+        }
+    }
+
+    Ok(dev)
+}
+
 fn define_command(
-    _uuid: Option<Uuid>,
-    _auto: bool,
-    _parent: Option<String>,
-    _mdev_type: Option<String>,
-    _jsonfile: Option<PathBuf>,
+    uuid: Option<Uuid>,
+    auto: bool,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    jsonfile: Option<PathBuf>,
 ) -> Result<()> {
-    return Err(anyhow!("Not implemented"));
+    debug!("Defining mdev {:?}", uuid);
+
+    let dev = define_command_helper(uuid, auto, parent, mdev_type, jsonfile)?;
+    dev.define().and_then(|_| {
+        if uuid.is_none() {
+            println!("{}", dev.uuid.to_hyphenated());
+        }
+        Ok(())
+    })
 }
 
 fn undefine_command(_uuid: Uuid, _parent: Option<String>) -> Result<()> {
