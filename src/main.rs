@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::vec::Vec;
 use structopt::StructOpt;
 use uuid::Uuid;
 
@@ -165,7 +166,7 @@ struct MdevInfo {
     path: PathBuf,
     parent: String,
     mdev_type: String,
-    attrs: BTreeMap<String, String>,
+    attrs: Vec<(String, String)>,
 }
 
 impl MdevInfo {
@@ -177,7 +178,7 @@ impl MdevInfo {
             path: PathBuf::new(),
             parent: String::new(),
             mdev_type: String::new(),
-            attrs: BTreeMap::new(),
+            attrs: Vec::new(),
         }
     }
 
@@ -275,7 +276,7 @@ impl MdevInfo {
                         let attrobj = attr.as_object().unwrap();
                         for (key, val) in attrobj.iter() {
                             let valstr = val.as_str().unwrap();
-                            self.attrs.insert(key.to_string(), valstr.to_string());
+                            self.attrs.push((key.to_string(), valstr.to_string()));
                         }
                     }
                 }
