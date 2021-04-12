@@ -10,6 +10,8 @@ use std::vec::Vec;
 use structopt::StructOpt;
 use uuid::Uuid;
 
+mod tests;
+
 const MDEV_BASE: &str = "/sys/bus/mdev/devices";
 const PERSIST_BASE: &str = "/etc/mdevctl.d";
 const PARENT_BASE: &str = "/sys/class/mdev_bus";
