@@ -344,24 +344,24 @@ impl MdevInfo {
             true => "auto",
             false => "manual",
         };
-        let mut jsonattrs = serde_json::json!([]);
+        let mut partial = serde_json::Map::new();
+        partial.insert("mdev_type".to_string(), self.mdev_type.clone().into());
+        partial.insert("start".to_string(), autostart.into());
         if self.attrs.len() > 0 {
+            let mut jsonattrs = Vec::new();
             for (key, value) in &self.attrs {
                 let attr = serde_json::json!({ key: value });
-                jsonattrs.as_array_mut().unwrap().push(attr);
+                jsonattrs.push(attr);
             }
+            partial.insert("attrs".to_string(), jsonattrs.into());
         }
-        let partial: serde_json::Value = serde_json::json!({
-                "mdev_type": self.mdev_type,
-                "start": autostart,
-                "attrs": jsonattrs
-        });
+
         let full: serde_json::Value =
             serde_json::json!({ self.uuid.to_hyphenated().to_string(): partial });
 
         match include_uuid {
             true => Ok(full),
-            false => Ok(partial),
+            false => Ok(partial.into()),
         }
     }
 
