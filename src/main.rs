@@ -483,6 +483,21 @@ impl MdevInfo {
     pub fn define(&self) -> Result<()> {
         self.write_config()
     }
+
+    pub fn undefine(&mut self) -> Result<()> {
+        match self.persist_path() {
+            Some(p) => fs::remove_file(p).with_context(|| {
+                format!(
+                    "Failed to undefine {}",
+                    self.uuid.to_hyphenated().to_string()
+                )
+            }),
+            None => Err(anyhow!(
+                "Failed to undefine {}",
+                self.uuid.to_hyphenated().to_string()
+            )),
+        }
+    }
 }
 
 fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
@@ -602,8 +617,15 @@ fn define_command(
     })
 }
 
-fn undefine_command(_uuid: Uuid, _parent: Option<String>) -> Result<()> {
-    return Err(anyhow!("Not implemented"));
+fn undefine_command(uuid: Uuid, parent: Option<String>) -> Result<()> {
+    debug!("Undefining mdev {:?}", uuid);
+    let devs = defined_devices(&Some(uuid), &parent)?;
+    for (_, mut children) in devs {
+        for child in children.iter_mut() {
+            child.undefine()?;
+        }
+    }
+    Ok(())
 }
 
 fn modify_command(
