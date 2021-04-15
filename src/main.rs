@@ -670,42 +670,9 @@ fn start_command_helper(
             /* The device is not fully specified without TYPE, we must find a config file, with optional
              * PARENT for disambiguation */
             if mdev_type.is_none() && uuid.is_some() {
-                let devs = defined_devices(&uuid, &parent)?;
-                let uuid = uuid.unwrap();
-                if devs.is_empty() {
-                    return match parent {
-                        None => Err(anyhow!(
-                            "Config for {} does not exist, define it first?",
-                            uuid.to_hyphenated().to_string()
-                        )),
-                        Some(p) => Err(anyhow!(
-                            "Config for {}/{} does not exist, define it first?",
-                            p,
-                            uuid.to_hyphenated().to_string()
-                        )),
-                    };
-                } else if devs.len() > 1 {
-                    return match parent {
-                        None => Err(anyhow!(
-                            "Multiple configs found for {}, specify a parent",
-                            uuid.to_hyphenated().to_string()
-                        )),
-                        Some(p) => Err(anyhow!(
-                            "Multiple configs found for {}/{}",
-                            p,
-                            uuid.to_hyphenated().to_string()
-                        )),
-                    };
-                } else {
-                    let (parent, children) = devs.iter().next().unwrap();
-                    if children.len() > 1 {
-                        return Err(anyhow!(
-                            "Multiple configs found for {}/{}",
-                            parent,
-                            uuid.to_hyphenated().to_string()
-                        ));
-                    }
-                    dev = Some(children.get(0).unwrap().clone());
+                dev = match get_defined_device(uuid.unwrap(), &parent) {
+                    Ok(d) => Some(d),
+                    Err(e) => return Err(e),
                 }
             }
             if uuid.is_none() {
@@ -740,6 +707,46 @@ fn stop_command(uuid: Uuid) -> Result<()> {
     let mut info = MdevInfo::new(uuid);
     info.load_from_sysfs()?;
     info.stop()
+}
+
+fn get_defined_device(uuid: Uuid, parent: &Option<String>) -> Result<MdevInfo> {
+    let u = Some(uuid);
+    let devs = defined_devices(&u, parent)?;
+    if devs.is_empty() {
+        return match parent {
+            None => Err(anyhow!(
+                "Mediated device {} is not defined",
+                uuid.to_hyphenated().to_string()
+            )),
+            Some(p) => Err(anyhow!(
+                "Mediated device {}/{} is not defined",
+                p,
+                uuid.to_hyphenated().to_string()
+            )),
+        };
+    } else if devs.len() > 1 {
+        return match parent {
+            None => Err(anyhow!(
+                "Multiple definitions found for {}, specify a parent",
+                uuid.to_hyphenated().to_string()
+            )),
+            Some(p) => Err(anyhow!(
+                "Multiple definitions found for {}/{}",
+                p,
+                uuid.to_hyphenated().to_string()
+            )),
+        };
+    } else {
+        let (parent, children) = devs.iter().next().unwrap();
+        if children.len() > 1 {
+            return Err(anyhow!(
+                "Multiple definitions found for {}/{}",
+                parent,
+                uuid.to_hyphenated().to_string()
+            ));
+        }
+        return Ok(children.get(0).unwrap().clone());
+    }
 }
 
 fn defined_devices(
