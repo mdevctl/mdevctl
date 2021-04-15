@@ -3,6 +3,7 @@ use faccess::PathExt;
 use log::{debug, warn};
 use serde_json;
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -51,7 +52,7 @@ enum Cli {
         parent: Option<String>,
         #[structopt(name = "type", short, long)]
         mdev_type: Option<String>,
-        #[structopt(long)]
+        #[structopt(long, conflicts_with("delattr"))]
         addattr: Option<String>,
         #[structopt(long)]
         delattr: bool,
@@ -498,6 +499,38 @@ impl MdevInfo {
             )),
         }
     }
+
+    pub fn add_attribute(&mut self, name: String, value: String, index: Option<u32>) -> Result<()> {
+        match index {
+            Some(i) => {
+                let i: usize = i.try_into().unwrap();
+                if i > self.attrs.len() {
+                    return Err(anyhow!("Attribute index {} is invalid", i));
+                }
+                self.attrs.insert(i, (name, value));
+            }
+            None => self.attrs.push((name, value)),
+        }
+
+        Ok(())
+    }
+
+    pub fn delete_attribute(&mut self, index: Option<u32>) -> Result<()> {
+        match index {
+            Some(i) => {
+                let i: usize = i.try_into().unwrap();
+                if i > self.attrs.len().try_into().unwrap() {
+                    return Err(anyhow!("Attribute index {} is invalid", i));
+                }
+                self.attrs.remove(i);
+            }
+            None => {
+                self.attrs.pop();
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
@@ -629,17 +662,41 @@ fn undefine_command(uuid: Uuid, parent: Option<String>) -> Result<()> {
 }
 
 fn modify_command(
-    _uuid: Uuid,
-    _parent: Option<String>,
-    _mdev_type: Option<String>,
-    _addattr: Option<String>,
-    _delattr: bool,
-    _index: Option<u32>,
-    _value: Option<String>,
-    _auto: bool,
-    _manual: bool,
+    uuid: Uuid,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    addattr: Option<String>,
+    delattr: bool,
+    index: Option<u32>,
+    value: Option<String>,
+    auto: bool,
+    manual: bool,
 ) -> Result<()> {
-    return Err(anyhow!("Not implemented"));
+    let mut dev = get_defined_device(uuid, &parent)?;
+    match mdev_type {
+        Some(t) => dev.mdev_type = t,
+        None => (),
+    }
+
+    if auto {
+        dev.autostart = true;
+    } else if manual {
+        dev.autostart = false;
+    }
+
+    match addattr {
+        Some(attr) => match value {
+            None => return Err(anyhow!("No attribute value provided")),
+            Some(v) => dev.add_attribute(attr, v, index)?,
+        },
+        None => {
+            if delattr {
+                dev.delete_attribute(index)?;
+            }
+        }
+    }
+
+    dev.write_config()
 }
 
 fn write_attr(basepath: &PathBuf, attr: &String, val: &String) -> Result<()> {
