@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use faccess::PathExt;
 use log::{debug, warn};
 use serde_json;
@@ -97,6 +97,8 @@ enum Cli {
         #[structopt(long)]
         dumpjson: bool,
     },
+    #[structopt(setting = structopt::clap::AppSettings::Hidden)]
+    StartParentMdevs { parent: String },
 }
 
 fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String> {
@@ -1056,6 +1058,33 @@ fn types_command(parent: Option<String>, dumpjson: bool) -> Result<()> {
     Ok(())
 }
 
+fn start_parent_mdevs_command(parent: String) -> Result<()> {
+    let mut devs = defined_devices(&None, &Some(parent))?;
+    if devs.is_empty() {
+        // nothing to do
+        return Ok(());
+    }
+
+    ensure!(devs.len() == 1, "More than one parent found");
+
+    for (_, children) in devs.iter_mut() {
+        for child in children {
+            if child.autostart {
+                debug!("Autostarting {:?}", child.uuid);
+                match child.start(false) {
+                    Err(e) => {
+                        for x in e.chain() {
+                            warn!("{}", x);
+                        }
+                    } // continue
+                    Ok(_) => (),
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     debug!("Starting up");
@@ -1098,5 +1127,6 @@ fn main() -> Result<()> {
             parent,
         } => list_command(defined, dumpjson, verbose, uuid, parent),
         Cli::Types { parent, dumpjson } => types_command(parent, dumpjson),
+        Cli::StartParentMdevs { parent } => start_parent_mdevs_command(parent),
     }
 }
