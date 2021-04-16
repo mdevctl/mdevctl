@@ -28,8 +28,8 @@ enum Cli {
         auto: bool,
         #[structopt(short, long, required_unless("uuid"))]
         parent: Option<String>,
-        #[structopt(short, long)]
-        r#type: Option<String>,
+        #[structopt(name = "type", short, long)]
+        mdev_type: Option<String>,
         #[structopt(long, parse(from_os_str), conflicts_with_all(&["type", "auto"]))]
         jsonfile: Option<PathBuf>,
     },
@@ -44,8 +44,8 @@ enum Cli {
         uuid: Uuid,
         #[structopt(short, long)]
         parent: Option<String>,
-        #[structopt(short, long)]
-        r#type: Option<String>,
+        #[structopt(name = "type", short, long)]
+        mdev_type: Option<String>,
         #[structopt(long)]
         addattr: Option<String>,
         #[structopt(long)]
@@ -64,8 +64,8 @@ enum Cli {
         uuid: Option<Uuid>,
         #[structopt(short, long, required_unless("uuid"))]
         parent: Option<String>,
-        #[structopt(short, long)]
-        r#type: Option<String>,
+        #[structopt(name = "type", short, long)]
+        mdev_type: Option<String>,
         #[structopt(long, parse(from_os_str), conflicts_with("type"))]
         jsonfile: Option<PathBuf>,
     },
@@ -327,7 +327,7 @@ fn define_command(
     _uuid: Option<Uuid>,
     _auto: bool,
     _parent: Option<String>,
-    r#_type: Option<String>,
+    _mdev_type: Option<String>,
     _jsonfile: Option<PathBuf>,
 ) -> Result<()> {
     return Err(anyhow!("Not implemented"));
@@ -340,7 +340,7 @@ fn undefine_command(_uuid: Uuid, _parent: Option<String>) -> Result<()> {
 fn modify_command(
     _uuid: Uuid,
     _parent: Option<String>,
-    r#_type: Option<String>,
+    _mdev_type: Option<String>,
     _addattr: Option<String>,
     _delattr: bool,
     _index: Option<u32>,
@@ -354,7 +354,7 @@ fn modify_command(
 fn start_command(
     _uuid: Option<Uuid>,
     _parent: Option<String>,
-    r#_type: Option<String>,
+    _mdev_type: Option<String>,
     _jsonfile: Option<PathBuf>,
 ) -> Result<()> {
     return Err(anyhow!("Not implemented"));
@@ -506,14 +506,14 @@ fn main() -> Result<()> {
             uuid,
             auto,
             parent,
-            r#type,
+            mdev_type,
             jsonfile,
-        } => define_command(uuid, auto, parent, r#type, jsonfile),
+        } => define_command(uuid, auto, parent, mdev_type, jsonfile),
         Cli::Undefine { uuid, parent } => undefine_command(uuid, parent),
         Cli::Modify {
             uuid,
             parent,
-            r#type,
+            mdev_type,
             addattr,
             delattr,
             index,
@@ -521,14 +521,14 @@ fn main() -> Result<()> {
             auto,
             manual,
         } => modify_command(
-            uuid, parent, r#type, addattr, delattr, index, value, auto, manual,
+            uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
         ),
         Cli::Start {
             uuid,
             parent,
-            r#type,
+            mdev_type,
             jsonfile,
-        } => start_command(uuid, parent, r#type, jsonfile),
+        } => start_command(uuid, parent, mdev_type, jsonfile),
         Cli::Stop { uuid } => stop_command(uuid),
         Cli::List {
             defined,
