@@ -497,7 +497,7 @@ fn types_command(_parent: Option<String>, _dumpjson: bool) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     debug!("Starting up");
     let args = Cli::from_args();
     debug!("Parsed args");
