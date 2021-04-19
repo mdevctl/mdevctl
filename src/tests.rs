@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::Environment;
     use crate::MdevInfo;
     use anyhow::Result;
     use std::env;
@@ -53,11 +54,16 @@ mod tests {
         assert_eq!(expected, actual);
     }
 
-    fn load_from_json(uuid: &str, parent: &str, filename: &PathBuf) -> Result<MdevInfo> {
+    fn load_from_json<'a>(
+        env: &'a Environment,
+        uuid: &str,
+        parent: &str,
+        filename: &PathBuf,
+    ) -> Result<MdevInfo<'a>> {
         let uuid = Uuid::parse_str(uuid);
         assert!(uuid.is_ok());
         let uuid = uuid.unwrap();
-        let mut dev = MdevInfo::new(uuid);
+        let mut dev = MdevInfo::new(env, uuid);
 
         let jsonstr = fs::read_to_string(filename)?;
         let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
@@ -70,8 +76,9 @@ mod tests {
         let datapath = test_path("load-json", uuid);
         let infile = datapath.join(format!("{}.in", uuid));
         let outfile = datapath.join(format!("{}.out", uuid));
+        let env = Environment::new("./test-env");
 
-        let dev = load_from_json(uuid, parent, &infile).unwrap();
+        let dev = load_from_json(&env, uuid, parent, &infile).unwrap();
         let jsonval = dev.to_json(false).unwrap();
         let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 

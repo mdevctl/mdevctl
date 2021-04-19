@@ -13,9 +13,30 @@ use uuid::Uuid;
 
 mod tests;
 
-const MDEV_BASE: &str = "/sys/bus/mdev/devices";
-const PERSIST_BASE: &str = "/etc/mdevctl.d";
-const PARENT_BASE: &str = "/sys/class/mdev_bus";
+#[derive(Debug)]
+struct Environment {
+    rootdir: PathBuf,
+}
+
+impl Environment {
+    pub fn new(path: &str) -> Environment {
+        Environment {
+            rootdir: PathBuf::from(path),
+        }
+    }
+
+    pub fn mdev_base(&self) -> PathBuf {
+        self.rootdir.join("sys/bus/mdev/devices")
+    }
+
+    pub fn persist_base(&self) -> PathBuf {
+        self.rootdir.join("etc/mdevctl.d")
+    }
+
+    pub fn parent_base(&self) -> PathBuf {
+        self.rootdir.join("sys/class/mdev_bus")
+    }
+}
 
 // command-line argument definitions.
 #[derive(StructOpt)]
@@ -237,7 +258,7 @@ impl MdevTypeInfo {
 }
 
 #[derive(Debug, Clone)]
-struct MdevInfo {
+struct MdevInfo<'a> {
     uuid: Uuid,
     active: bool,
     autostart: bool,
@@ -245,10 +266,11 @@ struct MdevInfo {
     parent: String,
     mdev_type: String,
     attrs: Vec<(String, String)>,
+    env: &'a Environment,
 }
 
-impl MdevInfo {
-    pub fn new(uuid: Uuid) -> MdevInfo {
+impl<'a> MdevInfo<'a> {
+    pub fn new(env: &'a Environment, uuid: Uuid) -> MdevInfo<'a> {
         MdevInfo {
             uuid: uuid,
             active: false,
@@ -257,6 +279,7 @@ impl MdevInfo {
             parent: String::new(),
             mdev_type: String::new(),
             attrs: Vec::new(),
+            env: env,
         }
     }
 
@@ -265,7 +288,7 @@ impl MdevInfo {
             return None;
         }
 
-        let mut path = PathBuf::from(PERSIST_BASE);
+        let mut path = self.env.persist_base();
         path.push(&self.parent);
         path.push(self.uuid.to_hyphenated().to_string());
         Some(path)
@@ -280,7 +303,7 @@ impl MdevInfo {
 
     pub fn load_from_sysfs(&mut self) -> Result<()> {
         debug!("Loading device '{:?}' from sysfs", self.uuid);
-        self.path = PathBuf::from(MDEV_BASE);
+        self.path = self.env.mdev_base();
         self.path.push(self.uuid.to_hyphenated().to_string());
         self.active = match self.path.symlink_metadata() {
             Ok(attr) => attr.file_type().is_symlink(),
@@ -459,7 +482,7 @@ impl MdevInfo {
 
     pub fn create(&mut self) -> Result<()> {
         debug!("Creating mdev {:?}", self.uuid);
-        let mut existing = MdevInfo::new(self.uuid);
+        let mut existing = MdevInfo::new(self.env, self.uuid);
 
         if existing.load_from_sysfs().is_ok() && existing.active {
             if existing.parent != self.parent {
@@ -471,9 +494,11 @@ impl MdevInfo {
             return Err(anyhow!("Device already exists"));
         }
 
-        let mut path: PathBuf = [PARENT_BASE, &self.parent, "mdev_supported_types"]
-            .iter()
-            .collect();
+        let mut path: PathBuf = self
+            .env
+            .parent_base()
+            .join(&self.parent)
+            .join("mdev_supported_types");
         debug!("Checking parent for mdev support: {:?}", path);
         if !path.is_dir() {
             return Err(anyhow!(
@@ -627,6 +652,7 @@ fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
 
 // convert 'define' command arguments into a MdevInfo struct
 fn define_command_helper(
+    env: &Environment,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -635,7 +661,7 @@ fn define_command_helper(
 ) -> Result<MdevInfo> {
     let uuid_provided = uuid.is_some();
     let uuid = uuid.unwrap_or_else(|| Uuid::new_v4());
-    let mut dev = MdevInfo::new(uuid);
+    let mut dev = MdevInfo::new(env, uuid);
 
     if jsonfile.is_some() {
         let jsonfile = jsonfile.unwrap();
@@ -657,7 +683,7 @@ fn define_command_helper(
             ));
         }
 
-        let devs = defined_devices(&Some(uuid), &parent)?;
+        let devs = defined_devices(env, &Some(uuid), &parent)?;
         if !devs.is_empty() {
             return Err(anyhow!(
                 "Cowardly refusing to overwrite existing config for {}/{}",
@@ -708,6 +734,7 @@ fn define_command_helper(
 }
 
 fn define_command(
+    env: &Environment,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -716,7 +743,7 @@ fn define_command(
 ) -> Result<()> {
     debug!("Defining mdev {:?}", uuid);
 
-    let dev = define_command_helper(uuid, auto, parent, mdev_type, jsonfile)?;
+    let dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
     dev.define().and_then(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.to_hyphenated());
@@ -725,9 +752,9 @@ fn define_command(
     })
 }
 
-fn undefine_command(uuid: Uuid, parent: Option<String>) -> Result<()> {
+fn undefine_command(env: &Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
-    let devs = defined_devices(&Some(uuid), &parent)?;
+    let devs = defined_devices(env, &Some(uuid), &parent)?;
     for (_, mut children) in devs {
         for child in children.iter_mut() {
             child.undefine()?;
@@ -737,6 +764,7 @@ fn undefine_command(uuid: Uuid, parent: Option<String>) -> Result<()> {
 }
 
 fn modify_command(
+    env: &Environment,
     uuid: Uuid,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -747,7 +775,7 @@ fn modify_command(
     auto: bool,
     manual: bool,
 ) -> Result<()> {
-    let mut dev = get_defined_device(uuid, &parent)?;
+    let mut dev = get_defined_device(env, uuid, &parent)?;
     match mdev_type {
         Some(t) => dev.mdev_type = t,
         None => (),
@@ -787,6 +815,7 @@ fn write_attr(basepath: &PathBuf, attr: &String, val: &String) -> Result<()> {
 }
 
 fn start_command_helper(
+    env: &Environment,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -812,7 +841,7 @@ fn start_command_helper(
                 ));
             }
 
-            let mut d = MdevInfo::new(uuid.unwrap_or_else(|| Uuid::new_v4()));
+            let mut d = MdevInfo::new(env, uuid.unwrap_or_else(|| Uuid::new_v4()));
             d.load_from_json(parent.unwrap(), &val)?;
             dev = Some(d);
         }
@@ -824,7 +853,7 @@ fn start_command_helper(
             /* The device is not fully specified without TYPE, we must find a config file, with optional
              * PARENT for disambiguation */
             if mdev_type.is_none() && uuid.is_some() {
-                dev = match get_defined_device(uuid.unwrap(), &parent) {
+                dev = match get_defined_device(env, uuid.unwrap(), &parent) {
                     Ok(d) => Some(d),
                     Err(e) => return Err(e),
                 }
@@ -836,7 +865,7 @@ fn start_command_helper(
             }
 
             if dev.is_none() {
-                let mut d = MdevInfo::new(uuid.unwrap_or_else(|| Uuid::new_v4()));
+                let mut d = MdevInfo::new(env, uuid.unwrap_or_else(|| Uuid::new_v4()));
                 d.parent = parent.unwrap();
                 d.mdev_type = mdev_type.unwrap();
                 dev = Some(d);
@@ -847,25 +876,30 @@ fn start_command_helper(
 }
 
 fn start_command(
+    env: &Environment,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
 ) -> Result<()> {
-    let mut dev = start_command_helper(uuid, parent, mdev_type, jsonfile)?;
+    let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
     dev.start(uuid.is_none())
 }
 
-fn stop_command(uuid: Uuid) -> Result<()> {
+fn stop_command(env: &Environment, uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
-    let mut info = MdevInfo::new(uuid);
+    let mut info = MdevInfo::new(env, uuid);
     info.load_from_sysfs()?;
     info.stop()
 }
 
-fn get_defined_device(uuid: Uuid, parent: &Option<String>) -> Result<MdevInfo> {
+fn get_defined_device<'a>(
+    env: &'a Environment,
+    uuid: Uuid,
+    parent: &Option<String>,
+) -> Result<MdevInfo<'a>> {
     let u = Some(uuid);
-    let devs = defined_devices(&u, parent)?;
+    let devs = defined_devices(env, &u, parent)?;
     if devs.is_empty() {
         return match parent {
             None => Err(anyhow!(
@@ -903,16 +937,17 @@ fn get_defined_device(uuid: Uuid, parent: &Option<String>) -> Result<MdevInfo> {
     }
 }
 
-fn defined_devices(
+fn defined_devices<'a>(
+    env: &'a Environment,
     uuid: &Option<Uuid>,
     parent: &Option<String>,
-) -> Result<BTreeMap<String, Vec<MdevInfo>>> {
+) -> Result<BTreeMap<String, Vec<MdevInfo<'a>>>> {
     let mut devices: BTreeMap<String, Vec<MdevInfo>> = BTreeMap::new();
     debug!(
         "Looking up defined mdevs: uuid={:?}, parent={:?}",
         uuid, parent
     );
-    for parentpath in PathBuf::from(PERSIST_BASE).read_dir()? {
+    for parentpath in env.persist_base().read_dir()? {
         let parentpath = parentpath?;
         let parentname = parentpath.file_name();
         let parentname = parentname.to_str().unwrap();
@@ -948,7 +983,7 @@ fn defined_devices(
             let mut contents = String::new();
             f.read_to_string(&mut contents)?;
             let val: serde_json::Value = serde_json::from_str(&contents)?;
-            let mut dev = MdevInfo::new(u);
+            let mut dev = MdevInfo::new(env, u);
             dev.load_from_json(parentname.to_string(), &val)?;
             dev.load_from_sysfs()?;
 
@@ -962,6 +997,7 @@ fn defined_devices(
 }
 
 fn list_command(
+    env: &Environment,
     defined: bool,
     dumpjson: bool,
     verbose: bool,
@@ -970,10 +1006,10 @@ fn list_command(
 ) -> Result<()> {
     let mut devices: BTreeMap<String, Vec<MdevInfo>> = BTreeMap::new();
     if defined {
-        devices = defined_devices(&uuid, &parent)?;
+        devices = defined_devices(env, &uuid, &parent)?;
     } else {
         debug!("Looking up active mdevs");
-        for dev in PathBuf::from(MDEV_BASE).read_dir()? {
+        for dev in env.mdev_base().read_dir()? {
             let dev = dev?;
             let fname = dev.file_name();
             let basename = fname.to_str().unwrap();
@@ -989,7 +1025,7 @@ fn list_command(
                 continue;
             }
 
-            let mut info = MdevInfo::new(u);
+            let mut info = MdevInfo::new(env, u);
             match info.load_from_sysfs() {
                 Ok(_) => {
                     if parent.is_some() {
@@ -1038,11 +1074,14 @@ fn list_command(
     Ok(())
 }
 
-fn supported_types(parent: Option<String>) -> Result<BTreeMap<String, Vec<MdevTypeInfo>>> {
+fn supported_types(
+    env: &Environment,
+    parent: Option<String>,
+) -> Result<BTreeMap<String, Vec<MdevTypeInfo>>> {
     debug!("Finding supported mdev types");
     let mut types: BTreeMap<String, Vec<MdevTypeInfo>> = BTreeMap::new();
 
-    for parentpath in PathBuf::from(PARENT_BASE).read_dir()? {
+    for parentpath in env.parent_base().read_dir()? {
         let parentpath = parentpath?;
         let parentname = parentpath.file_name();
         let parentname = parentname.to_str().unwrap();
@@ -1098,8 +1137,8 @@ fn supported_types(parent: Option<String>) -> Result<BTreeMap<String, Vec<MdevTy
     Ok(types)
 }
 
-fn types_command(parent: Option<String>, dumpjson: bool) -> Result<()> {
-    let types = supported_types(parent)?;
+fn types_command(env: &Environment, parent: Option<String>, dumpjson: bool) -> Result<()> {
+    let types = supported_types(env, parent)?;
     debug!("{:?}", types);
     if dumpjson {
         let mut jsontypes: serde_json::Value = serde_json::json!([]);
@@ -1131,8 +1170,8 @@ fn types_command(parent: Option<String>, dumpjson: bool) -> Result<()> {
     Ok(())
 }
 
-fn start_parent_mdevs_command(parent: String) -> Result<()> {
-    let mut devs = defined_devices(&None, &Some(parent))?;
+fn start_parent_mdevs_command(env: &Environment, parent: String) -> Result<()> {
+    let mut devs = defined_devices(env, &None, &Some(parent))?;
     if devs.is_empty() {
         // nothing to do
         return Ok(());
@@ -1162,6 +1201,7 @@ fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     debug!("Starting up");
     let args = Cli::from_args();
+    let env = Environment::new("/");
     debug!("Parsed args");
     match args {
         Cli::Define {
@@ -1170,8 +1210,8 @@ fn main() -> Result<()> {
             parent,
             mdev_type,
             jsonfile,
-        } => define_command(uuid, auto, parent, mdev_type, jsonfile),
-        Cli::Undefine { uuid, parent } => undefine_command(uuid, parent),
+        } => define_command(&env, uuid, auto, parent, mdev_type, jsonfile),
+        Cli::Undefine { uuid, parent } => undefine_command(&env, uuid, parent),
         Cli::Modify {
             uuid,
             parent,
@@ -1183,23 +1223,23 @@ fn main() -> Result<()> {
             auto,
             manual,
         } => modify_command(
-            uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
+            &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
         ),
         Cli::Start {
             uuid,
             parent,
             mdev_type,
             jsonfile,
-        } => start_command(uuid, parent, mdev_type, jsonfile),
-        Cli::Stop { uuid } => stop_command(uuid),
+        } => start_command(&env, uuid, parent, mdev_type, jsonfile),
+        Cli::Stop { uuid } => stop_command(&env, uuid),
         Cli::List {
             defined,
             dumpjson,
             verbose,
             uuid,
             parent,
-        } => list_command(defined, dumpjson, verbose, uuid, parent),
-        Cli::Types { parent, dumpjson } => types_command(parent, dumpjson),
-        Cli::StartParentMdevs { parent } => start_parent_mdevs_command(parent),
+        } => list_command(&env, defined, dumpjson, verbose, uuid, parent),
+        Cli::Types { parent, dumpjson } => types_command(&env, parent, dumpjson),
+        Cli::StartParentMdevs { parent } => start_parent_mdevs_command(&env, parent),
     }
 }
