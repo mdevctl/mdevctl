@@ -616,7 +616,6 @@ case "$cmd" in
                     if [ ! -L "$mdev_base/$uuid" ] || [ -n "$type" ]; then
                         usage
                     fi
-
                     parent=$(basename $(realpath "$mdev_base/$uuid" | sed -s "s/\/$uuid//"))
                     type=$(basename $(realpath "$mdev_base/$uuid/mdev_type"))
                 fi
@@ -650,11 +649,6 @@ case "$cmd" in
             set_config_key mdev_type "$type"
             set_config_key start "$start"
         fi
-
-        write_config "$persist_base/$parent/$uuid"
-        if [ $? -eq 0 ]; then
-            $print_uuid
-        fi
         ;;
     undefine)
         if [ -z "$uuid" ]; then
@@ -668,6 +662,8 @@ case "$cmd" in
         else
             find "$persist_base" -name "$uuid" -type f | xargs rm -f
         fi
+
+        exit 0
         ;;
     modify)
         if [ -z "$uuid" ]; then
@@ -738,8 +734,6 @@ case "$cmd" in
 
             del_attr_index "$index"
         fi
-
-        write_config "$file"
         ;;
     start)
         set -o errexit
@@ -835,10 +829,6 @@ case "$cmd" in
         if [ -z "$uuid" ]; then
             usage
         fi
-
-        set -o errexit
-
-        remove_mdev "$uuid"
         ;;
     list)
         json="[]"
@@ -1007,5 +997,22 @@ case "$cmd" in
         else
             echo -en "$txt"
         fi
+        ;;
+esac
+
+case "$cmd" in
+    define)
+        write_config "$persist_base/$parent/$uuid"
+        if [ $? -eq 0 ]; then
+            $print_uuid
+        fi
+        ;;
+    modify)
+        write_config "$file"
+        ;;
+    stop)
+        set -o errexit
+
+        remove_mdev "$uuid"
         ;;
 esac
