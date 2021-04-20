@@ -3,9 +3,11 @@ mod tests {
     use crate::Environment;
     use crate::MdevInfo;
     use anyhow::Result;
+    use log::info;
     use std::env;
     use std::fs;
     use std::path::PathBuf;
+    use tempdir::TempDir;
     use uuid::Uuid;
 
     const TEST_DATA_DIR: &str = "tests";
@@ -14,10 +16,29 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
-    // get a data path for the given testname. This can be used to construct input and output
-    // filenames, etc.
-    fn test_path(testname: &str, testcase: &str) -> PathBuf {
-        [TEST_DATA_DIR, testname, testcase].iter().collect()
+    #[derive(Debug)]
+    struct TestEnvironment {
+        env: Environment,
+        datapath: PathBuf,
+        scratch: TempDir,
+    }
+
+    impl TestEnvironment {
+        pub fn new(testname: &str, testcase: &str) -> TestEnvironment {
+            let path: PathBuf = [TEST_DATA_DIR, testname, testcase].iter().collect();
+            let scratchdir = TempDir::new(format!("mdevctl-{}", testname).as_str()).unwrap();
+            let test = TestEnvironment {
+                datapath: path,
+                env: Environment::new(scratchdir.path().to_str().unwrap()),
+                scratch: scratchdir,
+            };
+            // populate the basic directories in the environment
+            fs::create_dir_all(test.env.mdev_base()).expect("Unable to create mdev_base");
+            fs::create_dir_all(test.env.persist_base()).expect("Unable to create persist_base");
+            fs::create_dir_all(test.env.parent_base()).expect("Unable to create parent_base");
+            info!("---- Running test '{}/{}' ----", testname, testcase);
+            test
+        }
     }
 
     fn get_flag(varname: &str) -> bool {
@@ -73,12 +94,11 @@ mod tests {
     }
 
     fn test_load_json_helper(uuid: &str, parent: &str) {
-        let datapath = test_path("load-json", uuid);
-        let infile = datapath.join(format!("{}.in", uuid));
-        let outfile = datapath.join(format!("{}.out", uuid));
-        let env = Environment::new("./test-env");
+        let test = TestEnvironment::new("load-json", uuid);
+        let infile = test.datapath.join(format!("{}.in", uuid));
+        let outfile = test.datapath.join(format!("{}.out", uuid));
 
-        let dev = load_from_json(&env, uuid, parent, &infile).unwrap();
+        let dev = load_from_json(&test.env, uuid, parent, &infile).unwrap();
         let jsonval = dev.to_json(false).unwrap();
         let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
