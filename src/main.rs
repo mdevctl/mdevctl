@@ -161,7 +161,6 @@ impl MdevTypeInfo {
 struct MdevInfo {
     uuid: Uuid,
     active: bool,
-    defined: bool,
     autostart: bool,
     path: PathBuf,
     parent: String,
@@ -174,7 +173,6 @@ impl MdevInfo {
         MdevInfo {
             uuid: uuid,
             active: false,
-            defined: false,
             autostart: false,
             path: PathBuf::new(),
             parent: String::new(),
@@ -192,6 +190,13 @@ impl MdevInfo {
         path.push(&self.parent);
         path.push(self.uuid.to_hyphenated().to_string());
         Some(path)
+    }
+
+    pub fn is_defined(&self) -> bool {
+        match self.persist_path() {
+            Some(p) => p.exists(),
+            None => false,
+        }
     }
 
     pub fn load_from_sysfs(&mut self) -> Result<()> {
@@ -229,8 +234,6 @@ impl MdevInfo {
         }
         self.mdev_type = mdev_type;
 
-        self.defined = self.persist_path().unwrap().exists();
-
         debug!("loaded device {:?}", self);
         Ok(())
     }
@@ -240,7 +243,6 @@ impl MdevInfo {
             "Loading device '{:?}' from json (parent: {})",
             self.uuid, parent
         );
-        self.defined = true;
         if !self.parent.is_empty() && self.parent != parent {
             warn!(
                 "Overwriting parent for mdev {:?}: {} => {}",
@@ -288,7 +290,7 @@ impl MdevInfo {
     pub fn to_text(&self, fmt: &FormatType, verbose: bool) -> Result<String> {
         match fmt {
             FormatType::Defined => {
-                if !self.defined {
+                if !self.is_defined() {
                     return Err(anyhow!("Device is not defined"));
                 }
             }
@@ -317,7 +319,7 @@ impl MdevInfo {
                 }
             }
             FormatType::Active => {
-                if self.defined {
+                if self.is_defined() {
                     output.push_str(" (defined)");
                 }
             }
