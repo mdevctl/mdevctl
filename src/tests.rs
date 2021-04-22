@@ -16,6 +16,12 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
+    #[derive(PartialEq)]
+    enum Expect {
+        Pass,
+        Fail,
+    }
+
     #[derive(Debug)]
     struct TestEnvironment {
         env: Environment,
@@ -38,6 +44,38 @@ mod tests {
             fs::create_dir_all(test.env.parent_base()).expect("Unable to create parent_base");
             info!("---- Running test '{}/{}' ----", testname, testcase);
             test
+        }
+
+        // set up a few files in the test environment to simulate an defined mediated device
+        fn populate_defined_device(&self, uuid: &str, parent: &str, filename: &str) {
+            let jsonfile = self.datapath.join(filename);
+            let parentdir = self.env.persist_base().join(parent);
+            fs::create_dir_all(&parentdir).expect("Unable to setup parent dir");
+            let deffile = parentdir.join(uuid);
+            assert!(jsonfile.exists());
+            assert!(!deffile.exists());
+            fs::copy(jsonfile, deffile).expect("Unable to copy device def");
+        }
+
+        // set up a few files in the test environment to simulate an active mediated device
+        fn populate_active_device(&self, uuid: &str, parent: &str, mdev_type: &str) {
+            use std::os::unix::fs::symlink;
+
+            let parentdir = self.env.parent_base().join(parent).join(uuid);
+            fs::create_dir_all(&parentdir).expect("Unable to setup mdev parent");
+
+            let mut parenttypedir = self.scratch.path().join("sys/devices/pci0000:00/");
+            parenttypedir.push(parent);
+            parenttypedir.push("mdev_supported_types");
+            parenttypedir.push(mdev_type);
+            fs::create_dir_all(&parenttypedir).expect("Unable to setup mdev parent type");
+
+            let devdir = self.env.mdev_base().join(uuid);
+            fs::create_dir_all(&devdir.parent().unwrap()).expect("Unable to setup mdev dir");
+            symlink(&parentdir, &devdir).expect("Unable to symlink mdev file");
+
+            let typefile = devdir.join("mdev_type");
+            symlink(&parenttypedir, &typefile).expect("Unable to setup mdev type");
         }
     }
 
@@ -125,5 +163,185 @@ mod tests {
         test_load_json_helper("c07ab7b2-8aa2-427a-91c6-ffc949bb77f9", "0000:00:02.0");
         test_load_json_helper("783e6dbb-ea0e-411f-94e2-717eaad438bf", "0001:00:03.1");
         test_load_json_helper("5269fe7a-18d1-48ad-88e1-3fda4176f536", "0000:00:03.0");
+    }
+
+    fn test_define_helper<F>(
+        testname: &str,
+        expect: Expect,
+        uuid: Option<Uuid>,
+        auto: bool,
+        parent: Option<String>,
+        mdev_type: Option<String>,
+        jsonfile: Option<PathBuf>,
+        setupfn: F,
+    ) where
+        F: Fn(&TestEnvironment),
+    {
+        use crate::define_command_helper;
+        let test = TestEnvironment::new("define", testname);
+
+        // load the jsonfile from the test path.
+        let jsonfile = match jsonfile {
+            Some(f) => Some(test.datapath.join(f)),
+            None => None,
+        };
+
+        setupfn(&test);
+
+        let expectedfile = test.datapath.join("expected");
+        let def = define_command_helper(&test.env, uuid, auto, parent, mdev_type, jsonfile);
+        if expect == Expect::Fail {
+            def.expect_err("expected define command to fail");
+            return;
+        }
+
+        let def = def.expect("define command failed unexpectedly");
+        let path = def.persist_path().unwrap();
+        assert!(!path.exists());
+        def.define().expect("Failed to define device");
+        assert!(path.exists());
+        assert!(def.is_defined());
+        let filecontents = fs::read_to_string(&path).unwrap();
+        compare_to_file(&expectedfile, &filecontents);
+    }
+
+    #[test]
+    fn test_define() {
+        init();
+
+        const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+        const DEFAULT_PARENT: &str = "0000:00:03.0";
+        test_define_helper(
+            "no-uuid-no-type",
+            Expect::Fail,
+            None,
+            true,
+            Some(DEFAULT_PARENT.to_string()),
+            None,
+            None,
+            |_| {},
+        );
+        // if no uuid is specified, one will be auto-generated
+        test_define_helper(
+            "no-uuid",
+            Expect::Pass,
+            None,
+            true,
+            Some(DEFAULT_PARENT.to_string()),
+            Some("i915-GVTg_V5_4".to_string()),
+            None,
+            |_| {},
+        );
+        // specify autostart
+        test_define_helper(
+            "uuid-auto",
+            Expect::Pass,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            true,
+            Some(DEFAULT_PARENT.to_string()),
+            Some("i915-GVTg_V5_4".to_string()),
+            None,
+            |_| {},
+        );
+        // specify manual start
+        test_define_helper(
+            "uuid-manual",
+            Expect::Pass,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            Some(DEFAULT_PARENT.to_string()),
+            Some("i915-GVTg_V5_4".to_string()),
+            None,
+            |_| {},
+        );
+        // invalid to specify an separate mdev_type if defining via jsonfile
+        test_define_helper(
+            "jsonfile-type",
+            Expect::Fail,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            Some(DEFAULT_PARENT.to_string()),
+            Some("i915-GVTg_V5_4".to_string()),
+            Some(PathBuf::from("in.json")),
+            |_| {},
+        );
+        // specifying via jsonfile properly
+        test_define_helper(
+            "jsonfile",
+            Expect::Pass,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            Some(DEFAULT_PARENT.to_string()),
+            None,
+            Some(PathBuf::from("in.json")),
+            |_| {},
+        );
+        // If uuid is already active, specifying mdev_type will result in an error
+        test_define_helper(
+            "uuid-running-no-parent",
+            Expect::Fail,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            None,
+            Some("i915-GVTg_V5_4".to_string()),
+            None,
+            |test| {
+                test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
+            },
+        );
+        // If uuid is already active, should use mdev_type from running mdev
+        test_define_helper(
+            "uuid-running-no-type",
+            Expect::Pass,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            Some(DEFAULT_PARENT.to_string()),
+            None,
+            None,
+            |test| {
+                test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
+            },
+        );
+        // ok to define a device with the same uuid as a running device even if they have different
+        // parent devices
+        test_define_helper(
+            "uuid-running-diff-parent",
+            Expect::Pass,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            Some(DEFAULT_PARENT.to_string()),
+            Some("i915-GVTg_V5_4".to_string()),
+            None,
+            |test| {
+                test.populate_active_device(DEFAULT_UUID, "0000:00:02.0", "i915-GVTg_V5_4");
+            },
+        );
+        // ok to define a device with the same uuid as a running device even if they have different
+        // mdev_types
+        test_define_helper(
+            "uuid-running-diff-type",
+            Expect::Pass,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            Some(DEFAULT_PARENT.to_string()),
+            Some("i915-GVTg_V5_4".to_string()),
+            None,
+            |test| {
+                test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "different_type");
+            },
+        );
+        // defining a device that is already defined should result in an error
+        test_define_helper(
+            "uuid-already-defined",
+            Expect::Fail,
+            Uuid::parse_str(DEFAULT_UUID).ok(),
+            false,
+            Some(DEFAULT_PARENT.to_string()),
+            Some("i915-GVTg_V5_4".to_string()),
+            None,
+            |test| {
+                test.populate_defined_device(DEFAULT_UUID, DEFAULT_PARENT, "defined.json");
+            },
+        );
     }
 }
