@@ -65,12 +65,23 @@ mod tests {
             .map_err(|err| err.into())
     }
 
+    const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
+
     fn compare_to_file(filename: &PathBuf, actual: &str) {
-        let flag = get_flag("MDEVCTL_TEST_REGENERATE_OUTPUT");
+        let flag = get_flag(REGEN_FLAG);
         if flag {
             regen(filename, actual).expect("Failed to regenerate expected output");
         }
-        let expected = fs::read_to_string(filename).expect("Failed to read expected output");
+        let expected = fs::read_to_string(filename).unwrap_or_else(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                println!(
+                    "File {:?} not found, run tests with {}=1 to automatically \
+                             generate expected output",
+                    filename, REGEN_FLAG
+                );
+            }
+            Default::default()
+        });
 
         assert_eq!(expected, actual);
     }
