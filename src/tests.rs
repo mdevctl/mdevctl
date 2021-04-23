@@ -344,4 +344,235 @@ mod tests {
             },
         );
     }
+
+    fn test_modify_helper<F>(
+        testname: &str,
+        expect: Expect,
+        uuid: &str,
+        parent: Option<String>,
+        mdev_type: Option<String>,
+        addattr: Option<String>,
+        delattr: bool,
+        index: Option<u32>,
+        value: Option<String>,
+        auto: bool,
+        manual: bool,
+        setupfn: F,
+    ) where
+        F: Fn(&TestEnvironment),
+    {
+        use crate::modify_command;
+        let test = TestEnvironment::new("modify", testname);
+        let expectedfile = test.datapath.join("expected");
+        setupfn(&test);
+        let uuid = Uuid::parse_str(uuid).unwrap();
+        let result = modify_command(
+            &test.env,
+            uuid,
+            parent.clone(),
+            mdev_type,
+            addattr,
+            delattr,
+            index,
+            value,
+            auto,
+            manual,
+        );
+        if expect == Expect::Fail {
+            assert!(result.is_err());
+            return;
+        }
+
+        result.expect("Modify command failed unexpectedly");
+
+        let def = crate::get_defined_device(&test.env, uuid, &parent)
+            .expect("Couldn't find defined device");
+        let path = def.persist_path().unwrap();
+        assert!(path.exists());
+        assert!(def.is_defined());
+        let filecontents = fs::read_to_string(&path).unwrap();
+        compare_to_file(&expectedfile, &filecontents);
+    }
+
+    #[test]
+    fn test_modify() {
+        init();
+
+        const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+        const PARENT: &str = "0000:00:03.0";
+        test_modify_helper(
+            "device-not-defined",
+            Expect::Fail,
+            UUID,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            false,
+            false,
+            |_| {},
+        );
+        test_modify_helper(
+            "auto",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            None,
+            false,
+            None,
+            None,
+            true,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_modify_helper(
+            "manual",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            None,
+            false,
+            None,
+            None,
+            false,
+            true,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_modify_helper(
+            "delattr",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            None,
+            true,
+            Some(2),
+            None,
+            false,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_modify_helper(
+            "delattr-noindex",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            None,
+            true,
+            None,
+            None,
+            false,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_modify_helper(
+            "addattr",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            Some("added-attr".to_string()),
+            false,
+            Some(3),
+            Some("added-attr-value".to_string()),
+            false,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_modify_helper(
+            "addattr-noindex",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            Some("added-attr".to_string()),
+            false,
+            None,
+            Some("added-attr-value".to_string()),
+            false,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_modify_helper(
+            "mdev_type",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            Some("changed-mdev-type".to_string()),
+            None,
+            false,
+            None,
+            None,
+            false,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_modify_helper(
+            "multiple-noparent",
+            Expect::Fail,
+            UUID,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            true,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+                test.populate_defined_device(UUID, "0000:00:02.0", "defined.json");
+            },
+        );
+        test_modify_helper(
+            "multiple-parent",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            None,
+            false,
+            None,
+            None,
+            true,
+            false,
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+                test.populate_defined_device(UUID, "0000:00:02.0", "defined.json");
+            },
+        );
+        test_modify_helper(
+            "auto-manual",
+            Expect::Fail,
+            UUID,
+            Some(PARENT.to_string()),
+            None,
+            None,
+            false,
+            None,
+            None,
+            true,
+            true,
+            |_| {},
+        );
+    }
 }
