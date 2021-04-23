@@ -755,6 +755,9 @@ fn define_command(
 fn undefine_command(env: &Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
     let devs = defined_devices(env, &Some(uuid), &parent)?;
+    if devs.is_empty() {
+        return Err(anyhow!("No devices match the specified uuid"));
+    }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
             child.undefine()?;

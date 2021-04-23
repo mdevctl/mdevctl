@@ -575,4 +575,75 @@ mod tests {
             |_| {},
         );
     }
+
+    fn test_undefine_helper<F>(
+        testname: &str,
+        expect: Expect,
+        uuid: &str,
+        parent: Option<String>,
+        setupfn: F,
+    ) where
+        F: Fn(&TestEnvironment),
+    {
+        let test = TestEnvironment::new("undefine", testname);
+        setupfn(&test);
+        let uuid = Uuid::parse_str(uuid).unwrap();
+
+        let result = crate::undefine_command(&test.env, uuid, parent.clone());
+
+        if expect == Expect::Fail {
+            result.expect_err("undefine command should have failed");
+            return;
+        }
+
+        result.expect("undefine command should have succeeded");
+
+        let devs = crate::defined_devices(&test.env, &Some(uuid), &parent)
+            .expect("failed to query defined devices");
+        assert!(devs.is_empty());
+    }
+
+    #[test]
+    fn test_undefine() {
+        init();
+
+        const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+        const PARENT: &str = "0000:00:03.0";
+        const PARENT2: &str = "0000:00:02.0";
+
+        test_undefine_helper(
+            "single",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        // if multiple devices with the same uuid exists, the one with the matching parent should
+        // be undefined
+        test_undefine_helper(
+            "multiple-parent",
+            Expect::Pass,
+            UUID,
+            Some(PARENT.to_string()),
+            |test| {
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+                test.populate_defined_device(UUID, PARENT2, "defined.json");
+            },
+        );
+        // if multiple devices with the same uuid exists and no parent is specified, they should
+        // all be undefined
+        test_undefine_helper("multiple-noparent", Expect::Pass, UUID, None, |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        });
+        test_undefine_helper(
+            "nonexistent",
+            Expect::Fail,
+            UUID,
+            Some(PARENT.to_string()),
+            |_| {},
+        );
+    }
 }
