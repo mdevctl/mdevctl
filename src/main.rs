@@ -271,14 +271,14 @@ struct MdevInfo<'a> {
 impl<'a> MdevInfo<'a> {
     pub fn new(env: &'a Environment, uuid: Uuid) -> MdevInfo<'a> {
         MdevInfo {
-            uuid: uuid,
+            uuid,
             active: false,
             autostart: false,
             path: PathBuf::new(),
             parent: String::new(),
             mdev_type: String::new(),
             attrs: Vec::new(),
-            env: env,
+            env,
         }
     }
 
@@ -363,10 +363,7 @@ impl<'a> MdevInfo<'a> {
         }
         self.mdev_type = mdev_type;
         let startval = json["start"].as_str();
-        self.autostart = match startval {
-            Some("auto") => true,
-            _ => false,
-        };
+        self.autostart = matches!(startval, Some("auto"));
 
         if let Some(attrarray) = json["attrs"].as_array() {
             if !attrarray.is_empty() {
@@ -688,10 +685,8 @@ fn define_command_helper(
     } else {
         if uuid_provided {
             dev.load_from_sysfs()?;
-            if parent.is_none() {
-                if !dev.active || mdev_type.is_some() {
-                    return Err(anyhow!("No parent specified"));
-                }
+            if parent.is_none() && (!dev.active || mdev_type.is_some()) {
+                return Err(anyhow!("No parent specified"));
             }
         }
 
@@ -733,11 +728,10 @@ fn define_command(
     debug!("Defining mdev {:?}", uuid);
 
     let dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
-    dev.define().and_then(|_| {
+    dev.define().map(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.to_hyphenated());
         }
-        Ok(())
     })
 }
 
@@ -755,6 +749,7 @@ fn undefine_command(env: &Environment, uuid: Uuid, parent: Option<String>) -> Re
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn modify_command(
     env: &Environment,
     uuid: Uuid,
@@ -842,16 +837,16 @@ fn start_command_helper(
 
             /* The device is not fully specified without TYPE, we must find a config file, with optional
              * PARENT for disambiguation */
-            if mdev_type.is_none() && uuid.is_some() {
-                dev = match get_defined_device(env, uuid.unwrap(), &parent) {
-                    Ok(d) => Some(d),
-                    Err(e) => return Err(e),
+            if mdev_type.is_none() {
+                if let Some(uuid) = uuid {
+                    dev = match get_defined_device(env, uuid, &parent) {
+                        Ok(d) => Some(d),
+                        Err(e) => return Err(e),
+                    };
                 }
             }
-            if uuid.is_none() {
-                if parent.is_none() || mdev_type.is_none() {
-                    return Err(anyhow!("Device is insufficiently specified"));
-                }
+            if uuid.is_none() && (parent.is_none() || mdev_type.is_none()) {
+                return Err(anyhow!("Device is insufficiently specified"));
             }
 
             if dev.is_none() {
