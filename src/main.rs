@@ -368,20 +368,16 @@ impl<'a> MdevInfo<'a> {
             _ => false,
         };
 
-        match json["attrs"].as_array() {
-            Some(_) => {
-                let attrarray = json["attrs"].as_array().unwrap();
-                if !attrarray.is_empty() {
-                    for attr in json["attrs"].as_array().unwrap() {
-                        let attrobj = attr.as_object().unwrap();
-                        for (key, val) in attrobj.iter() {
-                            let valstr = val.as_str().unwrap();
-                            self.attrs.push((key.to_string(), valstr.to_string()));
-                        }
+        if let Some(attrarray) = json["attrs"].as_array() {
+            if !attrarray.is_empty() {
+                for attr in json["attrs"].as_array().unwrap() {
+                    let attrobj = attr.as_object().unwrap();
+                    for (key, val) in attrobj.iter() {
+                        let valstr = val.as_str().unwrap();
+                        self.attrs.push((key.to_string(), valstr.to_string()));
                     }
                 }
             }
-            _ => (),
         };
         debug!("loaded device {:?}", self);
 
@@ -553,12 +549,9 @@ impl<'a> MdevInfo<'a> {
 
         debug!("Setting attributes for mdev {:?}", self.uuid);
         for (k, v) in self.attrs.iter() {
-            match write_attr(&self.path, &k, &v) {
-                Err(e) => {
-                    self.stop()?;
-                    return Err(e);
-                }
-                _ => {}
+            if let Err(e) = write_attr(&self.path, &k, &v) {
+                self.stop()?;
+                return Err(e);
             }
         }
 
@@ -662,8 +655,7 @@ fn define_command_helper(
     let uuid = uuid.unwrap_or_else(|| Uuid::new_v4());
     let mut dev = MdevInfo::new(env, uuid);
 
-    if jsonfile.is_some() {
-        let jsonfile = jsonfile.unwrap();
+    if let Some(jsonfile) = jsonfile {
         if !jsonfile.readable() {
             return Err(anyhow!("Unable to read file {:?}", jsonfile));
         }
@@ -706,11 +698,11 @@ fn define_command_helper(
         }
 
         dev.autostart = auto;
-        if parent.is_some() {
-            dev.parent = parent.unwrap();
+        if let Some(p) = parent {
+            dev.parent = p;
         }
-        if mdev_type.is_some() {
-            dev.mdev_type = mdev_type.unwrap();
+        if let Some(t) = mdev_type {
+            dev.mdev_type = t;
         }
 
         if dev.parent.is_empty() {
@@ -778,9 +770,8 @@ fn modify_command(
     manual: bool,
 ) -> Result<()> {
     let mut dev = get_defined_device(env, uuid, &parent)?;
-    match mdev_type {
-        Some(t) => dev.mdev_type = t,
-        None => (),
+    if let Some(t) = mdev_type {
+        dev.mdev_type = t
     }
 
     if auto {
@@ -1028,30 +1019,22 @@ fn list_command(
             }
 
             let mut info = MdevInfo::new(env, u);
-            match info.load_from_sysfs() {
-                Ok(_) => {
-                    if parent.is_some() {
-                        match parent.as_ref() {
-                            Some(p) => {
-                                if p.as_ref() != info.parent {
-                                    debug!(
-                                        "Ignoring device {} because it doesn't match parent {}",
-                                        info.uuid, p
-                                    );
-                                    continue;
-                                }
-                            }
-                            None => (),
-                        }
+            if info.load_from_sysfs().is_ok() {
+                if let Some(p) = parent.as_ref() {
+                    if p != &info.parent {
+                        debug!(
+                            "Ignoring device {} because it doesn't match parent {}",
+                            info.uuid, p
+                        );
+                        continue;
                     }
-
-                    if !devices.contains_key(&info.parent) {
-                        devices.insert(info.parent.clone(), Vec::new());
-                    };
-
-                    devices.get_mut(&info.parent).unwrap().push(info);
                 }
-                _ => (),
+
+                if !devices.contains_key(&info.parent) {
+                    devices.insert(info.parent.clone(), Vec::new());
+                };
+
+                devices.get_mut(&info.parent).unwrap().push(info);
             };
         }
     }
@@ -1185,13 +1168,10 @@ fn start_parent_mdevs_command(env: &Environment, parent: String) -> Result<()> {
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                match child.start(false) {
-                    Err(e) => {
-                        for x in e.chain() {
-                            warn!("{}", x);
-                        }
-                    } // continue
-                    Ok(_) => (),
+                if let Err(e) = child.start(false) {
+                    for x in e.chain() {
+                        warn!("{}", x);
+                    }
                 }
             }
         }
