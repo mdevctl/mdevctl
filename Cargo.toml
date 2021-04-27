@@ -3,6 +3,10 @@ name = "mdevctl"
 version = "0.1.0"
 authors = ["Jonathon Jongsma <jjongsma@redhat.com>"]
 edition = "2018"
+license = "LGPL-2.1"
+description = "A mediated device management utility for Linux"
+repository = "https://github.com/mdevctl/mdevctl"
+homepage = "https://github.com/mdevctl/mdevctl"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
