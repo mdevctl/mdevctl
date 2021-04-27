@@ -804,4 +804,24 @@ mod tests {
         // the 'create' file in sysfs does not automatically create the device file structure in
         // the temporary test environment, so writing the sysfs attribute files fails.
     }
+
+    #[test]
+    fn test_stop() {
+        init();
+
+        const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+        const PARENT: &str = "0000:00:03.0";
+        const MDEV_TYPE: &str = "arbitrary_type";
+
+        let test = TestEnvironment::new("stop", "default");
+        test.populate_active_device(UUID, PARENT, MDEV_TYPE);
+
+        crate::stop_command(&test.env, Uuid::parse_str(UUID).unwrap())
+            .expect("stop command failed unexpectedly");
+
+        let remove_path = test.env.mdev_base().join(UUID).join("remove");
+        assert!(remove_path.exists());
+        let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
+        assert_eq!("1", contents);
+    }
 }
