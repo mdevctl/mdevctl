@@ -793,10 +793,9 @@ fn modify_command(
     dev.write_config()
 }
 
-fn write_attr(basepath: &PathBuf, attr: &String, val: &String) -> Result<()> {
+fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<()> {
     debug!("Writing attribute '{}' -> '{}'", attr, val);
-    let mut path = basepath.clone();
-    path.push(attr);
+    let path = basepath.join(attr);
     if !path.exists() {
         return Err(anyhow!("Invalid attribute '{}'", val));
     } else if !path.writable() {
