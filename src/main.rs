@@ -423,7 +423,7 @@ impl<'a> MdevInfo<'a> {
         }
 
         output.push('\n');
-        if verbose && self.attrs.len() > 0 {
+        if verbose && !self.attrs.is_empty() {
             let mut i = 0;
             output.push_str("  Attrs:\n");
             for (key, value) in &self.attrs {
@@ -443,7 +443,7 @@ impl<'a> MdevInfo<'a> {
         let mut partial = serde_json::Map::new();
         partial.insert("mdev_type".to_string(), self.mdev_type.clone().into());
         partial.insert("start".to_string(), autostart.into());
-        if self.attrs.len() > 0 {
+        if !self.attrs.is_empty() {
             let mut jsonattrs = Vec::new();
             for (key, value) in &self.attrs {
                 let attr = serde_json::json!({ key: value });
