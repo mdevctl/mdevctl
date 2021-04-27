@@ -650,7 +650,7 @@ fn define_command_helper(
     jsonfile: Option<PathBuf>,
 ) -> Result<MdevInfo> {
     let uuid_provided = uuid.is_some();
-    let uuid = uuid.unwrap_or_else(|| Uuid::new_v4());
+    let uuid = uuid.unwrap_or_else(Uuid::new_v4);
     let mut dev = MdevInfo::new(env, uuid);
 
     if let Some(jsonfile) = jsonfile {
@@ -832,7 +832,7 @@ fn start_command_helper(
                 ));
             }
 
-            let mut d = MdevInfo::new(env, uuid.unwrap_or_else(|| Uuid::new_v4()));
+            let mut d = MdevInfo::new(env, uuid.unwrap_or_else(Uuid::new_v4));
             d.load_from_json(parent.unwrap(), &val)?;
             dev = Some(d);
         }
@@ -856,7 +856,7 @@ fn start_command_helper(
             }
 
             if dev.is_none() {
-                let mut d = MdevInfo::new(env, uuid.unwrap_or_else(|| Uuid::new_v4()));
+                let mut d = MdevInfo::new(env, uuid.unwrap_or_else(Uuid::new_v4));
                 d.parent = parent.unwrap();
                 d.mdev_type = mdev_type.unwrap();
                 dev = Some(d);
