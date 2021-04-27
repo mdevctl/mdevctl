@@ -661,4 +661,147 @@ mod tests {
             |_| {},
         );
     }
+
+    fn test_start_helper<F>(
+        testname: &str,
+        expect_setup: Expect,
+        expect_execute: Expect,
+        uuid: Option<String>,
+        parent: Option<String>,
+        mdev_type: Option<String>,
+        jsonfile: Option<PathBuf>,
+        setupfn: F,
+    ) where
+        F: Fn(&TestEnvironment),
+    {
+        let test = TestEnvironment::new("start", testname);
+        setupfn(&test);
+        let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
+
+        let dev = crate::start_command_helper(&test.env, uuid, parent, mdev_type, jsonfile);
+
+        if expect_setup == Expect::Fail {
+            dev.expect_err("start command should have failed");
+            return;
+        }
+        let mut dev = dev.expect("Couldn't run start command");
+
+        let result = dev.start(false);
+        if expect_execute == Expect::Fail {
+            result.expect_err("start command should have failed");
+            return;
+        }
+        result.expect("Couldn't start the device");
+
+        let create_path = test
+            .env
+            .parent_base()
+            .join(dev.parent)
+            .join("mdev_supported_types")
+            .join(dev.mdev_type)
+            .join("create");
+        assert!(create_path.exists());
+        if uuid.is_some() {
+            assert_eq!(uuid.unwrap(), dev.uuid);
+        }
+        let contents = fs::read_to_string(create_path).expect("Unable to read 'create' file");
+        assert_eq!(dev.uuid.to_hyphenated().to_string(), contents);
+    }
+
+    #[test]
+    fn test_start() {
+        init();
+
+        const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+        const PARENT: &str = "0000:00:03.0";
+        const MDEV_TYPE: &str = "arbitrary_type";
+
+        test_start_helper(
+            "uuid-type-parent",
+            Expect::Pass,
+            Expect::Pass,
+            Some(UUID.to_string()),
+            Some(PARENT.to_string()),
+            Some(MDEV_TYPE.to_string()),
+            None,
+            |test| {
+                test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+            },
+        );
+        test_start_helper(
+            "no-uuid",
+            Expect::Pass,
+            Expect::Pass,
+            None,
+            Some(PARENT.to_string()),
+            Some(MDEV_TYPE.to_string()),
+            None,
+            |test| {
+                test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+            },
+        );
+        test_start_helper(
+            "no-parent",
+            Expect::Fail,
+            Expect::Fail,
+            Some(UUID.to_string()),
+            None,
+            Some(MDEV_TYPE.to_string()),
+            None,
+            |_| {},
+        );
+        // should fail if there is no defined device with the given uuid
+        test_start_helper(
+            "no-type",
+            Expect::Fail,
+            Expect::Fail,
+            Some(UUID.to_string()),
+            Some(PARENT.to_string()),
+            None,
+            None,
+            |_| {},
+        );
+        // should pass if there is a defined device with the given uuid
+        test_start_helper(
+            "no-type-defined",
+            Expect::Pass,
+            Expect::Pass,
+            Some(UUID.to_string()),
+            Some(PARENT.to_string()),
+            None,
+            None,
+            |test| {
+                test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+                test.populate_defined_device(UUID, PARENT, "defined.json");
+            },
+        );
+        test_start_helper(
+            "already-running",
+            Expect::Pass,
+            Expect::Fail,
+            Some(UUID.to_string()),
+            Some(PARENT.to_string()),
+            Some(MDEV_TYPE.to_string()),
+            None,
+            |test| {
+                test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+                test.populate_active_device(UUID, PARENT, MDEV_TYPE);
+            },
+        );
+        test_start_helper(
+            "no-instances",
+            Expect::Pass,
+            Expect::Fail,
+            Some(UUID.to_string()),
+            Some(PARENT.to_string()),
+            Some(MDEV_TYPE.to_string()),
+            None,
+            |test| {
+                test.populate_parent_device(PARENT, MDEV_TYPE, 0);
+            },
+        );
+        // TODO: test attributes -- difficult because executing the 'start' command by writing to
+        // the 'create' file in sysfs does not automatically create the device file structure in
+        // the temporary test environment, so writing the sysfs attribute files fails.
+    }
 }
