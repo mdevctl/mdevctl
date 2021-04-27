@@ -13,7 +13,7 @@ mod tests {
     const TEST_DATA_DIR: &str = "tests";
 
     fn init() {
-        let _ = env_logger::builder().is_test(true).try_init();
+        let _ = crate::logger().is_test(true).try_init();
     }
 
     #[derive(PartialEq)]

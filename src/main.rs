@@ -1171,8 +1171,15 @@ fn start_parent_mdevs_command(env: &Environment, parent: String) -> Result<()> {
     Ok(())
 }
 
+fn logger() -> env_logger::Builder {
+    let env = env_logger::Env::new()
+        .filter_or("MDEVCTL_LOG", "warn")
+        .write_style("MDEVCTL_LOG_STYLE");
+    env_logger::Builder::from_env(env)
+}
+
 fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+    logger().init();
     debug!("Starting up");
     let args = Cli::from_args();
     let env = Environment::new("/");
