@@ -61,21 +61,36 @@ mod tests {
         fn populate_active_device(&self, uuid: &str, parent: &str, mdev_type: &str) {
             use std::os::unix::fs::symlink;
 
-            let parentdir = self.env.parent_base().join(parent).join(uuid);
-            fs::create_dir_all(&parentdir).expect("Unable to setup mdev parent");
+            let (parentdir, parenttypedir) = self.populate_parent_device(parent, mdev_type, 1);
 
-            let mut parenttypedir = self.scratch.path().join("sys/devices/pci0000:00/");
-            parenttypedir.push(parent);
-            parenttypedir.push("mdev_supported_types");
-            parenttypedir.push(mdev_type);
-            fs::create_dir_all(&parenttypedir).expect("Unable to setup mdev parent type");
+            let parentdevdir = parentdir.join(uuid);
+            fs::create_dir_all(&parentdevdir).expect("Unable to setup parent device dir");
 
             let devdir = self.env.mdev_base().join(uuid);
             fs::create_dir_all(&devdir.parent().unwrap()).expect("Unable to setup mdev dir");
-            symlink(&parentdir, &devdir).expect("Unable to symlink mdev file");
+            symlink(&parentdevdir, &devdir).expect("Unable to setup mdev dir");
 
             let typefile = devdir.join("mdev_type");
             symlink(&parenttypedir, &typefile).expect("Unable to setup mdev type");
+        }
+
+        // set up a few files in the test environment to simulate a parent device that supports
+        // mediated devices
+        fn populate_parent_device(
+            &self,
+            parent: &str,
+            supported_type: &str,
+            instances: i32,
+        ) -> (PathBuf, PathBuf) {
+            let parentdir = self.env.parent_base().join(parent);
+            let parenttypedir = parentdir.join("mdev_supported_types").join(supported_type);
+            fs::create_dir_all(&parenttypedir).expect("Unable to setup mdev parent type");
+
+            let instancefile = parenttypedir.join("available_instances");
+            fs::write(instancefile, format!("{}", instances))
+                .expect("Unable to write available_instances");
+
+            (parentdir, parenttypedir)
         }
     }
 
