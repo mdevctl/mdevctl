@@ -424,12 +424,10 @@ impl<'a> MdevInfo<'a> {
 
         output.push('\n');
         if verbose && !self.attrs.is_empty() {
-            let mut i = 0;
             output.push_str("  Attrs:\n");
-            for (key, value) in &self.attrs {
+            for (i, (key, value)) in self.attrs.iter().enumerate() {
                 let txtattr = format!("    @{{{}}}: {{\"{}\":\"{}\"}}\n", i, key, value);
                 output.push_str(&txtattr);
-                i += 1;
             }
         }
         Ok(output)
