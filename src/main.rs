@@ -1,7 +1,6 @@
 use anyhow::{anyhow, ensure, Context, Result};
 use faccess::PathExt;
 use log::{debug, warn};
-use serde_json;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::fs;
