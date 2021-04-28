@@ -1,5 +1,4 @@
 use anyhow::{anyhow, ensure, Context, Result};
-use faccess::PathExt;
 use log::{debug, warn};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
@@ -651,9 +650,8 @@ fn define_command_helper(
     let mut dev = MdevInfo::new(env, uuid);
 
     if let Some(jsonfile) = jsonfile {
-        if !jsonfile.readable() {
-            return Err(anyhow!("Unable to read file {:?}", jsonfile));
-        }
+        let _ = std::fs::File::open(&jsonfile)
+            .with_context(|| format!("Unable to read file {:?}", jsonfile));
 
         if mdev_type.is_some() {
             return Err(anyhow!(
@@ -793,8 +791,6 @@ fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<()> {
     let path = basepath.join(attr);
     if !path.exists() {
         return Err(anyhow!("Invalid attribute '{}'", val));
-    } else if !path.writable() {
-        return Err(anyhow!("Attribute '{}' cannot be set", val));
     }
     fs::write(path, val).with_context(|| format!("Failed to write {} to attribute {}", val, attr))
 }
