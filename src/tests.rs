@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::info;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempdir::TempDir;
 use uuid::Uuid;
 
@@ -24,9 +24,14 @@ enum Expect {
 
 #[derive(Debug)]
 struct TestEnvironment {
-    env: Environment,
     datapath: PathBuf,
     scratch: TempDir,
+}
+
+impl Environment for TestEnvironment {
+    fn root(&self) -> &Path {
+        self.scratch.path()
+    }
 }
 
 impl TestEnvironment {
@@ -35,13 +40,12 @@ impl TestEnvironment {
         let scratchdir = TempDir::new(format!("mdevctl-{}", testname).as_str()).unwrap();
         let test = TestEnvironment {
             datapath: path,
-            env: Environment::new(scratchdir.path().to_str().unwrap()),
             scratch: scratchdir,
         };
         // populate the basic directories in the environment
-        fs::create_dir_all(test.env.mdev_base()).expect("Unable to create mdev_base");
-        fs::create_dir_all(test.env.persist_base()).expect("Unable to create persist_base");
-        fs::create_dir_all(test.env.parent_base()).expect("Unable to create parent_base");
+        fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
+        fs::create_dir_all(test.persist_base()).expect("Unable to create persist_base");
+        fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }
@@ -49,7 +53,7 @@ impl TestEnvironment {
     // set up a few files in the test environment to simulate an defined mediated device
     fn populate_defined_device(&self, uuid: &str, parent: &str, filename: &str) {
         let jsonfile = self.datapath.join(filename);
-        let parentdir = self.env.persist_base().join(parent);
+        let parentdir = self.persist_base().join(parent);
         fs::create_dir_all(&parentdir).expect("Unable to setup parent dir");
         let deffile = parentdir.join(uuid);
         assert!(jsonfile.exists());
@@ -66,7 +70,7 @@ impl TestEnvironment {
         let parentdevdir = parentdir.join(uuid);
         fs::create_dir_all(&parentdevdir).expect("Unable to setup parent device dir");
 
-        let devdir = self.env.mdev_base().join(uuid);
+        let devdir = self.mdev_base().join(uuid);
         fs::create_dir_all(&devdir.parent().unwrap()).expect("Unable to setup mdev dir");
         symlink(&parentdevdir, &devdir).expect("Unable to setup mdev dir");
 
@@ -82,7 +86,7 @@ impl TestEnvironment {
         supported_type: &str,
         instances: i32,
     ) -> (PathBuf, PathBuf) {
-        let parentdir = self.env.parent_base().join(parent);
+        let parentdir = self.parent_base().join(parent);
         let parenttypedir = parentdir.join("mdev_supported_types").join(supported_type);
         fs::create_dir_all(&parenttypedir).expect("Unable to setup mdev parent type");
 
@@ -140,7 +144,7 @@ fn compare_to_file(filename: &PathBuf, actual: &str) {
 }
 
 fn load_from_json<'a>(
-    env: &'a Environment,
+    env: &'a dyn Environment,
     uuid: &str,
     parent: &str,
     filename: &PathBuf,
@@ -162,7 +166,7 @@ fn test_load_json_helper(uuid: &str, parent: &str) {
     let infile = test.datapath.join(format!("{}.in", uuid));
     let outfile = test.datapath.join(format!("{}.out", uuid));
 
-    let dev = load_from_json(&test.env, uuid, parent, &infile).unwrap();
+    let dev = load_from_json(&test, uuid, parent, &infile).unwrap();
     let jsonval = dev.to_json(false).unwrap();
     let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
@@ -204,7 +208,7 @@ fn test_define_helper<F>(
     setupfn(&test);
 
     let expectedfile = test.datapath.join("expected");
-    let def = define_command_helper(&test.env, uuid, auto, parent, mdev_type, jsonfile);
+    let def = define_command_helper(&test, uuid, auto, parent, mdev_type, jsonfile);
     if expect == Expect::Fail {
         def.expect_err("expected define command to fail");
         return;
@@ -382,7 +386,7 @@ fn test_modify_helper<F>(
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
-        &test.env,
+        &test,
         uuid,
         parent.clone(),
         mdev_type,
@@ -401,7 +405,7 @@ fn test_modify_helper<F>(
     result.expect("Modify command failed unexpectedly");
 
     let def =
-        crate::get_defined_device(&test.env, uuid, &parent).expect("Couldn't find defined device");
+        crate::get_defined_device(&test, uuid, &parent).expect("Couldn't find defined device");
     let path = def.persist_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
@@ -604,7 +608,7 @@ fn test_undefine_helper<F>(
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
 
-    let result = crate::undefine_command(&test.env, uuid, parent.clone());
+    let result = crate::undefine_command(&test, uuid, parent.clone());
 
     if expect == Expect::Fail {
         result.expect_err("undefine command should have failed");
@@ -613,7 +617,7 @@ fn test_undefine_helper<F>(
 
     result.expect("undefine command should have succeeded");
 
-    let devs = crate::defined_devices(&test.env, &Some(uuid), &parent)
+    let devs = crate::defined_devices(&test, &Some(uuid), &parent)
         .expect("failed to query defined devices");
     assert!(devs.is_empty());
 }
@@ -678,7 +682,7 @@ fn test_start_helper<F>(
     setupfn(&test);
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
 
-    let dev = crate::start_command_helper(&test.env, uuid, parent, mdev_type, jsonfile);
+    let dev = crate::start_command_helper(&test, uuid, parent, mdev_type, jsonfile);
 
     if expect_setup == Expect::Fail {
         dev.expect_err("start command should have failed");
@@ -694,7 +698,6 @@ fn test_start_helper<F>(
     result.expect("Couldn't start the device");
 
     let create_path = test
-        .env
         .parent_base()
         .join(dev.parent)
         .join("mdev_supported_types")
@@ -816,10 +819,10 @@ fn test_stop() {
     let test = TestEnvironment::new("stop", "default");
     test.populate_active_device(UUID, PARENT, MDEV_TYPE);
 
-    crate::stop_command(&test.env, Uuid::parse_str(UUID).unwrap())
+    crate::stop_command(&test, Uuid::parse_str(UUID).unwrap())
         .expect("stop command failed unexpectedly");
 
-    let remove_path = test.env.mdev_base().join(UUID).join("remove");
+    let remove_path = test.mdev_base().join(UUID).join("remove");
     assert!(remove_path.exists());
     let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
     assert_eq!("1", contents);

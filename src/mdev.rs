@@ -21,11 +21,11 @@ pub struct MDev<'a> {
     pub parent: String,
     pub mdev_type: String,
     pub attrs: Vec<(String, String)>,
-    env: &'a Environment,
+    env: &'a dyn Environment,
 }
 
 impl<'a> MDev<'a> {
-    pub fn new(env: &'a Environment, uuid: Uuid) -> MDev<'a> {
+    pub fn new(env: &'a dyn Environment, uuid: Uuid) -> MDev<'a> {
         MDev {
             uuid,
             active: false,

@@ -9,7 +9,7 @@ use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::cli::Cli;
-use crate::environment::Environment;
+use crate::environment::{DefaultEnvironment, Environment};
 use crate::logger::logger;
 use crate::mdev::*;
 
@@ -40,7 +40,7 @@ fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
 
 // convert 'define' command arguments into a MDev struct
 fn define_command_helper(
-    env: &Environment,
+    env: &dyn Environment,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -118,7 +118,7 @@ fn define_command_helper(
 }
 
 fn define_command(
-    env: &Environment,
+    env: &dyn Environment,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -135,7 +135,7 @@ fn define_command(
     })
 }
 
-fn undefine_command(env: &Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
+fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
     let devs = defined_devices(env, &Some(uuid), &parent)?;
     if devs.is_empty() {
@@ -151,7 +151,7 @@ fn undefine_command(env: &Environment, uuid: Uuid, parent: Option<String>) -> Re
 
 #[allow(clippy::too_many_arguments)]
 fn modify_command(
-    env: &Environment,
+    env: &dyn Environment,
     uuid: Uuid,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -189,7 +189,7 @@ fn modify_command(
 }
 
 fn start_command_helper(
-    env: &Environment,
+    env: &dyn Environment,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -250,7 +250,7 @@ fn start_command_helper(
 }
 
 fn start_command(
-    env: &Environment,
+    env: &dyn Environment,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -260,7 +260,7 @@ fn start_command(
     dev.start(uuid.is_none())
 }
 
-fn stop_command(env: &Environment, uuid: Uuid) -> Result<()> {
+fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
@@ -268,7 +268,7 @@ fn stop_command(env: &Environment, uuid: Uuid) -> Result<()> {
 }
 
 fn get_defined_device<'a>(
-    env: &'a Environment,
+    env: &'a dyn Environment,
     uuid: Uuid,
     parent: &Option<String>,
 ) -> Result<MDev<'a>> {
@@ -312,7 +312,7 @@ fn get_defined_device<'a>(
 }
 
 fn defined_devices<'a>(
-    env: &'a Environment,
+    env: &'a dyn Environment,
     uuid: &Option<Uuid>,
     parent: &Option<String>,
 ) -> Result<BTreeMap<String, Vec<MDev<'a>>>> {
@@ -371,7 +371,7 @@ fn defined_devices<'a>(
 }
 
 fn list_command(
-    env: &Environment,
+    env: &dyn Environment,
     defined: bool,
     dumpjson: bool,
     verbose: bool,
@@ -441,7 +441,7 @@ fn list_command(
 }
 
 fn supported_types(
-    env: &Environment,
+    env: &dyn Environment,
     parent: Option<String>,
 ) -> Result<BTreeMap<String, Vec<MDevType>>> {
     debug!("Finding supported mdev types");
@@ -503,7 +503,7 @@ fn supported_types(
     Ok(types)
 }
 
-fn types_command(env: &Environment, parent: Option<String>, dumpjson: bool) -> Result<()> {
+fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) -> Result<()> {
     let types = supported_types(env, parent)?;
     debug!("{:?}", types);
     if dumpjson {
@@ -536,7 +536,7 @@ fn types_command(env: &Environment, parent: Option<String>, dumpjson: bool) -> R
     Ok(())
 }
 
-fn start_parent_mdevs_command(env: &Environment, parent: String) -> Result<()> {
+fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<()> {
     let mut devs = defined_devices(env, &None, &Some(parent))?;
     if devs.is_empty() {
         // nothing to do
@@ -564,7 +564,8 @@ fn main() -> Result<()> {
     logger().init();
     debug!("Starting up");
     let args = Cli::from_args();
-    let env = Environment::new("/");
+    let env = DefaultEnvironment::new();
+    debug!("{:?}", env);
     debug!("Parsed args");
     match args {
         Cli::Define {
