@@ -15,6 +15,8 @@ use crate::mdev::{FormatType, MDev};
 mod cli;
 mod environment;
 mod mdev;
+
+#[cfg(test)]
 mod tests;
 
 #[derive(Debug, Clone)]
