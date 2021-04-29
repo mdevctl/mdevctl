@@ -1,7 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use crate::environment::Environment;
-    use crate::MDev;
     use anyhow::Result;
     use log::info;
     use std::env;
@@ -9,6 +7,9 @@ mod tests {
     use std::path::PathBuf;
     use tempdir::TempDir;
     use uuid::Uuid;
+
+    use crate::environment::Environment;
+    use crate::mdev::MDev;
 
     const TEST_DATA_DIR: &str = "tests";
 
