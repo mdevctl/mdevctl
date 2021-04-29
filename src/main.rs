@@ -79,7 +79,7 @@ impl MdevTypeInfo {
 }
 
 #[derive(Debug, Clone)]
-struct MdevInfo<'a> {
+struct MDev<'a> {
     uuid: Uuid,
     active: bool,
     autostart: bool,
@@ -90,9 +90,9 @@ struct MdevInfo<'a> {
     env: &'a Environment,
 }
 
-impl<'a> MdevInfo<'a> {
-    pub fn new(env: &'a Environment, uuid: Uuid) -> MdevInfo<'a> {
-        MdevInfo {
+impl<'a> MDev<'a> {
+    pub fn new(env: &'a Environment, uuid: Uuid) -> MDev<'a> {
+        MDev {
             uuid,
             active: false,
             autostart: false,
@@ -294,7 +294,7 @@ impl<'a> MdevInfo<'a> {
 
     pub fn create(&mut self) -> Result<()> {
         debug!("Creating mdev {:?}", self.uuid);
-        let mut existing = MdevInfo::new(self.env, self.uuid);
+        let mut existing = MDev::new(self.env, self.uuid);
 
         if existing.load_from_sysfs().is_ok() && existing.active {
             if existing.parent != self.parent {
@@ -442,7 +442,7 @@ impl<'a> MdevInfo<'a> {
     }
 }
 
-fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
+fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
     let mut parents = serde_json::map::Map::new();
     for (parentname, children) in devices {
         let mut childrenarray = Vec::new();
@@ -459,7 +459,7 @@ fn format_json(devices: BTreeMap<String, Vec<MdevInfo>>) -> Result<String> {
     serde_json::to_string_pretty(&jsonval).map_err(|_e| anyhow!("Unable to serialize json"))
 }
 
-// convert 'define' command arguments into a MdevInfo struct
+// convert 'define' command arguments into a MDev struct
 fn define_command_helper(
     env: &Environment,
     uuid: Option<Uuid>,
@@ -467,10 +467,10 @@ fn define_command_helper(
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
-) -> Result<MdevInfo> {
+) -> Result<MDev> {
     let uuid_provided = uuid.is_some();
     let uuid = uuid.unwrap_or_else(Uuid::new_v4);
-    let mut dev = MdevInfo::new(env, uuid);
+    let mut dev = MDev::new(env, uuid);
 
     if let Some(jsonfile) = jsonfile {
         let _ = std::fs::File::open(&jsonfile)
@@ -624,9 +624,9 @@ fn start_command_helper(
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
-) -> Result<MdevInfo> {
+) -> Result<MDev> {
     debug!("Starting device '{:?}'", uuid);
-    let mut dev: Option<MdevInfo> = None;
+    let mut dev: Option<MDev> = None;
     match jsonfile {
         Some(fname) => {
             let contents = fs::read_to_string(&fname)
@@ -645,7 +645,7 @@ fn start_command_helper(
                 ));
             }
 
-            let mut d = MdevInfo::new(env, uuid.unwrap_or_else(Uuid::new_v4));
+            let mut d = MDev::new(env, uuid.unwrap_or_else(Uuid::new_v4));
             d.load_from_json(parent.unwrap(), &val)?;
             dev = Some(d);
         }
@@ -669,7 +669,7 @@ fn start_command_helper(
             }
 
             if dev.is_none() {
-                let mut d = MdevInfo::new(env, uuid.unwrap_or_else(Uuid::new_v4));
+                let mut d = MDev::new(env, uuid.unwrap_or_else(Uuid::new_v4));
                 d.parent = parent.unwrap();
                 d.mdev_type = mdev_type.unwrap();
                 dev = Some(d);
@@ -692,16 +692,16 @@ fn start_command(
 
 fn stop_command(env: &Environment, uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
-    let mut info = MdevInfo::new(env, uuid);
-    info.load_from_sysfs()?;
-    info.stop()
+    let mut dev = MDev::new(env, uuid);
+    dev.load_from_sysfs()?;
+    dev.stop()
 }
 
 fn get_defined_device<'a>(
     env: &'a Environment,
     uuid: Uuid,
     parent: &Option<String>,
-) -> Result<MdevInfo<'a>> {
+) -> Result<MDev<'a>> {
     let u = Some(uuid);
     let devs = defined_devices(env, &u, parent)?;
     if devs.is_empty() {
@@ -745,8 +745,8 @@ fn defined_devices<'a>(
     env: &'a Environment,
     uuid: &Option<Uuid>,
     parent: &Option<String>,
-) -> Result<BTreeMap<String, Vec<MdevInfo<'a>>>> {
-    let mut devices: BTreeMap<String, Vec<MdevInfo>> = BTreeMap::new();
+) -> Result<BTreeMap<String, Vec<MDev<'a>>>> {
+    let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
     debug!(
         "Looking up defined mdevs: uuid={:?}, parent={:?}",
         uuid, parent
@@ -787,7 +787,7 @@ fn defined_devices<'a>(
             let mut contents = String::new();
             f.read_to_string(&mut contents)?;
             let val: serde_json::Value = serde_json::from_str(&contents)?;
-            let mut dev = MdevInfo::new(env, u);
+            let mut dev = MDev::new(env, u);
             dev.load_from_json(parentname.to_string(), &val)?;
             dev.load_from_sysfs()?;
 
@@ -808,7 +808,7 @@ fn list_command(
     uuid: Option<Uuid>,
     parent: Option<String>,
 ) -> Result<()> {
-    let mut devices: BTreeMap<String, Vec<MdevInfo>> = BTreeMap::new();
+    let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
     if defined {
         devices = defined_devices(env, &uuid, &parent)?;
     } else {
@@ -829,23 +829,23 @@ fn list_command(
                 continue;
             }
 
-            let mut info = MdevInfo::new(env, u);
-            if info.load_from_sysfs().is_ok() {
+            let mut dev = MDev::new(env, u);
+            if dev.load_from_sysfs().is_ok() {
                 if let Some(p) = parent.as_ref() {
-                    if p != &info.parent {
+                    if p != &dev.parent {
                         debug!(
                             "Ignoring device {} because it doesn't match parent {}",
-                            info.uuid, p
+                            dev.uuid, p
                         );
                         continue;
                     }
                 }
 
-                if !devices.contains_key(&info.parent) {
-                    devices.insert(info.parent.clone(), Vec::new());
+                if !devices.contains_key(&dev.parent) {
+                    devices.insert(dev.parent.clone(), Vec::new());
                 };
 
-                devices.get_mut(&info.parent).unwrap().push(info);
+                devices.get_mut(&dev.parent).unwrap().push(dev);
             };
         }
     }

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::environment::Environment;
-    use crate::MdevInfo;
+    use crate::MDev;
     use anyhow::Result;
     use log::info;
     use std::env;
@@ -144,11 +144,11 @@ mod tests {
         uuid: &str,
         parent: &str,
         filename: &PathBuf,
-    ) -> Result<MdevInfo<'a>> {
+    ) -> Result<MDev<'a>> {
         let uuid = Uuid::parse_str(uuid);
         assert!(uuid.is_ok());
         let uuid = uuid.unwrap();
-        let mut dev = MdevInfo::new(env, uuid);
+        let mut dev = MDev::new(env, uuid);
 
         let jsonstr = fs::read_to_string(filename)?;
         let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
