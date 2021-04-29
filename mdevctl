@@ -580,11 +580,22 @@ case ${1} in
                 fi
 
                 if [ "$(get_config_key start)" == "auto" ]; then
-                    start_mdev "$uuid" "$parent" "$(get_config_key mdev_type)"
-                    if [ $? -ne 0 ]; then
-                        echo "Failed to create mdev $uuid, type $(get_config_key mdev_type) on $parent" >&2
-                        # continue...
+                    callout "pre" "start" "$uuid" "$parent" "$(get_config_key mdev_type)" 2>&1 | logger -t $(basename $0) -p err
+                    if [ $? -eq 0 ]; then
+                        start_mdev "$uuid" "$parent" "$(get_config_key mdev_type)"
+                        if [ $? -ne 0 ]; then
+                            echo "Failed to create mdev $uuid, type $(get_config_key mdev_type) on $parent" >&2
+                            # continue...
+
+                            state="failure"
+                        else
+                            state="success"
+                        fi
+
+                        callout "post" "start" "$uuid" "$parent" "$(get_config_key mdev_type)" 2>&1 | logger -t $(basename $0) -p err
                     fi
+
+                    callout_notify "start" "$uuid" "$parent" "$type" | logger -t $(basename $0) -p notice
                 fi
             fi
         done
@@ -978,9 +989,6 @@ case "$cmd" in
                 print_uuid="echo $uuid"
             fi
         fi
-
-        start_mdev "$uuid" "$parent" "$type" "$print_uuid"
-        exit $?
         ;;
     stop)
         if [ -z "$uuid" ]; then
@@ -1174,6 +1182,9 @@ case "$cmd" in
         ;;
     modify)
         write_config "$file"
+        ;;
+    start)
+        start_mdev "$uuid" "$parent" "$type" "$print_uuid"
         ;;
     stop)
         remove_mdev "$uuid"
