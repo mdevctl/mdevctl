@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::cli::Cli;
 use crate::environment::Environment;
 use crate::logger::logger;
-use crate::mdev::{FormatType, MDev};
+use crate::mdev::*;
 
 mod cli;
 mod environment;
@@ -20,50 +20,6 @@ mod mdev;
 
 #[cfg(test)]
 mod tests;
-
-#[derive(Debug, Clone)]
-struct MDevType {
-    parent: String,
-    typename: String,
-    available_instances: i32,
-    device_api: String,
-    name: String,
-    description: String,
-}
-
-impl MDevType {
-    pub fn new() -> MDevType {
-        MDevType {
-            parent: String::new(),
-            typename: String::new(),
-            available_instances: 0,
-            device_api: String::new(),
-            name: String::new(),
-            description: String::new(),
-        }
-    }
-
-    pub fn to_json(&self) -> Result<serde_json::Value> {
-        let mut jsonobj: serde_json::Value = serde_json::json!({
-            "available_instances": self.available_instances,
-            "device_api": self.device_api,
-        });
-        if !self.name.is_empty() {
-            jsonobj.as_object_mut().unwrap().insert(
-                "name".to_string(),
-                serde_json::Value::String(self.name.clone()),
-            );
-        }
-        if !self.description.is_empty() {
-            jsonobj.as_object_mut().unwrap().insert(
-                "description".to_string(),
-                serde_json::Value::String(self.description.clone()),
-            );
-        }
-
-        Ok(serde_json::json!({ &self.typename: jsonobj }))
-    }
-}
 
 fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
     let mut parents = serde_json::map::Map::new();

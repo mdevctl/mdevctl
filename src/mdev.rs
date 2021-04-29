@@ -397,3 +397,47 @@ fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<()> {
     }
     fs::write(path, val).with_context(|| format!("Failed to write {} to attribute {}", val, attr))
 }
+
+#[derive(Debug, Clone)]
+pub struct MDevType {
+    pub parent: String,
+    pub typename: String,
+    pub available_instances: i32,
+    pub device_api: String,
+    pub name: String,
+    pub description: String,
+}
+
+impl MDevType {
+    pub fn new() -> MDevType {
+        MDevType {
+            parent: String::new(),
+            typename: String::new(),
+            available_instances: 0,
+            device_api: String::new(),
+            name: String::new(),
+            description: String::new(),
+        }
+    }
+
+    pub fn to_json(&self) -> Result<serde_json::Value> {
+        let mut jsonobj: serde_json::Value = serde_json::json!({
+            "available_instances": self.available_instances,
+            "device_api": self.device_api,
+        });
+        if !self.name.is_empty() {
+            jsonobj.as_object_mut().unwrap().insert(
+                "name".to_string(),
+                serde_json::Value::String(self.name.clone()),
+            );
+        }
+        if !self.description.is_empty() {
+            jsonobj.as_object_mut().unwrap().insert(
+                "description".to_string(),
+                serde_json::Value::String(self.description.clone()),
+            );
+        }
+
+        Ok(serde_json::json!({ &self.typename: jsonobj }))
+    }
+}
