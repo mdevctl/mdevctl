@@ -35,7 +35,7 @@ enum FormatType {
 }
 
 #[derive(Debug, Clone)]
-struct MdevTypeInfo {
+struct MDevType {
     parent: String,
     typename: String,
     available_instances: i32,
@@ -44,9 +44,9 @@ struct MdevTypeInfo {
     description: String,
 }
 
-impl MdevTypeInfo {
-    pub fn new() -> MdevTypeInfo {
-        MdevTypeInfo {
+impl MDevType {
+    pub fn new() -> MDevType {
+        MDevType {
             parent: String::new(),
             typename: String::new(),
             available_instances: 0,
@@ -873,9 +873,9 @@ fn list_command(
 fn supported_types(
     env: &Environment,
     parent: Option<String>,
-) -> Result<BTreeMap<String, Vec<MdevTypeInfo>>> {
+) -> Result<BTreeMap<String, Vec<MDevType>>> {
     debug!("Finding supported mdev types");
-    let mut types: BTreeMap<String, Vec<MdevTypeInfo>> = BTreeMap::new();
+    let mut types: BTreeMap<String, Vec<MDevType>> = BTreeMap::new();
 
     for parentpath in env.parent_base().read_dir()? {
         let parentpath = parentpath?;
@@ -896,7 +896,7 @@ fn supported_types(
                 continue;
             }
 
-            let mut t = MdevTypeInfo::new();
+            let mut t = MDevType::new();
             t.parent = parentname.to_string();
 
             let mut path = child.path();
