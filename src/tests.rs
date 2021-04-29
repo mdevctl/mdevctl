@@ -7,12 +7,13 @@ use tempdir::TempDir;
 use uuid::Uuid;
 
 use crate::environment::Environment;
+use crate::logger::logger;
 use crate::mdev::MDev;
 
 const TEST_DATA_DIR: &str = "tests";
 
 fn init() {
-    let _ = crate::logger().is_test(true).try_init();
+    let _ = logger().is_test(true).try_init();
 }
 
 #[derive(PartialEq)]
