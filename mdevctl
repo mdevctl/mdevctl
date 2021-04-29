@@ -823,12 +823,48 @@ case "$cmd" in
             usage
         fi
 
-        set -o errexit
-
         if [ -n "$parent" ]; then
-            rm -f "$persist_base/$parent/$uuid"
+            read_config "$persist_base/$parent/$uuid"
+            type="$(get_config_key mdev_type)"
+
+            callout "pre" "$cmd" "$uuid" "$parent" "$type"
+            if [ $? -eq 0 ]; then
+                rm -f "$persist_base/$parent/$uuid"
+                if [ $? -eq 0 ]; then
+                    state="success"
+                else
+                    state="failure"
+                fi
+
+                callout "post" "$cmd" "$uuid" "$parent" "$type"
+            fi
+
+            callout_notify "$cmd" "$uuid" "$parent" "$type"
         else
-            find "$persist_base" -name "$uuid" -type f | xargs rm -f
+            undef_configs=$(find "$persist_base" -name "$uuid" -type f)
+
+            if [ -n "$undef_configs" ]; then
+                for p in $undef_configs; do
+                    parent=$(basename $(realpath "$p" | sed -s "s/\/$uuid//"))
+                    read_config "$persist_base/$parent/$uuid"
+                    type="$(get_config_key mdev_type)"
+
+                    callout "pre" "$cmd" "$uuid" "$parent" "$type"
+                    if [ $? -eq 0 ]; then
+                        rm -f "$persist_base/$parent/$uuid"
+                        if [ $? -eq 0 ]; then
+                            state="success"
+                        else
+                            state="failure"
+                        fi
+
+                        callout "post" "$cmd" "$uuid" "$parent" "$type"
+                    fi
+
+                    callout_notify "$cmd" "$uuid" "$parent" "$type"
+                    script=""
+                done
+            fi
         fi
 
         exit 0
