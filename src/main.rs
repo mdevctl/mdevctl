@@ -10,34 +10,11 @@ use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::cli::Cli;
+use crate::environment::Environment;
 
 mod cli;
+mod environment;
 mod tests;
-
-#[derive(Debug)]
-struct Environment {
-    rootdir: PathBuf,
-}
-
-impl Environment {
-    pub fn new(path: &str) -> Environment {
-        Environment {
-            rootdir: PathBuf::from(path),
-        }
-    }
-
-    pub fn mdev_base(&self) -> PathBuf {
-        self.rootdir.join("sys/bus/mdev/devices")
-    }
-
-    pub fn persist_base(&self) -> PathBuf {
-        self.rootdir.join("etc/mdevctl.d")
-    }
-
-    pub fn parent_base(&self) -> PathBuf {
-        self.rootdir.join("sys/class/mdev_bus")
-    }
-}
 
 fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String> {
     let path = fs::canonicalize(path)?;

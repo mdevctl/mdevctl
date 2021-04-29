@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::Environment;
+    use crate::environment::Environment;
     use crate::MdevInfo;
     use anyhow::Result;
     use log::info;
