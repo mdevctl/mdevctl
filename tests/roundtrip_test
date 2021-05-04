@@ -1,0 +1,117 @@
+#!/bin/bash
+result=$(modprobe mtty 2>&1)
+if ! [[ "$?" -eq "0" ]]; then
+	echo "Can't load test device module. ABORT. - $result"
+	exit 1
+fi
+
+summary_result=0
+
+message="- Confirm that test device is a known type"
+result="$(mdevctl types)"
+if ! [[ "$result" =~ "mtty".* ]]; then
+	message="$message: FAIL - got $result"
+fi
+echo $message
+
+message="- Define and list device without uuid on mtty-1"
+result="$(mdevctl define -t mtty-1 -p mtty)"
+result1="$(mdevctl list -d -p mtty)"
+if ! [[ "$result1" =~ "$result" ]]; then
+	summary_result=1
+	message="$message: FAIL - define result: '$result', list result: '$result1'"
+fi
+echo $message
+
+message="- Define and list created device on mtty-2"
+uuid=$(uuidgen)
+echo "$uuid" > /sys/devices/virtual/mtty/mtty/mdev_supported_types/mtty-2/create
+result=$(mdevctl define -u $uuid)
+result1=$(mdevctl list -d -p mtty)
+if ! [[ "$uuid" =~ "$result" ]]; then
+	summary_result=1
+	message="$message: FAIL - created device not listed; define result '$result', list result '$result1'"
+fi
+echo $message
+
+message="- Stop known device on mtty-2"
+result=$(mdevctl stop -u $uuid)
+if ! [[ "$?" -eq "0" ]]; then
+	summary_result=1
+	message="$message: FAIL - stop result '$result'"
+fi
+echo $message
+
+message="- Modify known device on mtty-2 and check json"
+result=$(mdevctl modify -u $uuid --addattr=sample_attribute --value=some_value)
+result1=$(mdevctl list -d -u $uuid --dumpjson)
+expected_json='"sample_attribute": "some_value"'
+if ! [[ "${result1//[$'\t\r\n']}" =~ .*"$expected_json".* ]]; then
+	summary_result=1
+	message="$message: FAIL - modify result '$result', json dump result '$result1'"
+fi
+echo $message
+
+message="- Start known device tries to set attribute but fails on non-existing attribute"
+result=$(mdevctl start -u $uuid 2>&1)
+if ! [[ "$?" -eq "1" ]]; then
+	summary_result=1
+	message="$message: FAIL - start result: '$result'"
+fi
+echo $message
+
+message="- Delete non-existing attribute on known device"
+result=$(mdevctl modify -u $uuid --delattr --index 0)
+if ! [[ "$?" -eq "0" ]]; then
+	summary_result=1
+	message="$message: FAIL - delete attribute result '$result'"
+fi
+echo $message
+
+message="- Define device from json, change start type"
+definition='{ "mdev_type": "mtty-1", "start": "manual" }'
+echo "$definition" > tmp_definition
+uuid=$(uuidgen)
+result=$(mdevctl define -u $uuid -p mtty --jsonfile=./tmp_definition)
+result1=$(mdevctl modify -a -u $uuid)
+result2=$(mdevctl list -d -u $uuid --dumpjson)
+expected_json='"start": "auto"'
+if ! [[ "${result2//[$'\t\r\n']}" =~ .*"$expected_json".* ]]; then
+	summary_result=1
+	message="$message: FAIL - definition result: '$result', modification result: '$result1', json dump: '$result2'"
+fi
+echo $message
+
+rm -f ./tmp_definition
+
+message="- Start known devices"
+for i in $(mdevctl list -d| awk '{ print $1 }'); do
+	result=$(mdevctl start -u $i)
+	if ! [[ "$?" -eq "0" ]]; then
+		summary_result=1
+		message="$message: FAIL - device $i - start result: '$result'"
+	fi
+done
+echo $message
+
+message="- Stop all known devices"
+for i in $(mdevctl list| awk '{ print $1 }'); do
+	result=$(mdevctl stop -u $i)
+        if ! [[ "$?" -eq "0" ]]; then
+		summary_result=1
+		message="$message: FAIL - failed to stop $i - $result"
+	fi
+done
+echo $message
+
+message="- Undefine all known devices"
+for i in $(mdevctl list -d| awk '{ print $1 }'); do
+	result=$(mdevctl undefine -u $i)
+	if ! [[ "$?" -eq "0" ]]; then
+		summary_result=1
+		message="$message: FAIL - failed to undefine $i - $result"
+	fi
+done
+echo $message
+
+exit $summary_result

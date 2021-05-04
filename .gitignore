@@ -2,3 +2,4 @@ mdevctl.spec
 *.tar.gz
 *.rpm
 */
+!tests/
