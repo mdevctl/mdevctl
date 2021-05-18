@@ -1,5 +1,12 @@
+//! A filesystem environment for mdevctl
+
 use std::path::{Path, PathBuf};
 
+/// A trait which provides filesystem paths for certain system resources.
+///
+/// The main purpose of this trait is to enable testability of the mdevctl commands by abstracting
+/// out the filesystem locations. Tests can implement [`Environment`] and provide filesystem paths
+/// within a mock filesystem environment that will not affect the system.
 pub trait Environment {
     fn root(&self) -> &Path;
 
@@ -16,6 +23,7 @@ pub trait Environment {
     }
 }
 
+/// A default implementation of the Environment trait which uses '/' as the filesystem root.
 #[derive(Debug)]
 pub struct DefaultEnvironment {
     rootpath: PathBuf,

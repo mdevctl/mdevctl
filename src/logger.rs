@@ -1,3 +1,5 @@
+//! Logging implementation for mdevctl
+
 pub fn logger() -> env_logger::Builder {
     let env = env_logger::Env::new()
         .filter_or("MDEVCTL_LOG", "warn")

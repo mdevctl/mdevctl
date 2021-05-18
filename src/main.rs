@@ -1,3 +1,10 @@
+//! mdevctl is a utility for managing and persisting devices in the mediated device framework of
+//! the Linux kernel.  Mediated devices are sub-devices of a parent device (ex. a vGPU) which can
+//! be dynamically created and potentially used by drivers like vfio-mdev for assignment to virtual
+//! machines.
+//!
+//! See `mdevctl help` or the manpage for more information.
+
 use anyhow::{anyhow, ensure, Context, Result};
 use log::{debug, warn};
 use std::collections::BTreeMap;
@@ -21,6 +28,7 @@ mod mdev;
 #[cfg(test)]
 mod tests;
 
+/// Format a map of mediated devices into a json string
 fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
     let mut parents = serde_json::map::Map::new();
     for (parentname, children) in devices {
@@ -38,7 +46,7 @@ fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
     serde_json::to_string_pretty(&jsonval).map_err(|_e| anyhow!("Unable to serialize json"))
 }
 
-// convert 'define' command arguments into a MDev struct
+/// convert 'define' command arguments into a MDev struct
 fn define_command_helper(
     env: &dyn Environment,
     uuid: Option<Uuid>,
@@ -117,6 +125,7 @@ fn define_command_helper(
     Ok(dev)
 }
 
+/// Implementation of the `mdevctl define` command
 fn define_command(
     env: &dyn Environment,
     uuid: Option<Uuid>,
@@ -135,6 +144,7 @@ fn define_command(
     })
 }
 
+/// Implementation of the `mdevctl undefine` command
 fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
     let devs = defined_devices(env, &Some(uuid), &parent)?;
@@ -149,6 +159,7 @@ fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -
     Ok(())
 }
 
+/// Implementation of the `mdevctl modify` command
 #[allow(clippy::too_many_arguments)]
 fn modify_command(
     env: &dyn Environment,
@@ -188,6 +199,7 @@ fn modify_command(
     dev.write_config()
 }
 
+/// convert 'start' command arguments into a MDev struct
 fn start_command_helper(
     env: &dyn Environment,
     uuid: Option<Uuid>,
@@ -249,6 +261,7 @@ fn start_command_helper(
     Ok(dev.unwrap())
 }
 
+/// Implementation of the `mdevctl start` command
 fn start_command(
     env: &dyn Environment,
     uuid: Option<Uuid>,
@@ -260,6 +273,7 @@ fn start_command(
     dev.start(uuid.is_none())
 }
 
+/// Implementation of the `mdevctl stop` command
 fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
@@ -267,6 +281,7 @@ fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
     dev.stop()
 }
 
+/// convenience function to lookup a defined device by uuid and parent
 fn get_defined_device<'a>(
     env: &'a dyn Environment,
     uuid: Uuid,
@@ -311,6 +326,7 @@ fn get_defined_device<'a>(
     }
 }
 
+/// Get a map of all defined devices, optionally filtered by uuid and parent
 fn defined_devices<'a>(
     env: &'a dyn Environment,
     uuid: &Option<Uuid>,
@@ -370,6 +386,7 @@ fn defined_devices<'a>(
     Ok(devices)
 }
 
+/// Implementation of the `mdevctl list` command
 fn list_command(
     env: &dyn Environment,
     defined: bool,
@@ -440,6 +457,7 @@ fn list_command(
     Ok(())
 }
 
+/// Get a map of all mediated device types that are supported on this machine
 fn supported_types(
     env: &dyn Environment,
     parent: Option<String>,
@@ -503,6 +521,7 @@ fn supported_types(
     Ok(types)
 }
 
+/// Implementation of the `mdevctl types` command
 fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) -> Result<()> {
     let types = supported_types(env, parent)?;
     debug!("{:?}", types);
@@ -536,6 +555,7 @@ fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) 
     Ok(())
 }
 
+/// Implementation of the `start-parent-mdevs` command
 fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<()> {
     let mut devs = defined_devices(env, &None, &Some(parent))?;
     if devs.is_empty() {
@@ -560,6 +580,7 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
     Ok(())
 }
 
+/// parse command line arguments and dispatch to command-specific functions
 fn main() -> Result<()> {
     logger().init();
     debug!("Starting up");

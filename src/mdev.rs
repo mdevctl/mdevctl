@@ -1,3 +1,5 @@
+//! Structures for representing a mediated device
+
 use crate::environment::Environment;
 use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
@@ -12,6 +14,7 @@ pub enum FormatType {
     Defined,
 }
 
+/// Representation of a mediated device
 #[derive(Debug, Clone)]
 pub struct MDev<'a> {
     pub uuid: Uuid,
@@ -398,6 +401,7 @@ fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<()> {
     fs::write(path, val).with_context(|| format!("Failed to write {} to attribute {}", val, attr))
 }
 
+/// Representation of a mediated device type
 #[derive(Debug, Clone)]
 pub struct MDevType {
     pub parent: String,

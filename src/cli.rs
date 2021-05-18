@@ -1,3 +1,5 @@
+//! Command line options for mdevctl
+
 use std::path::PathBuf;
 pub use structopt::StructOpt;
 use uuid::Uuid;
