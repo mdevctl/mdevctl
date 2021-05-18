@@ -77,7 +77,7 @@ fn define_command_helper(
             ));
         }
 
-        let devs = defined_devices(env, &Some(uuid), &parent)?;
+        let devs = defined_devices(env, Some(&uuid), parent.as_ref())?;
         if !devs.is_empty() {
             return Err(anyhow!(
                 "Cowardly refusing to overwrite existing config for {}/{}",
@@ -147,7 +147,7 @@ fn define_command(
 /// Implementation of the `mdevctl undefine` command
 fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
-    let devs = defined_devices(env, &Some(uuid), &parent)?;
+    let devs = defined_devices(env, Some(&uuid), parent.as_ref())?;
     if devs.is_empty() {
         return Err(anyhow!("No devices match the specified uuid"));
     }
@@ -173,7 +173,7 @@ fn modify_command(
     auto: bool,
     manual: bool,
 ) -> Result<()> {
-    let mut dev = get_defined_device(env, uuid, &parent)?;
+    let mut dev = get_defined_device(env, uuid, parent.as_ref())?;
     if let Some(t) = mdev_type {
         dev.mdev_type = t
     }
@@ -240,7 +240,7 @@ fn start_command_helper(
              * PARENT for disambiguation */
             if mdev_type.is_none() {
                 if let Some(uuid) = uuid {
-                    dev = match get_defined_device(env, uuid, &parent) {
+                    dev = match get_defined_device(env, uuid, parent.as_ref()) {
                         Ok(d) => Some(d),
                         Err(e) => return Err(e),
                     };
@@ -285,10 +285,9 @@ fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
 fn get_defined_device<'a>(
     env: &'a dyn Environment,
     uuid: Uuid,
-    parent: &Option<String>,
+    parent: Option<&String>,
 ) -> Result<MDev<'a>> {
-    let u = Some(uuid);
-    let devs = defined_devices(env, &u, parent)?;
+    let devs = defined_devices(env, Some(&uuid), parent)?;
     if devs.is_empty() {
         return match parent {
             None => Err(anyhow!(
@@ -329,8 +328,8 @@ fn get_defined_device<'a>(
 /// Get a map of all defined devices, optionally filtered by uuid and parent
 fn defined_devices<'a>(
     env: &'a dyn Environment,
-    uuid: &Option<Uuid>,
-    parent: &Option<String>,
+    uuid: Option<&Uuid>,
+    parent: Option<&String>,
 ) -> Result<BTreeMap<String, Vec<MDev<'a>>>> {
     let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
     debug!(
@@ -341,9 +340,7 @@ fn defined_devices<'a>(
         let parentpath = parentpath?;
         let parentname = parentpath.file_name();
         let parentname = parentname.to_str().unwrap();
-        if (parent.is_some() && parent.as_ref().unwrap() != parentname)
-            || !parentpath.metadata()?.is_dir()
-        {
+        if (parent.is_some() && parent.unwrap() != parentname) || !parentpath.metadata()?.is_dir() {
             debug!("Ignoring child devices for parent {}", parentname);
             continue;
         }
@@ -360,7 +357,7 @@ fn defined_devices<'a>(
             let basename = path.file_name().unwrap().to_str().unwrap();
             let u = Uuid::parse_str(basename).unwrap();
             debug!("found mdev {:?}", u);
-            if uuid.is_some() && uuid.as_ref().unwrap() != &u {
+            if uuid.is_some() && uuid.unwrap() != &u {
                 debug!(
                     "Ignoring device {} because it doesn't match uuid {}",
                     u,
@@ -397,7 +394,7 @@ fn list_command(
 ) -> Result<()> {
     let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
     if defined {
-        devices = defined_devices(env, &uuid, &parent)?;
+        devices = defined_devices(env, uuid.as_ref(), parent.as_ref())?;
     } else {
         debug!("Looking up active mdevs");
         for dev in env.mdev_base().read_dir()? {
@@ -557,7 +554,7 @@ fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) 
 
 /// Implementation of the `start-parent-mdevs` command
 fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<()> {
-    let mut devs = defined_devices(env, &None, &Some(parent))?;
+    let mut devs = defined_devices(env, None, Some(&parent))?;
     if devs.is_empty() {
         // nothing to do
         return Ok(());

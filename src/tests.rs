@@ -404,8 +404,8 @@ fn test_modify_helper<F>(
 
     result.expect("Modify command failed unexpectedly");
 
-    let def =
-        crate::get_defined_device(&test, uuid, &parent).expect("Couldn't find defined device");
+    let def = crate::get_defined_device(&test, uuid, parent.as_ref())
+        .expect("Couldn't find defined device");
     let path = def.persist_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
@@ -617,7 +617,7 @@ fn test_undefine_helper<F>(
 
     result.expect("undefine command should have succeeded");
 
-    let devs = crate::defined_devices(&test, &Some(uuid), &parent)
+    let devs = crate::defined_devices(&test, Some(&uuid), parent.as_ref())
         .expect("failed to query defined devices");
     assert!(devs.is_empty());
 }
