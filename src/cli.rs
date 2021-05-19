@@ -4,6 +4,25 @@ use std::path::PathBuf;
 pub use structopt::StructOpt;
 use uuid::Uuid;
 
+#[derive(StructOpt, Debug)]
+#[structopt(about = "List mediated devices")]
+pub struct LsmdevOptions {
+    #[structopt(short, long, help = "Show defined devices")]
+    pub defined: bool,
+    #[structopt(long, help = "Output device list in json format")]
+    pub dumpjson: bool,
+    #[structopt(short, long, help = "Print additional information about the devices")]
+    pub verbose: bool,
+    #[structopt(short, long, help = "List devices matching the specified UUID")]
+    pub uuid: Option<Uuid>,
+    #[structopt(
+        short,
+        long,
+        help = "List devices associated with the specified Parent device"
+    )]
+    pub parent: Option<String>,
+}
+
 // command-line argument definitions.
 #[derive(StructOpt)]
 #[structopt(
@@ -13,7 +32,7 @@ use uuid::Uuid;
         structopt::clap::AppSettings::UnifiedHelpMessage,
     ]
 )]
-pub enum Cli {
+pub enum MdevctlCommands {
     #[structopt(
         about = "Define a persistent mediated device",
         long_about = "Define a persistent mediated device\n\n\
@@ -172,22 +191,7 @@ pub enum Cli {
                 devices). When the verbose option is provided, the human readable listing will \
                 include attributes for the device(s)."
     )]
-    List {
-        #[structopt(short, long, help = "Show defined devices")]
-        defined: bool,
-        #[structopt(long, help = "Output device list in json format")]
-        dumpjson: bool,
-        #[structopt(short, long, help = "Print additional information about the devices")]
-        verbose: bool,
-        #[structopt(short, long, help = "List devices matching the specified UUID")]
-        uuid: Option<Uuid>,
-        #[structopt(
-            short,
-            long,
-            help = "List devices associated with the specified Parent device"
-        )]
-        parent: Option<String>,
-    },
+    List(LsmdevOptions),
     #[structopt(
         about = "List available mediated device types",
         long_about = "List available mediated device types\n\n\

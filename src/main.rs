@@ -15,7 +15,7 @@ use std::vec::Vec;
 use structopt::StructOpt;
 use uuid::Uuid;
 
-use crate::cli::Cli;
+use crate::cli::{LsmdevOptions, MdevctlCommands};
 use crate::environment::{DefaultEnvironment, Environment};
 use crate::logger::logger;
 use crate::mdev::*;
@@ -586,47 +586,66 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
 fn main() -> Result<()> {
     logger().init();
     debug!("Starting up");
-    let args = Cli::from_args();
+
     let env = DefaultEnvironment::new();
     debug!("{:?}", env);
-    debug!("Parsed args");
-    match args {
-        Cli::Define {
-            uuid,
-            auto,
-            parent,
-            mdev_type,
-            jsonfile,
-        } => define_command(&env, uuid, auto, parent, mdev_type, jsonfile),
-        Cli::Undefine { uuid, parent } => undefine_command(&env, uuid, parent),
-        Cli::Modify {
-            uuid,
-            parent,
-            mdev_type,
-            addattr,
-            delattr,
-            index,
-            value,
-            auto,
-            manual,
-        } => modify_command(
-            &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
-        ),
-        Cli::Start {
-            uuid,
-            parent,
-            mdev_type,
-            jsonfile,
-        } => start_command(&env, uuid, parent, mdev_type, jsonfile),
-        Cli::Stop { uuid } => stop_command(&env, uuid),
-        Cli::List {
-            defined,
-            dumpjson,
-            verbose,
-            uuid,
-            parent,
-        } => list_command(&env, defined, dumpjson, verbose, uuid, parent),
-        Cli::Types { parent, dumpjson } => types_command(&env, parent, dumpjson),
-        Cli::StartParentMdevs { parent } => start_parent_mdevs_command(&env, parent),
+    // check if we're running as the symlink executable 'lsmdev'. If so, just execute the 'list'
+    // command directly
+    let exe = std::env::args_os().next().unwrap();
+    match exe.to_str() {
+        Some(val) if val.ends_with("lsmdev") => {
+            debug!("running as 'lsmdev'");
+            let opts = LsmdevOptions::from_args();
+            list_command(
+                &env,
+                opts.defined,
+                opts.dumpjson,
+                opts.verbose,
+                opts.uuid,
+                opts.parent,
+            )
+        }
+        _ => match MdevctlCommands::from_args() {
+            MdevctlCommands::Define {
+                uuid,
+                auto,
+                parent,
+                mdev_type,
+                jsonfile,
+            } => define_command(&env, uuid, auto, parent, mdev_type, jsonfile),
+            MdevctlCommands::Undefine { uuid, parent } => undefine_command(&env, uuid, parent),
+            MdevctlCommands::Modify {
+                uuid,
+                parent,
+                mdev_type,
+                addattr,
+                delattr,
+                index,
+                value,
+                auto,
+                manual,
+            } => modify_command(
+                &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
+            ),
+            MdevctlCommands::Start {
+                uuid,
+                parent,
+                mdev_type,
+                jsonfile,
+            } => start_command(&env, uuid, parent, mdev_type, jsonfile),
+            MdevctlCommands::Stop { uuid } => stop_command(&env, uuid),
+            MdevctlCommands::List(list) => list_command(
+                &env,
+                list.defined,
+                list.dumpjson,
+                list.verbose,
+                list.uuid,
+                list.parent,
+            ),
+            MdevctlCommands::Types { parent, dumpjson } => types_command(&env, parent, dumpjson),
+            MdevctlCommands::StartParentMdevs { parent } => {
+                start_parent_mdevs_command(&env, parent)
+            }
+        },
     }
 }
