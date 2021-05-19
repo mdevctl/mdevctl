@@ -70,18 +70,14 @@ fn define_command_helper(
             ));
         }
 
-        if parent.is_none() {
-            return Err(anyhow!(
-                "Parent device required to define device via {:?}",
-                jsonfile
-            ));
-        }
+        let parent = parent
+            .ok_or_else(|| anyhow!("Parent device required to define device via {:?}", jsonfile))?;
 
-        let devs = defined_devices(env, Some(&uuid), parent.as_ref())?;
+        let devs = defined_devices(env, Some(&uuid), Some(&parent))?;
         if !devs.is_empty() {
             return Err(anyhow!(
                 "Cowardly refusing to overwrite existing config for {}/{}",
-                parent.unwrap(),
+                parent,
                 uuid.to_hyphenated().to_string()
             ));
         }
@@ -89,7 +85,7 @@ fn define_command_helper(
         let filecontents = fs::read_to_string(&jsonfile)
             .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
         let jsonval: serde_json::Value = serde_json::from_str(&filecontents)?;
-        dev.load_from_json(parent.unwrap(), &jsonval)?;
+        dev.load_from_json(parent, &jsonval)?;
     } else {
         if uuid_provided {
             dev.load_from_sysfs()?;
@@ -221,14 +217,11 @@ fn start_command_helper(
                 ));
             }
 
-            if parent.is_none() {
-                return Err(anyhow!(
-                    "Parent device required to start device via json file"
-                ));
-            }
+            let parent = parent
+                .ok_or_else(|| anyhow!("Parent device required to start device via json file"))?;
 
             let mut d = MDev::new(env, uuid.unwrap_or_else(Uuid::new_v4));
-            d.load_from_json(parent.unwrap(), &val)?;
+            d.load_from_json(parent, &val)?;
             dev = Some(d);
         }
         _ => {
