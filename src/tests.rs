@@ -827,3 +827,22 @@ fn test_stop() {
     let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
     assert_eq!("1", contents);
 }
+
+#[test]
+fn test_invalid_files() {
+    init();
+
+    const PARENT: &str = "0000:00:03.0";
+    const MDEV_TYPE: &str = "arbitrary_type";
+
+    // just make sure that the list command can deal with invalid files without panic-ing
+    let test = TestEnvironment::new("invalid-files", "invalid-active");
+    test.populate_active_device("invalid-uuid-value", PARENT, MDEV_TYPE);
+    let result = crate::list_command(&test, false, false, false, None, None);
+    assert!(result.is_ok());
+
+    let test = TestEnvironment::new("invalid-files", "invalid-defined");
+    test.populate_defined_device("invalid-uuid-value", PARENT, "device.json");
+    let result = crate::list_command(&test, true, false, false, None, None);
+    assert!(result.is_ok());
+}

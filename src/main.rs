@@ -348,9 +348,15 @@ fn defined_devices<'a>(
 
             let path = child.path();
             let basename = path.file_name().unwrap().to_str().unwrap();
-            let u = Uuid::parse_str(basename).unwrap();
+            let u = Uuid::parse_str(basename);
+            if u.is_err() {
+                warn!("Can't determine uuid for file '{}'", basename);
+                continue;
+            }
+            let u = u.unwrap();
+
             debug!("found mdev {:?}", u);
-            if uuid.is_some() && uuid.unwrap() != &u {
+            if uuid.is_some() && uuid != Some(&u) {
                 debug!(
                     "Ignoring device {} because it doesn't match uuid {}",
                     u,
@@ -395,9 +401,15 @@ fn list_command(
             let fname = dev.file_name();
             let basename = fname.to_str().unwrap();
             debug!("found defined mdev {}", basename);
-            let u = Uuid::parse_str(basename).unwrap();
+            let u = Uuid::parse_str(basename);
 
-            if uuid.is_some() && u != uuid.unwrap() {
+            if u.is_err() {
+                warn!("Can't determine uuid for file '{}'", basename);
+                continue;
+            }
+            let u = u.unwrap();
+
+            if uuid.is_some() && uuid != Some(u) {
                 debug!(
                     "Ignoring device {} because it doesn't match uuid {}",
                     u,
