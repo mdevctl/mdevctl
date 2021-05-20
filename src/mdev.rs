@@ -21,8 +21,8 @@ pub struct MDev<'a> {
     pub uuid: Uuid,
     pub active: bool,
     pub autostart: bool,
-    pub parent: String,
-    pub mdev_type: String,
+    pub parent: Option<String>,
+    pub mdev_type: Option<String>,
     pub attrs: Vec<(String, String)>,
     env: &'a dyn Environment,
 }
@@ -33,8 +33,8 @@ impl<'a> MDev<'a> {
             uuid,
             active: false,
             autostart: false,
-            parent: String::new(),
-            mdev_type: String::new(),
+            parent: None,
+            mdev_type: None,
             attrs: Vec::new(),
             env,
         }
@@ -46,13 +46,33 @@ impl<'a> MDev<'a> {
         p
     }
 
+    // get parent and propagate a consistent error to the caller if absent
+    pub fn parent(&self) -> Result<&String> {
+        self.parent.as_ref().ok_or_else(|| {
+            anyhow!(
+                "Device {} is missing a parent",
+                self.uuid.to_hyphenated().to_string()
+            )
+        })
+    }
+
+    // get mdev_type and propagate a consistent error to the caller if absent
+    pub fn mdev_type(&self) -> Result<&String> {
+        self.mdev_type.as_ref().ok_or_else(|| {
+            anyhow!(
+                "Device {} is missing a mdev_type",
+                self.uuid.to_hyphenated().to_string()
+            )
+        })
+    }
+
     pub fn persist_path(&self) -> Option<PathBuf> {
-        if self.parent.is_empty() {
+        if self.parent.is_none() {
             return None;
         }
 
         let mut path = self.env.persist_base();
-        path.push(&self.parent);
+        path.push(self.parent.as_ref().unwrap());
         path.push(self.uuid.to_hyphenated().to_string());
         Some(path)
     }
@@ -79,23 +99,27 @@ impl<'a> MDev<'a> {
         let canonpath = self.path().canonicalize()?;
         let sysfsparent = canonpath.parent().unwrap();
         let parentname = canonical_basename(sysfsparent)?;
-        if !self.parent.is_empty() && self.parent != parentname {
+        if self.parent.is_some() && self.parent.as_ref() != Some(&parentname) {
             warn!(
                 "Overwriting parent for mdev {:?}: {} => {}",
-                self.uuid, self.parent, parentname
+                self.uuid,
+                self.parent.as_ref().unwrap(),
+                parentname
             );
         }
-        self.parent = parentname;
+        self.parent = Some(parentname);
         let mut typepath = self.path();
         typepath.push("mdev_type");
         let mdev_type = canonical_basename(typepath)?;
-        if !self.mdev_type.is_empty() && self.mdev_type != mdev_type {
+        if self.mdev_type.is_some() && self.mdev_type.as_ref() != Some(&mdev_type) {
             warn!(
                 "Overwriting mdev type for mdev {:?}: {} => {}",
-                self.uuid, self.mdev_type, mdev_type
+                self.uuid,
+                self.mdev_type.as_ref().unwrap(),
+                mdev_type
             );
         }
-        self.mdev_type = mdev_type;
+        self.mdev_type = Some(mdev_type);
 
         debug!("loaded device {:?}", self);
         Ok(())
@@ -106,24 +130,28 @@ impl<'a> MDev<'a> {
             "Loading device '{:?}' from json (parent: {})",
             self.uuid, parent
         );
-        if !self.parent.is_empty() && self.parent != parent {
+        if self.parent.is_some() && self.parent.as_ref() != Some(&parent) {
             warn!(
                 "Overwriting parent for mdev {:?}: {} => {}",
-                self.uuid, self.parent, parent
+                self.uuid,
+                self.parent.as_ref().unwrap(),
+                parent
             );
         }
-        self.parent = parent;
+        self.parent = Some(parent);
         if json["mdev_type"].is_null() || json["start"].is_null() {
             return Err(anyhow!("invalid json"));
         }
         let mdev_type = json["mdev_type"].as_str().unwrap().to_string();
-        if !self.mdev_type.is_empty() && self.mdev_type != mdev_type {
+        if self.mdev_type.is_some() && self.mdev_type.as_ref() != Some(&mdev_type) {
             warn!(
                 "Overwriting mdev type for mdev {:?}: {} => {}",
-                self.uuid, self.mdev_type, mdev_type
+                self.uuid,
+                self.mdev_type.as_ref().unwrap(),
+                mdev_type
             );
         }
-        self.mdev_type = mdev_type;
+        self.mdev_type = Some(mdev_type);
         let startval = json["start"].as_str();
         self.autostart = matches!(startval, Some("auto"));
 
@@ -159,9 +187,9 @@ impl<'a> MDev<'a> {
 
         let mut output = self.uuid.to_hyphenated().to_string();
         output.push(' ');
-        output.push_str(&self.parent);
+        output.push_str(&self.parent()?);
         output.push(' ');
-        output.push_str(&self.mdev_type);
+        output.push_str(&self.mdev_type()?);
         output.push(' ');
         output.push_str(match self.autostart {
             true => "auto",
@@ -198,7 +226,7 @@ impl<'a> MDev<'a> {
             false => "manual",
         };
         let mut partial = serde_json::Map::new();
-        partial.insert("mdev_type".to_string(), self.mdev_type.clone().into());
+        partial.insert("mdev_type".to_string(), self.mdev_type()?.clone().into());
         partial.insert("start".to_string(), autostart.into());
         if !self.attrs.is_empty() {
             let mut jsonattrs = Vec::new();
@@ -234,6 +262,8 @@ impl<'a> MDev<'a> {
 
     pub fn create(&mut self) -> Result<()> {
         debug!("Creating mdev {:?}", self.uuid);
+        let parent = self.parent()?;
+        let mdev_type = self.mdev_type()?;
         let mut existing = MDev::new(self.env, self.uuid);
 
         if existing.load_from_sysfs().is_ok() && existing.active {
@@ -249,25 +279,22 @@ impl<'a> MDev<'a> {
         let mut path: PathBuf = self
             .env
             .parent_base()
-            .join(&self.parent)
+            .join(&parent)
             .join("mdev_supported_types");
         debug!("Checking parent for mdev support: {:?}", path);
         if !path.is_dir() {
             return Err(anyhow!(
                 "Parent {} is not currently registered for mdev support",
-                self.parent
+                parent
             ));
         }
-        path.push(&self.mdev_type);
-        debug!(
-            "Checking parent for mdev type {}: {:?}",
-            self.mdev_type, path
-        );
+        path.push(&mdev_type);
+        debug!("Checking parent for mdev type {}: {:?}", mdev_type, path);
         if !path.is_dir() {
             return Err(anyhow!(
                 "Parent {} does not support mdev type {}",
-                self.parent,
-                self.mdev_type
+                parent,
+                mdev_type
             ));
         }
         path.push("available_instances");
@@ -278,8 +305,8 @@ impl<'a> MDev<'a> {
         if avail == 0 {
             return Err(anyhow!(
                 "No available instances of {} on {}",
-                self.mdev_type,
-                self.parent
+                mdev_type,
+                parent
             ));
         }
         path.pop();
@@ -294,8 +321,8 @@ impl<'a> MDev<'a> {
                 format!(
                     "Failed to create mdev {}, type {} on {}",
                     self.uuid.to_hyphenated().to_string(),
-                    self.mdev_type,
-                    self.parent
+                    mdev_type,
+                    parent
                 )
             }),
         }

@@ -172,7 +172,7 @@ fn test_load_json_helper(uuid: &str, parent: &str) {
 
     compare_to_file(&outfile, &jsonstr);
     assert_eq!(uuid, dev.uuid.to_hyphenated().to_string());
-    assert_eq!(parent, dev.parent);
+    assert_eq!(Some(parent.to_string()), dev.parent);
 }
 
 #[test]
@@ -699,9 +699,9 @@ fn test_start_helper<F>(
 
     let create_path = test
         .parent_base()
-        .join(dev.parent)
+        .join(dev.parent.unwrap())
         .join("mdev_supported_types")
-        .join(dev.mdev_type)
+        .join(dev.mdev_type.unwrap())
         .join("create");
     assert!(create_path.exists());
     if uuid.is_some() {

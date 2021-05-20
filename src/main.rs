@@ -95,17 +95,17 @@ fn define_command_helper(
         }
 
         dev.autostart = auto;
-        if let Some(p) = parent {
-            dev.parent = p;
+        if parent.is_some() {
+            dev.parent = parent;
         }
-        if let Some(t) = mdev_type {
-            dev.mdev_type = t;
+        if mdev_type.is_some() {
+            dev.mdev_type = mdev_type;
         }
 
-        if dev.parent.is_empty() {
+        if dev.parent.is_none() {
             return Err(anyhow!("No parent specified"));
         }
-        if dev.mdev_type.is_empty() {
+        if dev.mdev_type.is_none() {
             return Err(anyhow!("No type specified"));
         }
 
@@ -113,7 +113,7 @@ fn define_command_helper(
             return Err(anyhow!(
                 "Device {} on {} already defined, try modify?",
                 dev.uuid.to_hyphenated().to_string(),
-                dev.parent
+                dev.parent()?
             ));
         }
     }
@@ -170,8 +170,8 @@ fn modify_command(
     manual: bool,
 ) -> Result<()> {
     let mut dev = get_defined_device(env, uuid, parent.as_ref())?;
-    if let Some(t) = mdev_type {
-        dev.mdev_type = t
+    if mdev_type.is_some() {
+        dev.mdev_type = mdev_type;
     }
 
     if auto {
@@ -245,8 +245,8 @@ fn start_command_helper(
 
             if dev.is_none() {
                 let mut d = MDev::new(env, uuid.unwrap_or_else(Uuid::new_v4));
-                d.parent = parent.unwrap();
-                d.mdev_type = mdev_type.unwrap();
+                d.parent = parent;
+                d.mdev_type = mdev_type;
                 dev = Some(d);
             }
         }
@@ -420,21 +420,21 @@ fn list_command(
 
             let mut dev = MDev::new(env, u);
             if dev.load_from_sysfs().is_ok() {
-                if let Some(p) = parent.as_ref() {
-                    if p != &dev.parent {
-                        debug!(
-                            "Ignoring device {} because it doesn't match parent {}",
-                            dev.uuid, p
-                        );
-                        continue;
-                    }
+                if parent.is_some() && (parent != dev.parent) {
+                    debug!(
+                        "Ignoring device {} because it doesn't match parent {}",
+                        dev.uuid,
+                        parent.as_ref().unwrap()
+                    );
+                    continue;
                 }
 
-                if !devices.contains_key(&dev.parent) {
-                    devices.insert(dev.parent.clone(), Vec::new());
+                let devparent = dev.parent()?;
+                if !devices.contains_key(devparent) {
+                    devices.insert(devparent.clone(), Vec::new());
                 };
 
-                devices.get_mut(&dev.parent).unwrap().push(dev);
+                devices.get_mut(devparent).unwrap().push(dev);
             };
         }
     }
