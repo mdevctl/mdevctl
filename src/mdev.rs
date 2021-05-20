@@ -21,7 +21,6 @@ pub struct MDev<'a> {
     pub uuid: Uuid,
     pub active: bool,
     pub autostart: bool,
-    pub path: PathBuf,
     pub parent: String,
     pub mdev_type: String,
     pub attrs: Vec<(String, String)>,
@@ -34,12 +33,17 @@ impl<'a> MDev<'a> {
             uuid,
             active: false,
             autostart: false,
-            path: PathBuf::new(),
             parent: String::new(),
             mdev_type: String::new(),
             attrs: Vec::new(),
             env,
         }
+    }
+
+    pub fn path(&self) -> PathBuf {
+        let mut p = self.env.mdev_base();
+        p.push(self.uuid.to_hyphenated().to_string());
+        p
     }
 
     pub fn persist_path(&self) -> Option<PathBuf> {
@@ -62,9 +66,7 @@ impl<'a> MDev<'a> {
 
     pub fn load_from_sysfs(&mut self) -> Result<()> {
         debug!("Loading device '{:?}' from sysfs", self.uuid);
-        self.path = self.env.mdev_base();
-        self.path.push(self.uuid.to_hyphenated().to_string());
-        self.active = match self.path.symlink_metadata() {
+        self.active = match self.path().symlink_metadata() {
             Ok(attr) => attr.file_type().is_symlink(),
             _ => false,
         };
@@ -74,7 +76,7 @@ impl<'a> MDev<'a> {
             return Ok(());
         }
 
-        let canonpath = self.path.canonicalize()?;
+        let canonpath = self.path().canonicalize()?;
         let sysfsparent = canonpath.parent().unwrap();
         let parentname = canonical_basename(sysfsparent)?;
         if !self.parent.is_empty() && self.parent != parentname {
@@ -84,7 +86,7 @@ impl<'a> MDev<'a> {
             );
         }
         self.parent = parentname;
-        let mut typepath = self.path.to_owned();
+        let mut typepath = self.path();
         typepath.push("mdev_type");
         let mdev_type = canonical_basename(typepath)?;
         if !self.mdev_type.is_empty() && self.mdev_type != mdev_type {
@@ -218,7 +220,7 @@ impl<'a> MDev<'a> {
 
     pub fn stop(&mut self) -> Result<()> {
         debug!("Removing mdev {:?}", self.uuid);
-        let mut remove_path = self.path.clone();
+        let mut remove_path = self.path();
         remove_path.push("remove");
         debug!("remove path '{:?}'", remove_path);
         match fs::write(remove_path, "1") {
@@ -304,7 +306,7 @@ impl<'a> MDev<'a> {
 
         debug!("Setting attributes for mdev {:?}", self.uuid);
         for (k, v) in self.attrs.iter() {
-            if let Err(e) = write_attr(&self.path, &k, &v) {
+            if let Err(e) = write_attr(&self.path(), &k, &v) {
                 self.stop()?;
                 return Err(e);
             }
