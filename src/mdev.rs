@@ -67,14 +67,12 @@ impl<'a> MDev<'a> {
     }
 
     pub fn persist_path(&self) -> Option<PathBuf> {
-        if self.parent.is_none() {
-            return None;
-        }
-
-        let mut path = self.env.persist_base();
-        path.push(self.parent.as_ref().unwrap());
-        path.push(self.uuid.to_hyphenated().to_string());
-        Some(path)
+        self.parent.as_ref().map(|x| {
+            let mut path = self.env.persist_base();
+            path.push(x);
+            path.push(self.uuid.to_hyphenated().to_string());
+            path
+        })
     }
 
     pub fn is_defined(&self) -> bool {
