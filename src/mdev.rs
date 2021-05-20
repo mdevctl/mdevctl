@@ -362,18 +362,15 @@ impl<'a> MDev<'a> {
     }
 
     pub fn undefine(&mut self) -> Result<()> {
-        match self.persist_path() {
-            Some(p) => fs::remove_file(p).with_context(|| {
-                format!(
-                    "Failed to undefine {}",
-                    self.uuid.to_hyphenated().to_string()
-                )
-            }),
-            None => Err(anyhow!(
+        let p = self.persist_path().ok_or_else(|| {
+            anyhow!(
                 "Failed to undefine {}",
                 self.uuid.to_hyphenated().to_string()
-            )),
-        }
+            )
+        })?;
+
+        fs::remove_file(&p).with_context(|| format!("Failed to remove file {:?}", p))?;
+        Ok(())
     }
 
     pub fn add_attribute(&mut self, name: String, value: String, index: Option<u32>) -> Result<()> {
