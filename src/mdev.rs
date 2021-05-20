@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use uuid::Uuid;
 
+#[derive(Clone, Copy)]
 pub enum FormatType {
     Active,
     Defined,
@@ -140,7 +141,7 @@ impl<'a> MDev<'a> {
         Ok(())
     }
 
-    pub fn to_text(&self, fmt: &FormatType, verbose: bool) -> Result<String> {
+    pub fn to_text(&self, fmt: FormatType, verbose: bool) -> Result<String> {
         match fmt {
             FormatType::Defined => {
                 if !self.is_defined() {

@@ -450,7 +450,7 @@ fn list_command(
                 false => FormatType::Active,
             };
             for dev in children {
-                output.push_str(&dev.to_text(&ft, verbose)?);
+                output.push_str(&dev.to_text(ft, verbose)?);
             }
         }
         println!("{}", output);
