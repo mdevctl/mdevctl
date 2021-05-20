@@ -443,16 +443,17 @@ fn list_command(
         let output = format_json(devices)?;
         println!("{}", output);
     } else {
-        let mut output = String::new();
-        for (_parent, children) in devices {
-            let ft = match defined {
-                true => FormatType::Defined,
-                false => FormatType::Active,
-            };
-            for dev in children {
-                output.push_str(&dev.to_text(ft, verbose)?);
-            }
-        }
+        let ft = match defined {
+            true => FormatType::Defined,
+            false => FormatType::Active,
+        };
+        let output = devices
+            .values()
+            // convert child vector into an iterator over the vector's elements
+            .flat_map(|v| v.iter())
+            // convert MDev elements to a text representation, filtering out errors
+            .flat_map(|d| d.to_text(ft, verbose))
+            .collect::<String>();
         println!("{}", output);
     }
 
