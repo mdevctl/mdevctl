@@ -60,5 +60,3 @@ make DESTDIR=%{buildroot} install
 %endif
 
 %changelog
-* Tue Apr 27 10:55:11 CDT 2021 Jonathon Jongsma <jjongsma@redhat.com> - 0.1.0-1
-- Initial package
