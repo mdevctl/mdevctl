@@ -2,3 +2,5 @@
 *.sw?
 Cargo.lock
 Makefile
+rust-mdevctl.spec
+/*.rpm

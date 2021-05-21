@@ -11,6 +11,28 @@ BASH_COMPLETION_DIR=$(DATADIR)/bash-completion/completions
 all:
 	@echo "Run 'make install' to install the program"
 
+# since we generate a Makefile, we have to use --no-verify to stop cargo from
+# complaining that we modified the source directory during build.
+archive:
+	cargo package --allow-dirty --no-verify
+
+rust-mdevctl.spec: rust-mdevctl.spec.in
+	cargo build
+
+srpm: rust-mdevctl.spec archive
+	rpmbuild -bs --define "_sourcedir $(PWD)/target/package" \
+		--define "_specdir $(PWD)" \
+		--define "_builddir $(PWD)" \
+		--define "_srcrpmdir $(PWD)" \
+		--define "_rpmdir $(PWD)" $<
+
+rpm: rust-mdevctl.spec archive
+	rpmbuild -bb --define "_sourcedir $(PWD)/target/package" \
+		--define "_specdir $(PWD)" \
+		--define "_builddir $(PWD)" \
+		--define "_srcrpmdir $(PWD)" \
+		--define "_rpmdir $(PWD)" $<
+
 install:
 	mkdir -p $(DESTDIR)$(CONFDIR)
 	mkdir -p $(DESTDIR)$(UDEVDIR)/rules.d/

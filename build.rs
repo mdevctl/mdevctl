@@ -14,6 +14,7 @@ fn apply_template(template: &PathBuf) -> String {
 
     let profile = env::var_os("PROFILE").expect("PROFILE environment variable not defined");
     let mdevctl_bin_path = PathBuf::from("target").join(profile).join("mdevctl");
+    let version = std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION not set");
 
     fs::read_to_string(template)
         .expect(format!("Failed to read template {:?}", template).as_str())
@@ -26,6 +27,7 @@ fn apply_template(template: &PathBuf) -> String {
             "@@lsmdev.bash@@",
             outdir.join("lsmdev.bash").to_str().unwrap(),
         )
+        .replace("@@mdevctl_version@@", version.as_str())
         .replace(
             "@@generated_notice@@",
             format!(
@@ -43,6 +45,13 @@ fn main() {
     // generate bash completions for both executables
     cli::MdevctlCommands::clap().gen_completions("mdevctl", Shell::Bash, &outdir);
     cli::LsmdevOptions::clap().gen_completions("lsmdev", Shell::Bash, &outdir);
+
+    // generate a rpm spec file from the spec.in template
+    let rpm_in = PathBuf::from("rust-mdevctl.spec.in");
+    let rpm_out = PathBuf::from(rpm_in.file_stem().unwrap());
+    let contents = apply_template(&rpm_in);
+    std::fs::write(&rpm_out, contents).expect(format!("Failed to write {:?}", rpm_out).as_str());
+    println!("cargo:rerun-if-changed={}", rpm_in.to_str().unwrap());
 
     // Generate a makefile for installing the auxiliary files based on the Makefile.in template
     let makefile_in = PathBuf::from("Makefile.in");
