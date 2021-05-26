@@ -22,15 +22,38 @@ pub enum Cli {
                 Running devices are unaffected by this command."
     )]
     Define {
-        #[structopt(short, long, required_unless("parent"))]
+        #[structopt(
+            short,
+            long,
+            required_unless("parent"),
+            help = "Assign UUID to the device"
+        )]
         uuid: Option<Uuid>,
-        #[structopt(short, long)]
+        #[structopt(
+            short,
+            long,
+            help = "Automatically start device on parent availability"
+        )]
         auto: bool,
-        #[structopt(short, long, required_unless("uuid"))]
+        #[structopt(
+            short,
+            long,
+            required_unless("uuid"),
+            help = "Specify the parent of the device"
+        )]
         parent: Option<String>,
-        #[structopt(name = "type", short, long)]
+        #[structopt(
+            name = "type",
+            short,
+            long,
+            help = "Specify the mdev type of the device"
+        )]
         mdev_type: Option<String>,
-        #[structopt(long, parse(from_os_str), conflicts_with_all(&["type", "auto"]))]
+        #[structopt(
+            long, parse(from_os_str),
+            conflicts_with_all(&["type", "auto"]),
+            help = "Specify device details in JSON format"
+        )]
         jsonfile: Option<PathBuf>,
     },
 
@@ -42,9 +65,9 @@ pub enum Cli {
                 Running devices are unaffected by this command."
     )]
     Undefine {
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "UUID of the device to be undefined")]
         uuid: Uuid,
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "Parent of the device to be undefined")]
         parent: Option<String>,
     },
 
@@ -63,23 +86,33 @@ pub enum Cli {
                 Running devices are unaffected by this command."
     )]
     Modify {
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "UUID of the mdev to modify")]
         uuid: Uuid,
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "Parent of the mdev to modify")]
         parent: Option<String>,
-        #[structopt(name = "type", short, long)]
+        #[structopt(
+            name = "type",
+            short,
+            long,
+            help = "Modify the mdev type for this device"
+        )]
         mdev_type: Option<String>,
-        #[structopt(long, conflicts_with("delattr"))]
+        #[structopt(long, conflicts_with("delattr"), help = "add a new attribute")]
         addattr: Option<String>,
-        #[structopt(long)]
+        #[structopt(long, help = "Delete an attribute")]
         delattr: bool,
-        #[structopt(long, short)]
+        #[structopt(long, short, help = "Index of the attribute to modify")]
         index: Option<u32>,
-        #[structopt(long)]
+        #[structopt(long, help = "Value for the attribute specified by --addattr")]
         value: Option<String>,
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "Device will be started automatically")]
         auto: bool,
-        #[structopt(short, long, conflicts_with("auto"))]
+        #[structopt(
+            short,
+            long,
+            conflicts_with("auto"),
+            help = "Device must be started manually"
+        )]
         manual: bool,
     },
     #[structopt(
@@ -95,18 +128,33 @@ pub enum Cli {
                 attributes to be applied to the started device."
     )]
     Start {
-        #[structopt(short, long, required_unless("parent"))]
+        #[structopt(
+            short,
+            long,
+            required_unless("parent"),
+            help = "UUID of the device to start"
+        )]
         uuid: Option<Uuid>,
-        #[structopt(short, long, required_unless("uuid"))]
+        #[structopt(
+            short,
+            long,
+            required_unless("uuid"),
+            help = "Parent of the device to start"
+        )]
         parent: Option<String>,
-        #[structopt(name = "type", short, long)]
+        #[structopt(name = "type", short, long, help = "Mdev type of the device to start")]
         mdev_type: Option<String>,
-        #[structopt(long, parse(from_os_str), conflicts_with("type"))]
+        #[structopt(
+            long,
+            parse(from_os_str),
+            conflicts_with("type"),
+            help = "Details of the device to be started, in JSON format"
+        )]
         jsonfile: Option<PathBuf>,
     },
     #[structopt(about = "Stop a mediated device")]
     Stop {
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "UUID of the device to stop")]
         uuid: Uuid,
     },
     #[structopt(
@@ -123,15 +171,19 @@ pub enum Cli {
                 include attributes for the device(s)."
     )]
     List {
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "Show defined devices")]
         defined: bool,
-        #[structopt(long)]
+        #[structopt(long, help = "Output device list in json format")]
         dumpjson: bool,
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "Print additional information about the devices")]
         verbose: bool,
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "List devices matching the specified UUID")]
         uuid: Option<Uuid>,
-        #[structopt(short, long)]
+        #[structopt(
+            short,
+            long,
+            help = "List devices associated with the specified Parent device"
+        )]
         parent: Option<String>,
     },
     #[structopt(
@@ -141,9 +193,9 @@ pub enum Cli {
                 The 'dumpjson' option provides output in machine readable JSON format."
     )]
     Types {
-        #[structopt(short, long)]
+        #[structopt(short, long, help = "Show supported types for the specified parent")]
         parent: Option<String>,
-        #[structopt(long)]
+        #[structopt(long, help = "Output mdev types list in JSON format")]
         dumpjson: bool,
     },
     #[structopt(setting = structopt::clap::AppSettings::Hidden)]
