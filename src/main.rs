@@ -429,6 +429,8 @@ fn list_command(
                     continue;
                 }
 
+                let _ = dev.load_definition();
+
                 let devparent = dev.parent()?;
                 if !devices.contains_key(devparent) {
                     devices.insert(devparent.clone(), Vec::new());

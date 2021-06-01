@@ -5,6 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
 use std::convert::TryInto;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use uuid::Uuid;
@@ -166,6 +167,19 @@ impl<'a> MDev<'a> {
         };
         debug!("loaded device {:?}", self);
 
+        Ok(())
+    }
+
+    // load the stored definition from disk if it exists
+    pub fn load_definition(&mut self) -> Result<()> {
+        if let Some(path) = self.persist_path() {
+            let mut f = fs::File::open(path)?;
+            let mut contents = String::new();
+            f.read_to_string(&mut contents)?;
+            let val: serde_json::Value = serde_json::from_str(&contents)?;
+            let parent = self.parent.as_ref().unwrap().clone();
+            self.load_from_json(parent, &val)?;
+        }
         Ok(())
     }
 
