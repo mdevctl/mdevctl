@@ -132,8 +132,9 @@ fn define_command(
 ) -> Result<()> {
     debug!("Defining mdev {:?}", uuid);
 
-    let dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
-    dev.define().map(|_| {
+    let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
+
+    invoke_with_callout(&mut dev, "define", |dev| dev.define()).map(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.to_hyphenated());
         }
@@ -149,7 +150,7 @@ fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            child.undefine()?;
+            let _ = invoke_with_callout(&mut child.clone(), "undefine", |_dev| child.undefine());
         }
     }
     Ok(())
@@ -192,7 +193,7 @@ fn modify_command(
         }
     }
 
-    dev.write_config()
+    invoke_with_callout(&mut dev, "modify", |dev| dev.write_config())
 }
 
 /// convert 'start' command arguments into a MDev struct
@@ -263,7 +264,8 @@ fn start_command(
     jsonfile: Option<PathBuf>,
 ) -> Result<()> {
     let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
-    dev.start(uuid.is_none())
+
+    invoke_with_callout(&mut dev, "start", |dev| dev.start(uuid.is_none()))
 }
 
 /// Implementation of the `mdevctl stop` command
@@ -271,7 +273,8 @@ fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
-    dev.stop()
+
+    invoke_with_callout(&mut dev, "stop", |dev| dev.stop())
 }
 
 /// convenience function to lookup a defined device by uuid and parent
@@ -644,6 +647,31 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         }
     }
     Ok(())
+}
+
+fn invoke_with_callout<F>(dev: &mut MDev, action: &str, mut func: F) -> Result<()>
+where F: FnMut(&mut MDev) -> Result<()>, {
+    let mut c = Callout::new(dev.clone());
+
+    let res = match c.callout("pre", action) {
+      Ok(_) => {
+        let tmp_res = func(dev);
+        match tmp_res {
+            Ok(_) => {
+                c.set_state("success")
+            }
+            Err(_) => {
+                c.set_state("failure")
+            }
+        }
+
+        let _ = c.callout("post", action);
+        tmp_res
+      }
+      Err(e) => Err(e)
+    };
+
+    res
 }
 
 /// parse command line arguments and dispatch to command-specific functions

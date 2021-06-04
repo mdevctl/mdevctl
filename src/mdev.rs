@@ -5,10 +5,11 @@ use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
 use std::convert::TryInto;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use uuid::Uuid;
+use std::process::{Command, Stdio, Output, ExitStatus};
 
 #[derive(Clone, Copy)]
 pub enum FormatType {
@@ -478,5 +479,112 @@ impl MDevType {
         }
 
         Ok(serde_json::json!({ &self.typename: jsonobj }))
+    }
+}
+
+pub struct Callout<'a> {
+    mdev: MDev<'a>,
+    state: &'a str,
+    conf: String,
+    script: PathBuf,
+    sname: String,
+}
+
+impl<'a> Callout<'a> {
+    pub fn new(mdev: MDev<'a>) -> Callout<'a> {
+        Callout {
+            mdev: mdev,
+            state: "none",
+            conf: String::new(),
+            script: PathBuf::new(),
+            sname: String::new(),
+        }
+    }
+
+    pub fn set_state(&mut self, state: &'a str) {
+        self.state = state;
+    }
+
+    fn invoke_script<P: AsRef<Path>>(&mut self, script: P, event: &str, action: &str, stderr: bool, stdout: bool) -> Result<ExitStatus> {
+        let cmd = Command::new(script.as_ref().as_os_str())
+                .arg("-t")
+                .arg(self.mdev.mdev_type.as_ref().unwrap())
+                .arg("-e")
+                .arg(event)
+                .arg("-a")
+                .arg(action)
+                .arg("-s")
+                .arg(&self.state)
+                .arg("-u")
+                .arg(self.mdev.uuid.to_string())
+                .arg("-p")
+                .arg(self.mdev.parent.as_ref().unwrap())
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped());
+
+        let mut child = cmd.spawn()?;
+
+        if let Some(mut child_stdin) = child.stdin.take() {
+            child_stdin
+                .write_all(&self.conf.as_bytes())
+                .with_context(|| "Failed to write to stdin of command")?;
+        }
+
+        let output = child.wait_with_output()?;
+
+        self.print_output(script, output, stderr, stdout)
+    }
+
+    fn print_output<P: AsRef<Path>>(&mut self, script: P, output: Output, stderr: bool, stdout: bool) -> Result<ExitStatus> {
+        self.sname = script.as_ref().file_name().unwrap().to_str().unwrap().to_string();
+
+        if stderr {
+            let st = String::from_utf8_lossy(&output.stderr);
+            if !st.is_empty() {
+                eprint!("{}: {}", &self.sname, st);
+            }
+        }
+        if stdout {
+            let st = String::from_utf8_lossy(&output.stdout);
+            if !st.is_empty() {
+                print!("{}: {}", &self.sname, st);
+            }
+        }
+
+        Ok(output.status)
+    }
+
+    pub fn callout(&mut self, event: &str, action: &str) -> Result<()> {
+        if self.conf.is_empty() {
+            self.conf = self.mdev.to_json(false)?.to_string();
+        }
+
+        let mut rc = Some(0);
+
+        let dir = self.mdev.env.callout_script_base();
+        if dir.read_dir()?.count() == 0 {
+            return Ok(());
+        }
+
+        if self.script.to_str().unwrap().is_empty() {
+            for s in dir.read_dir()? {
+                let path = &s?.path();
+                let res = self.invoke_script(path, event, action, true, false);
+                rc = res?.code();
+                if rc != Some(2) {
+                    self.script = path.clone();
+                    break;
+                }
+            }
+        } else {
+            let res = self.invoke_script(self.script.clone(), event, action, true, false);
+            rc = res?.code();
+        }
+
+        match rc {
+            Some(0) => Ok(()),
+            _ => Err(anyhow!("aborting command due to results from callout script {:?}", self.script)),
+        }
     }
 }
