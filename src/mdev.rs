@@ -240,11 +240,11 @@ impl<'a> MDev<'a> {
         let mut partial = serde_json::Map::new();
         partial.insert("mdev_type".to_string(), self.mdev_type()?.clone().into());
         partial.insert("start".to_string(), autostart.into());
-        let mut jsonattrs = Vec::new();
-        for (key, value) in &self.attrs {
-            let attr = serde_json::json!({ key: value });
-            jsonattrs.push(attr);
-        }
+        let jsonattrs: Vec<_> = self
+            .attrs
+            .iter()
+            .map(|(key, value)| serde_json::json!({ key: value }))
+            .collect();
         partial.insert("attrs".to_string(), jsonattrs.into());
 
         let full: serde_json::Value =
