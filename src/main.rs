@@ -84,7 +84,7 @@ fn define_command_helper(
 
         let filecontents = fs::read_to_string(&jsonfile)
             .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
-        let jsonval: serde_json::Value = serde_json::from_str(&filecontents)?;
+        let jsonval = serde_json::from_str(&filecontents)?;
         dev.load_from_json(parent, &jsonval)?;
     } else {
         if uuid_provided {
@@ -209,7 +209,7 @@ fn start_command_helper(
         Some(fname) => {
             let contents = fs::read_to_string(&fname)
                 .with_context(|| format!("Unable to read jsonfile {:?}", fname))?;
-            let val: serde_json::Value = serde_json::from_str(&contents)?;
+            let val = serde_json::from_str(&contents)?;
 
             if mdev_type.is_some() {
                 return Err(anyhow!(
@@ -368,7 +368,7 @@ fn defined_devices<'a>(
             let mut f = fs::File::open(path)?;
             let mut contents = String::new();
             f.read_to_string(&mut contents)?;
-            let val: serde_json::Value = serde_json::from_str(&contents)?;
+            let val = serde_json::from_str(&contents)?;
             let mut dev = MDev::new(env, u);
             dev.load_from_json(parentname.to_string(), &val)?;
             dev.load_from_sysfs()?;

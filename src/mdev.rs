@@ -176,7 +176,7 @@ impl<'a> MDev<'a> {
             let mut f = fs::File::open(path)?;
             let mut contents = String::new();
             f.read_to_string(&mut contents)?;
-            let val: serde_json::Value = serde_json::from_str(&contents)?;
+            let val = serde_json::from_str(&contents)?;
             let parent = self.parent.as_ref().unwrap().clone();
             self.load_from_json(parent, &val)?;
         }
@@ -247,8 +247,7 @@ impl<'a> MDev<'a> {
             .collect();
         partial.insert("attrs".to_string(), jsonattrs.into());
 
-        let full: serde_json::Value =
-            serde_json::json!({ self.uuid.to_hyphenated().to_string(): partial });
+        let full = serde_json::json!({ self.uuid.to_hyphenated().to_string(): partial });
 
         match include_uuid {
             true => Ok(full),
@@ -462,7 +461,7 @@ impl MDevType {
     }
 
     pub fn to_json(&self) -> Result<serde_json::Value> {
-        let mut jsonobj: serde_json::Value = serde_json::json!({
+        let mut jsonobj = serde_json::json!({
             "available_instances": self.available_instances,
             "device_api": self.device_api,
         });
