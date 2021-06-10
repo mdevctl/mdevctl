@@ -1,0 +1,8 @@
+9f579710-6ffc-4201-987a-4ffa0fb1f3a5 0000:00:02.0 vfio_ap-passthrough manual
+  Attrs:
+    @{0}: {"assign_adapter":"5"}
+    @{1}: {"assign_adapter":"6"}
+    @{2}: {"assign_domain":"0xab"}
+    @{3}: {"assign_control_domain":"0xab"}
+    @{4}: {"assign_domain":"4"}
+    @{5}: {"assign_control_domain":"4"}
