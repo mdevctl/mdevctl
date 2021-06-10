@@ -391,6 +391,20 @@ fn list_command(
     uuid: Option<Uuid>,
     parent: Option<String>,
 ) -> Result<()> {
+    let output = list_command_helper(env, defined, dumpjson, verbose, uuid, parent)?;
+    println!("{}", output);
+    Ok(())
+}
+
+/// convert 'list' command arguments into a text output
+fn list_command_helper(
+    env: &dyn Environment,
+    defined: bool,
+    dumpjson: bool,
+    verbose: bool,
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+) -> Result<String> {
     let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
     if defined {
         devices = defined_devices(env, uuid.as_ref(), parent.as_ref())?;
@@ -441,25 +455,23 @@ fn list_command(
         }
     }
 
-    if dumpjson {
-        let output = format_json(devices)?;
-        println!("{}", output);
-    } else {
-        let ft = match defined {
-            true => FormatType::Defined,
-            false => FormatType::Active,
-        };
-        let output = devices
-            .values()
-            // convert child vector into an iterator over the vector's elements
-            .flat_map(|v| v.iter())
-            // convert MDev elements to a text representation, filtering out errors
-            .flat_map(|d| d.to_text(ft, verbose))
-            .collect::<String>();
-        println!("{}", output);
-    }
-
-    Ok(())
+    let output = match dumpjson {
+        true => format_json(devices)?,
+        false => {
+            let ft = match defined {
+                true => FormatType::Defined,
+                false => FormatType::Active,
+            };
+            devices
+                .values()
+                // convert child vector into an iterator over the vector's elements
+                .flat_map(|v| v.iter())
+                // convert MDev elements to a text representation, filtering out errors
+                .flat_map(|d| d.to_text(ft, verbose))
+                .collect::<String>()
+        }
+    };
+    Ok(output)
 }
 
 /// Get a map of all mediated device types that are supported on this machine
