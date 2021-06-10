@@ -609,6 +609,7 @@ case "$cmd" in
                 exit 1
             fi
 
+            mkdir -p "$persist_base/$parent"
             write_config "$persist_base/$parent/$uuid"
             if [ $? -ne 0 ]; then
                 exit 1
