@@ -671,6 +671,7 @@ where F: FnMut(&mut MDev) -> Result<()>, {
       Err(e) => Err(e)
     };
 
+    let _ = c.callout_notify("notify", action);
     res
 }
 

@@ -507,8 +507,23 @@ impl<'a> Callout<'a> {
     }
 
     fn invoke_script<P: AsRef<Path>>(&mut self, script: P, event: &str, action: &str, stderr: bool, stdout: bool, autostart: bool) -> Result<ExitStatus> {
-        let cmd = Command::new(script.as_ref().as_os_str())
-                .arg("-t")
+        let mut cmd = Command::new(script.as_ref().as_os_str());
+        if event == "notify" {
+            cmd.arg("-e")
+                .arg(event)
+                .arg("-a")
+                .arg(action)
+                .arg("-s")
+                .arg(&self.state)
+                .arg("-u")
+                .arg(self.mdev.uuid.to_string())
+                .arg("-p")
+                .arg(self.mdev.parent.as_ref().unwrap())
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        } else {
+            cmd.arg("-t")
                 .arg(self.mdev.mdev_type.as_ref().unwrap())
                 .arg("-e")
                 .arg(event)
@@ -523,6 +538,7 @@ impl<'a> Callout<'a> {
                 .stdin(Stdio::piped())
                 .stdout(Stdio::null())
                 .stderr(Stdio::piped());
+        }
 
         let mut child = cmd.spawn()?;
 
@@ -597,5 +613,20 @@ impl<'a> Callout<'a> {
             Some(0) => Ok(()),
             _ => Err(anyhow!("aborting command due to results from callout script {:?}", self.script)),
         }
+    }
+
+    pub fn callout_notify(&mut self, event: &str, action: &str) -> Result<()> {
+        let dir = self.mdev.env.callout_notification_base();
+
+        if dir.read_dir()?.count() == 0 {
+            return Ok(());
+        }
+
+        for s in dir.read_dir()? {
+            let path = &s?.path();
+            let _ = self.invoke_script(path, event, action, true, true, self.mdev.autostart);
+        }
+
+        Ok(())
     }
 }
