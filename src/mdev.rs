@@ -11,6 +11,7 @@ use std::vec::Vec;
 use uuid::Uuid;
 use std::process::{Command, Stdio, Output, ExitStatus};
 use libsystemd::logging::{self, Priority};
+use regex::Regex;
 
 #[derive(Clone, Copy)]
 pub enum FormatType {
@@ -628,5 +629,56 @@ impl<'a> Callout<'a> {
         }
 
         Ok(())
+    }
+
+    pub fn callout_get(&mut self, event: &str, action: &str) -> Result<Vec<String>> {
+        let mut v: Vec<String> = Vec::new();
+        let mut st = String::new();
+
+        let dir = self.mdev.env.callout_script_base();
+
+        if dir.read_dir()?.count() == 0 {
+            return Ok(v);
+        }
+
+        for s in dir.read_dir()? {
+            let path = &s?.path();
+            let cmd = Command::new(path.as_os_str())
+                .arg("-t")
+                .arg(self.mdev.mdev_type.as_ref().unwrap())
+                .arg("-e")
+                .arg(event)
+                .arg("-a")
+                .arg(action)
+                .arg("-s")
+                .arg("none")
+                .arg("-u")
+                .arg(self.mdev.uuid.to_string())
+                .arg("-p")
+                .arg(self.mdev.parent.as_ref().unwrap())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()?;
+
+            let output = cmd.wait_with_output();
+
+            let rc = output.as_ref().unwrap().status.code();
+            if rc != Some(2) {
+                self.script = path.clone();
+                if output.as_ref().unwrap().status.success() {
+                    st = String::from_utf8_lossy(&output.as_ref().unwrap().stdout).to_string();
+                    break;
+                } else {
+                    return Err(anyhow!("failed to get attributes from {:?}", self.script));
+                }
+            }
+        }
+
+        let re = Regex::new(r"\w+").unwrap();
+        for cap in re.captures_iter(&st) {
+            v.push(cap[0].to_string());
+        }
+
+        Ok(v)
     }
 }

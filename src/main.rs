@@ -134,11 +134,24 @@ fn define_command(
 
     let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
 
-    invoke_with_callout(&mut dev, "define", |dev| dev.define()).map(|_| {
-        if uuid.is_none() {
-            println!("{}", dev.uuid.to_hyphenated());
+    let p = env.mdev_base().join(dev.uuid.to_string());
+    if p.exists() {
+        match invoke_callout_get(&mut dev) {
+            Ok(_) =>
+                invoke_with_callout(&mut dev, "define", |dev| dev.define()).map(|_| {
+                    if uuid.is_none() {
+                        println!("{}", dev.uuid.to_hyphenated());
+                    }
+                }),
+            Err(e) => Err(e)
         }
-    })
+    } else {
+        invoke_with_callout(&mut dev, "define", |dev| dev.define()).map(|_| {
+            if uuid.is_none() {
+                println!("{}", dev.uuid.to_hyphenated());
+            }
+        })
+    }
 }
 
 /// Implementation of the `mdevctl undefine` command
@@ -449,6 +462,10 @@ fn list_command_helper(
 
                     let _ = dev.load_definition();
 
+                    if !dev.is_defined() {
+                        let _ = invoke_callout_get(&mut dev);
+                    }
+
                     let devparent = dev.parent()?;
                     if !devices.contains_key(devparent) {
                         devices.insert(devparent.clone(), Vec::new());
@@ -673,6 +690,18 @@ where F: FnMut(&mut MDev) -> Result<()>, {
 
     let _ = c.callout_notify("notify", action);
     res
+}
+
+fn invoke_callout_get(dev: &mut MDev) -> Result<()> {
+    let mut c = Callout::new(dev.clone());
+
+    let vec = c.callout_get("get", "attributes")?;
+
+    for i in (0..vec.len()).step_by(2) {
+        dev.add_attribute(vec[i].clone(), vec[i+1].clone(), None)?;
+    }
+
+    Ok(())
 }
 
 /// parse command line arguments and dispatch to command-specific functions
