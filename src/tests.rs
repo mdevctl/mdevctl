@@ -65,7 +65,8 @@ impl TestEnvironment {
     fn populate_active_device(&self, uuid: &str, parent: &str, mdev_type: &str) {
         use std::os::unix::fs::symlink;
 
-        let (parentdir, parenttypedir) = self.populate_parent_device(parent, mdev_type, 1);
+        let (parentdir, parenttypedir) =
+            self.populate_parent_device(parent, mdev_type, 1, "", "", None);
 
         let parentdevdir = parentdir.join(uuid);
         fs::create_dir_all(&parentdevdir).expect("Unable to setup parent device dir");
@@ -85,6 +86,9 @@ impl TestEnvironment {
         parent: &str,
         supported_type: &str,
         instances: i32,
+        device_api: &str,
+        name: &str,
+        description: Option<&str>,
     ) -> (PathBuf, PathBuf) {
         let parentdir = self.parent_base().join(parent);
         let parenttypedir = parentdir.join("mdev_supported_types").join(supported_type);
@@ -93,6 +97,17 @@ impl TestEnvironment {
         let instancefile = parenttypedir.join("available_instances");
         fs::write(instancefile, format!("{}", instances))
             .expect("Unable to write available_instances");
+
+        let apifile = parenttypedir.join("device_api");
+        fs::write(apifile, format!("{}", device_api)).expect("Unable to write device_api");
+
+        let namefile = parenttypedir.join("name");
+        fs::write(namefile, format!("{}", name)).expect("Unable to write name");
+
+        if let Some(desc) = description {
+            let descfile = parenttypedir.join("description");
+            fs::write(descfile, format!("{}", desc)).expect("Unable to write description");
+        }
 
         (parentdir, parenttypedir)
     }
@@ -728,7 +743,7 @@ fn test_start() {
         Some(MDEV_TYPE.to_string()),
         None,
         |test| {
-            test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
     );
     test_start_helper(
@@ -740,7 +755,7 @@ fn test_start() {
         Some(MDEV_TYPE.to_string()),
         None,
         |test| {
-            test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
     );
     test_start_helper(
@@ -774,7 +789,7 @@ fn test_start() {
         None,
         None,
         |test| {
-            test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
     );
@@ -787,7 +802,7 @@ fn test_start() {
         Some(MDEV_TYPE.to_string()),
         None,
         |test| {
-            test.populate_parent_device(PARENT, MDEV_TYPE, 1);
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_active_device(UUID, PARENT, MDEV_TYPE);
         },
     );
@@ -800,7 +815,7 @@ fn test_start() {
         Some(MDEV_TYPE.to_string()),
         None,
         |test| {
-            test.populate_parent_device(PARENT, MDEV_TYPE, 0);
+            test.populate_parent_device(PARENT, MDEV_TYPE, 0, "vfio-pci", "testdev", None);
         },
     );
     // TODO: test attributes -- difficult because executing the 'start' command by writing to
