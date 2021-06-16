@@ -547,16 +547,22 @@ fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) 
     let types = supported_types(env, parent)?;
     debug!("{:?}", types);
     if dumpjson {
-        let mut jsontypes: serde_json::Value = serde_json::json!([]);
+        let mut parents = serde_json::map::Map::new();
         for (parent, children) in types {
-            let mut jsonchildren: serde_json::Value = serde_json::json!([]);
+            let mut childarray = Vec::new();
             for child in children {
-                jsonchildren.as_array_mut().unwrap().push(child.to_json()?);
+                childarray.push(child.to_json()?);
             }
-            let jsonparent = serde_json::json!({ parent: jsonchildren });
-            jsontypes.as_array_mut().unwrap().push(jsonparent);
+            parents.insert(parent, childarray.into());
         }
-        println!("{}", serde_json::to_string_pretty(&jsontypes)?);
+
+        let jsonval = match parents.len() {
+            0 => serde_json::json!([]),
+            _ => serde_json::json!([parents]),
+        };
+        let jsonstr = serde_json::to_string_pretty(&jsonval)
+            .map_err(|_e| anyhow!("Unable to serialize json"))?;
+        println!("{}", &jsonstr);
     } else {
         for (parent, children) in types {
             println!("{}", parent);
