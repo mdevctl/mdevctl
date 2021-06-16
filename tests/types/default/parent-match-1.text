@@ -1,0 +1,15 @@
+0000:00:02.0
+  mdev_type1
+    Available instances: 5
+    Device API: vfio-pci
+    Name: name1
+    Description: description 1
+  mdev_type2
+    Available instances: 16
+    Device API: vfio-pci
+    Name: name2
+  mdev_type3
+    Available instances: 1
+    Device API: vfio-pci
+    Name: name3
+    Description: description 3

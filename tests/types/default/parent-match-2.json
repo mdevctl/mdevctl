@@ -1,0 +1,20 @@
+[
+  {
+    "0000:00:03.0": [
+      {
+        "nvidia-155": {
+          "available_instances": 4,
+          "device_api": "vfio-pci",
+          "name": "GRID M10-2B"
+        }
+      },
+      {
+        "nvidia-36": {
+          "available_instances": 16,
+          "device_api": "vfio-pci",
+          "name": "GRID M10-0Q"
+        }
+      }
+    ]
+  }
+]

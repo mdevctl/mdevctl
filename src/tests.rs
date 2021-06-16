@@ -1,5 +1,6 @@
 use anyhow::Result;
 use log::info;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1068,5 +1069,100 @@ fn test_list() {
         true,
         None,
         Some("nonexistent".to_string()),
+    );
+}
+
+fn test_types_helper(
+    test: &TestEnvironment,
+    subtest: &str,
+    expect: Expect,
+    parent: Option<String>,
+) {
+    use crate::types_command_helper;
+
+    // test text output
+    let expectedtext = test.datapath.join(format!("{}.text", subtest));
+    let res = types_command_helper(test, parent.clone(), false);
+    if expect == Expect::Fail {
+        res.expect_err("expected types command to fail");
+        return;
+    }
+
+    let output = res.expect("types command failed unexpectedly");
+    compare_to_file(&expectedtext, &output);
+
+    // test JSON output
+    let expectedjson = test.datapath.join(format!("{}.json", subtest));
+    let res = types_command_helper(test, parent.clone(), true);
+    if expect == Expect::Fail {
+        res.expect_err("expected types command to fail");
+        return;
+    }
+
+    let output = res.expect("types command failed unexpectedly");
+    compare_to_file(&expectedjson, &output);
+}
+
+#[test]
+fn test_types() {
+    init();
+
+    let test = TestEnvironment::new("types", "default");
+
+    // test an empty environment without any devices that suppport mdevs
+    test_types_helper(&test, "empty", Expect::Pass, None);
+
+    // populate test environment with a variety of parent devices that support certain mdev types
+    let mut parents = BTreeMap::new();
+    parents.insert(
+        "0000:00:02.0",
+        vec![
+            ("mdev_type1", 5, "vfio-pci", "name1", Some("description 1")),
+            ("mdev_type2", 16, "vfio-pci", "name2", None),
+            ("mdev_type3", 1, "vfio-pci", "name3", Some("description 3")),
+        ],
+    );
+    parents.insert(
+        "0000:00:03.0",
+        vec![
+            ("nvidia-155", 4, "vfio-pci", "GRID M10-2B", None),
+            ("nvidia-36", 16, "vfio-pci", "GRID M10-0Q", None),
+        ],
+    );
+    parents.insert(
+        "0.0.26ab",
+        vec![("vfio_ccw-io", 4, "vfio_mdev", "name", Some("description"))],
+    );
+
+    for (parent, types) in parents {
+        for t in types {
+            test.populate_parent_device(parent, t.0, t.1, t.2, t.3, t.4);
+        }
+    }
+
+    test_types_helper(&test, "full", Expect::Pass, None);
+    test_types_helper(
+        &test,
+        "parent-match-1",
+        Expect::Pass,
+        Some("0000:00:02.0".to_string()),
+    );
+    test_types_helper(
+        &test,
+        "parent-match-2",
+        Expect::Pass,
+        Some("0000:00:03.0".to_string()),
+    );
+    test_types_helper(
+        &test,
+        "parent-match-3",
+        Expect::Pass,
+        Some("0.0.26ab".to_string()),
+    );
+    test_types_helper(
+        &test,
+        "parent-no-match",
+        Expect::Pass,
+        Some("missing".to_string()),
     );
 }

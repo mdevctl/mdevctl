@@ -1,0 +1,14 @@
+[
+  {
+    "0.0.26ab": [
+      {
+        "vfio_ccw-io": {
+          "available_instances": 4,
+          "device_api": "vfio_mdev",
+          "name": "name",
+          "description": "description"
+        }
+      }
+    ]
+  }
+]

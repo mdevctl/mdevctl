@@ -1,0 +1,30 @@
+0.0.26ab
+  vfio_ccw-io
+    Available instances: 4
+    Device API: vfio_mdev
+    Name: name
+    Description: description
+0000:00:02.0
+  mdev_type1
+    Available instances: 5
+    Device API: vfio-pci
+    Name: name1
+    Description: description 1
+  mdev_type2
+    Available instances: 16
+    Device API: vfio-pci
+    Name: name2
+  mdev_type3
+    Available instances: 1
+    Device API: vfio-pci
+    Name: name3
+    Description: description 3
+0000:00:03.0
+  nvidia-155
+    Available instances: 4
+    Device API: vfio-pci
+    Name: GRID M10-2B
+  nvidia-36
+    Available instances: 16
+    Device API: vfio-pci
+    Name: GRID M10-0Q

@@ -1,0 +1,9 @@
+0000:00:03.0
+  nvidia-155
+    Available instances: 4
+    Device API: vfio-pci
+    Name: GRID M10-2B
+  nvidia-36
+    Available instances: 16
+    Device API: vfio-pci
+    Name: GRID M10-0Q
