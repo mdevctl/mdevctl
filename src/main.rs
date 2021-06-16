@@ -542,9 +542,14 @@ fn supported_types(
     Ok(types)
 }
 
-/// Implementation of the `mdevctl types` command
-fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) -> Result<()> {
+/// convert 'types' command arguments into a text output
+fn types_command_helper(
+    env: &dyn Environment,
+    parent: Option<String>,
+    dumpjson: bool,
+) -> Result<String> {
     let types = supported_types(env, parent)?;
+    let mut output = String::new();
     debug!("{:?}", types);
     if dumpjson {
         let mut parents = serde_json::map::Map::new();
@@ -562,23 +567,33 @@ fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) 
         };
         let jsonstr = serde_json::to_string_pretty(&jsonval)
             .map_err(|_e| anyhow!("Unable to serialize json"))?;
-        println!("{}", &jsonstr);
+        output.push_str(&jsonstr);
     } else {
         for (parent, children) in types {
-            println!("{}", parent);
+            output.push_str(&format!("{}\n", parent));
             for child in children {
-                println!("  {}", child.typename);
-                println!("    Available instances: {}", child.available_instances);
-                println!("    Device API: {}", child.device_api);
+                output.push_str(&format!("  {}\n", child.typename));
+                output.push_str(&format!(
+                    "    Available instances: {}\n",
+                    child.available_instances
+                ));
+                output.push_str(&format!("    Device API: {}\n", child.device_api));
                 if !child.name.is_empty() {
-                    println!("    Name: {}", child.name);
+                    output.push_str(&format!("    Name: {}\n", child.name));
                 }
                 if !child.description.is_empty() {
-                    println!("    Description: {}", child.description);
+                    output.push_str(&format!("    Description: {}\n", child.description));
                 }
             }
         }
     }
+    Ok(output)
+}
+
+/// Implementation of the `mdevctl types` command
+fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) -> Result<()> {
+    let output = types_command_helper(env, parent, dumpjson)?;
+    println!("{}", output);
     Ok(())
 }
 
