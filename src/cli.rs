@@ -118,13 +118,23 @@ pub enum MdevctlCommands {
             help = "Modify the mdev type for this device"
         )]
         mdev_type: Option<String>,
-        #[structopt(long, conflicts_with("delattr"), help = "add a new attribute")]
+        #[structopt(
+            long,
+            conflicts_with("delattr"),
+            requires("value"),
+            help = "add a new attribute",
+            value_name = "attr_name"
+        )]
         addattr: Option<String>,
         #[structopt(long, help = "Delete an attribute")]
         delattr: bool,
         #[structopt(long, short, help = "Index of the attribute to modify")]
         index: Option<u32>,
-        #[structopt(long, help = "Value for the attribute specified by --addattr")]
+        #[structopt(
+            long,
+            help = "Value for the attribute specified by --addattr",
+            value_name = "attr_value"
+        )]
         value: Option<String>,
         #[structopt(short, long, help = "Device will be started automatically")]
         auto: bool,
