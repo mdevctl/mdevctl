@@ -482,58 +482,60 @@ fn supported_types(
     debug!("Finding supported mdev types");
     let mut types: BTreeMap<String, Vec<MDevType>> = BTreeMap::new();
 
-    for parentpath in env.parent_base().read_dir()? {
-        let parentpath = parentpath?;
-        let parentname = parentpath.file_name();
-        let parentname = parentname.to_str().unwrap();
-        debug!("Looking for supported types for device {}", parentname);
-        if parent.is_some() && parent.as_ref().unwrap() != parentname {
-            debug!("Ignoring types for parent {}", parentname);
-            continue;
-        }
-
-        let mut childtypes = Vec::new();
-        let mut parentpath = parentpath.path();
-        parentpath.push("mdev_supported_types");
-        for child in parentpath.read_dir()? {
-            let child = child?;
-            if !child.metadata()?.is_dir() {
+    if let Ok(dir) = env.parent_base().read_dir() {
+        for parentpath in dir {
+            let parentpath = parentpath?;
+            let parentname = parentpath.file_name();
+            let parentname = parentname.to_str().unwrap();
+            debug!("Looking for supported types for device {}", parentname);
+            if parent.is_some() && parent.as_ref().unwrap() != parentname {
+                debug!("Ignoring types for parent {}", parentname);
                 continue;
             }
 
-            let mut t = MDevType::new();
-            t.parent = parentname.to_string();
+            let mut childtypes = Vec::new();
+            let mut parentpath = parentpath.path();
+            parentpath.push("mdev_supported_types");
+            for child in parentpath.read_dir()? {
+                let child = child?;
+                if !child.metadata()?.is_dir() {
+                    continue;
+                }
 
-            let mut path = child.path();
-            t.typename = path.file_name().unwrap().to_str().unwrap().to_string();
-            debug!("found mdev type {}", t.typename);
+                let mut t = MDevType::new();
+                t.parent = parentname.to_string();
 
-            path.push("available_instances");
-            debug!("Checking available instances: {:?}", path);
-            t.available_instances = fs::read_to_string(&path)?.trim().parse()?;
+                let mut path = child.path();
+                t.typename = path.file_name().unwrap().to_str().unwrap().to_string();
+                debug!("found mdev type {}", t.typename);
 
-            path.pop();
-            path.push("device_api");
-            t.device_api = fs::read_to_string(&path)?.trim().to_string();
+                path.push("available_instances");
+                debug!("Checking available instances: {:?}", path);
+                t.available_instances = fs::read_to_string(&path)?.trim().parse()?;
 
-            path.pop();
-            path.push("name");
-            if path.exists() {
-                t.name = fs::read_to_string(&path)?.trim().to_string();
+                path.pop();
+                path.push("device_api");
+                t.device_api = fs::read_to_string(&path)?.trim().to_string();
+
+                path.pop();
+                path.push("name");
+                if path.exists() {
+                    t.name = fs::read_to_string(&path)?.trim().to_string();
+                }
+
+                path.pop();
+                path.push("description");
+                if path.exists() {
+                    t.description = fs::read_to_string(&path)?
+                        .trim()
+                        .replace("\n", ", ")
+                        .to_string();
+                }
+
+                childtypes.push(t);
             }
-
-            path.pop();
-            path.push("description");
-            if path.exists() {
-                t.description = fs::read_to_string(&path)?
-                    .trim()
-                    .replace("\n", ", ")
-                    .to_string();
-            }
-
-            childtypes.push(t);
+            types.insert(parentname.to_string(), childtypes);
         }
-        types.insert(parentname.to_string(), childtypes);
     }
     Ok(types)
 }
