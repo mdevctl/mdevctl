@@ -111,7 +111,7 @@ fn define_command_helper(
 
         if dev.is_defined() {
             return Err(anyhow!(
-                "Device {} on {} already defined, try modify?",
+                "Device {} on {} already defined",
                 dev.uuid.to_hyphenated().to_string(),
                 dev.parent()?
             ));
