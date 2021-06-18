@@ -15,18 +15,20 @@ all:
 # complaining that we modified the source directory during build.
 archive:
 	cargo package --allow-dirty --no-verify
+	cargo vendor
+	tar -caf target/package/mdevctl-@@mdevctl_version@@-vendor.crate vendor/
 
-rust-mdevctl.spec: rust-mdevctl.spec.in
+mdevctl.spec: mdevctl.spec.in
 	cargo build
 
-srpm: rust-mdevctl.spec archive
+srpm: mdevctl.spec archive
 	rpmbuild -bs --define "_sourcedir $(PWD)/target/package" \
 		--define "_specdir $(PWD)" \
 		--define "_builddir $(PWD)" \
 		--define "_srcrpmdir $(PWD)" \
 		--define "_rpmdir $(PWD)" $<
 
-rpm: rust-mdevctl.spec archive
+rpm: mdevctl.spec archive
 	rpmbuild -bb --define "_sourcedir $(PWD)/target/package" \
 		--define "_specdir $(PWD)" \
 		--define "_builddir $(PWD)" \

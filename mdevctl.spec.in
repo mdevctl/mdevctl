@@ -5,31 +5,51 @@
 
 %global crate mdevctl
 
+%if ! (0%{?fedora} >= 34 || 0%{?rhel} >= 8)
+%{error: RPM generation is not yet supported on this distribution}
+%endif
+
+%if 0%{?fedora} >= 34
 Name:           rust-%{crate}
+%else
+Name:           mdevctl
+%endif
 Version:        @@mdevctl_version@@
 Release:        1%{?dist}
 Summary:        A mediated device management utility for Linux
 
 # Upstream license specification: LGPL-2.1
 License:        LGPLv2
-URL:            https://crates.io/crates/mdevctl
-Source:         %{crates_source}
+URL:            https://github.com/mdevctl/mdevctl
+Source0:        mdevctl-%{version}.crate
+%if 0%{?rhel} >= 8
+Source1:        mdevctl-%{version}-vendor.crate
+%endif
 
 ExclusiveArch:  %{rust_arches}
 
+%if 0%{?fedora} >= 34
 BuildRequires:  rust-packaging
+%endif
+%if 0%{?rhel}
+BuildRequires: rust-toolset
+%endif
 
 %global _description %{expand:
 %{summary}.}
 
 %description %{_description}
 
+%if 0%{?fedora} >= 34
 %package     -n %{crate}
 Summary:        %{summary}
 
 %description -n %{crate} %{_description}
 
 %files       -n %{crate}
+%else
+%files
+%endif
 %license COPYING
 %doc README.md
 %{_sbindir}/mdevctl
@@ -42,11 +62,15 @@ Summary:        %{summary}
 %{_datadir}/bash-completion/completions/lsmdev
 
 %prep
+%if 0%{?fedora} >= 34
 %autosetup -n %{crate}-%{version_no_tilde} -p1
 %cargo_prep
-
 %generate_buildrequires
 %cargo_generate_buildrequires
+%else
+%setup -q -n %{name}-%{version}
+%cargo_prep -V 1
+%endif
 
 %build
 %cargo_build

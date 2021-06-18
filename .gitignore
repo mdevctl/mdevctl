@@ -2,5 +2,6 @@
 *.sw?
 Cargo.lock
 Makefile
-rust-mdevctl.spec
+mdevctl.spec
+/vendor/
 /*.rpm

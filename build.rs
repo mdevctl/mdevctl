@@ -47,7 +47,7 @@ fn main() {
     cli::LsmdevOptions::clap().gen_completions("lsmdev", Shell::Bash, &outdir);
 
     // generate a rpm spec file from the spec.in template
-    let rpm_in = PathBuf::from("rust-mdevctl.spec.in");
+    let rpm_in = PathBuf::from("mdevctl.spec.in");
     let rpm_out = PathBuf::from(rpm_in.file_stem().unwrap());
     let contents = apply_template(&rpm_in);
     std::fs::write(&rpm_out, contents).expect(format!("Failed to write {:?}", rpm_out).as_str());
