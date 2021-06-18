@@ -457,6 +457,11 @@ fn list_command_helper(
         }
     }
 
+    // ensure that devices are sorted in a stable order
+    for v in devices.values_mut() {
+        v.sort_by_key(|e| e.uuid);
+    }
+
     let output = match dumpjson {
         true => {
             // if specified to a single device, output such that it can be piped into a config
