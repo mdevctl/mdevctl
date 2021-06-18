@@ -431,7 +431,7 @@ fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<()> {
     debug!("Writing attribute '{}' -> '{}'", attr, val);
     let path = basepath.join(attr);
     if !path.exists() {
-        return Err(anyhow!("Invalid attribute '{}'", val));
+        return Err(anyhow!("Invalid attribute '{}'", attr));
     }
     fs::write(path, val).with_context(|| format!("Failed to write {} to attribute {}", val, attr))
 }
