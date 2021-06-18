@@ -458,7 +458,23 @@ fn list_command_helper(
     }
 
     let output = match dumpjson {
-        true => format_json(devices)?,
+        true => {
+            // if specified to a single device, output such that it can be piped into a config
+            // file, else print entire heirarchy
+            if uuid.is_none() || devices.values().flatten().count() > 1 {
+                format_json(devices)?
+            } else {
+                let jsonval = match devices.values().next() {
+                    Some(children) => children
+                        .first()
+                        .ok_or_else(|| anyhow!("Failed to get device"))?
+                        .to_json(false)?,
+                    None => serde_json::json!([]),
+                };
+                serde_json::to_string_pretty(&jsonval)
+                    .map_err(|_e| anyhow!("Unable to serialize json"))?
+            }
+        }
         false => {
             let ft = match defined {
                 true => FormatType::Defined,
