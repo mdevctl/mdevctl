@@ -539,6 +539,9 @@ fn supported_types(
             types.insert(parentname.to_string(), childtypes);
         }
     }
+    for v in types.values_mut() {
+        v.sort_by_key(|t| t.typename.clone());
+    }
     Ok(types)
 }
 
