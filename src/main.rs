@@ -410,48 +410,50 @@ fn list_command_helper(
         devices = defined_devices(env, uuid.as_ref(), parent.as_ref())?;
     } else {
         debug!("Looking up active mdevs");
-        for dev in env.mdev_base().read_dir()? {
-            let dev = dev?;
-            let fname = dev.file_name();
-            let basename = fname.to_str().unwrap();
-            debug!("found defined mdev {}", basename);
-            let u = Uuid::parse_str(basename);
+        if let Ok(dir) = env.mdev_base().read_dir() {
+            for dev in dir {
+                let dev = dev?;
+                let fname = dev.file_name();
+                let basename = fname.to_str().unwrap();
+                debug!("found defined mdev {}", basename);
+                let u = Uuid::parse_str(basename);
 
-            if u.is_err() {
-                warn!("Can't determine uuid for file '{}'", basename);
-                continue;
-            }
-            let u = u.unwrap();
+                if u.is_err() {
+                    warn!("Can't determine uuid for file '{}'", basename);
+                    continue;
+                }
+                let u = u.unwrap();
 
-            if uuid.is_some() && uuid != Some(u) {
-                debug!(
-                    "Ignoring device {} because it doesn't match uuid {}",
-                    u,
-                    uuid.unwrap()
-                );
-                continue;
-            }
-
-            let mut dev = MDev::new(env, u);
-            if dev.load_from_sysfs().is_ok() {
-                if parent.is_some() && (parent != dev.parent) {
+                if uuid.is_some() && uuid != Some(u) {
                     debug!(
-                        "Ignoring device {} because it doesn't match parent {}",
-                        dev.uuid,
-                        parent.as_ref().unwrap()
+                        "Ignoring device {} because it doesn't match uuid {}",
+                        u,
+                        uuid.unwrap()
                     );
                     continue;
                 }
 
-                let _ = dev.load_definition();
+                let mut dev = MDev::new(env, u);
+                if dev.load_from_sysfs().is_ok() {
+                    if parent.is_some() && (parent != dev.parent) {
+                        debug!(
+                            "Ignoring device {} because it doesn't match parent {}",
+                            dev.uuid,
+                            parent.as_ref().unwrap()
+                        );
+                        continue;
+                    }
 
-                let devparent = dev.parent()?;
-                if !devices.contains_key(devparent) {
-                    devices.insert(devparent.clone(), Vec::new());
+                    let _ = dev.load_definition();
+
+                    let devparent = dev.parent()?;
+                    if !devices.contains_key(devparent) {
+                        devices.insert(devparent.clone(), Vec::new());
+                    };
+
+                    devices.get_mut(devparent).unwrap().push(dev);
                 };
-
-                devices.get_mut(devparent).unwrap().push(dev);
-            };
+            }
         }
     }
 
