@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use uuid::Uuid;
 use std::process::{Command, Stdio, Output, ExitStatus};
+use libsystemd::logging::{self, Priority};
 
 #[derive(Clone, Copy)]
 pub enum FormatType {
@@ -505,7 +506,7 @@ impl<'a> Callout<'a> {
         self.state = state;
     }
 
-    fn invoke_script<P: AsRef<Path>>(&mut self, script: P, event: &str, action: &str, stderr: bool, stdout: bool) -> Result<ExitStatus> {
+    fn invoke_script<P: AsRef<Path>>(&mut self, script: P, event: &str, action: &str, stderr: bool, stdout: bool, autostart: bool) -> Result<ExitStatus> {
         let cmd = Command::new(script.as_ref().as_os_str())
                 .arg("-t")
                 .arg(self.mdev.mdev_type.as_ref().unwrap())
@@ -533,22 +534,32 @@ impl<'a> Callout<'a> {
 
         let output = child.wait_with_output()?;
 
-        self.print_output(script, output, stderr, stdout)
+        self.print_output(script, output, stderr, stdout, autostart)
     }
 
-    fn print_output<P: AsRef<Path>>(&mut self, script: P, output: Output, stderr: bool, stdout: bool) -> Result<ExitStatus> {
+    fn print_output<P: AsRef<Path>>(&mut self, script: P, output: Output, stderr: bool, stdout: bool, autostart: bool) -> Result<ExitStatus> {
         self.sname = script.as_ref().file_name().unwrap().to_str().unwrap().to_string();
 
         if stderr {
             let st = String::from_utf8_lossy(&output.stderr);
             if !st.is_empty() {
-                eprint!("{}: {}", &self.sname, st);
+                let s = format!("{}: {}", &self.sname, st);
+                eprint!("{}", &s);
+
+                if autostart {
+                    let _ = logging::journal_print(Priority::Warning, &s);
+                }
             }
         }
         if stdout {
             let st = String::from_utf8_lossy(&output.stdout);
             if !st.is_empty() {
-                print!("{}: {}", &self.sname, st);
+                let s = format!("{}: {}", &self.sname, st);
+                print!("{}", &s);
+
+                if autostart {
+                    let _ = logging::journal_print(Priority::Warning, &s);
+                }
             }
         }
 
@@ -570,7 +581,7 @@ impl<'a> Callout<'a> {
         if self.script.to_str().unwrap().is_empty() {
             for s in dir.read_dir()? {
                 let path = &s?.path();
-                let res = self.invoke_script(path, event, action, true, false);
+                let res = self.invoke_script(path, event, action, true, false, self.mdev.autostart);
                 rc = res?.code();
                 if rc != Some(2) {
                     self.script = path.clone();
@@ -578,7 +589,7 @@ impl<'a> Callout<'a> {
                 }
             }
         } else {
-            let res = self.invoke_script(self.script.clone(), event, action, true, false);
+            let res = self.invoke_script(self.script.clone(), event, action, true, false, self.mdev.autostart);
             rc = res?.code();
         }
 
