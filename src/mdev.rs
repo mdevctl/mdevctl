@@ -85,12 +85,7 @@ impl<'a> MDev<'a> {
 
     pub fn load_from_sysfs(&mut self) -> Result<()> {
         debug!("Loading device '{:?}' from sysfs", self.uuid);
-        self.active = match self.path().symlink_metadata() {
-            Ok(attr) => attr.file_type().is_symlink(),
-            _ => false,
-        };
-
-        if !self.active {
+        if !self.path().exists() {
             debug!("loaded device {:?}", self);
             return Ok(());
         }
@@ -99,27 +94,31 @@ impl<'a> MDev<'a> {
         let sysfsparent = canonpath.parent().unwrap();
         let parentname = canonical_basename(sysfsparent)?;
         if self.parent.is_some() && self.parent.as_ref() != Some(&parentname) {
-            warn!(
-                "Overwriting parent for mdev {:?}: {} => {}",
+            debug!(
+                "Active mdev {:?} has different parent: {}!={}. No match.",
                 self.uuid,
                 self.parent.as_ref().unwrap(),
                 parentname
             );
+            return Ok(());
         }
-        self.parent = Some(parentname);
         let mut typepath = self.path();
         typepath.push("mdev_type");
         let mdev_type = canonical_basename(typepath)?;
         if self.mdev_type.is_some() && self.mdev_type.as_ref() != Some(&mdev_type) {
-            warn!(
-                "Overwriting mdev type for mdev {:?}: {} => {}",
+            debug!(
+                "Active mdev {:?} has different type: {}!={}. No match.",
                 self.uuid,
                 self.mdev_type.as_ref().unwrap(),
                 mdev_type
             );
+            return Ok(());
         }
-        self.mdev_type = Some(mdev_type);
 
+        // active device in sysfs matches this device. update information
+        self.mdev_type = Some(mdev_type);
+        self.parent = Some(parentname);
+        self.active = true;
         debug!("loaded device {:?}", self);
         Ok(())
     }
