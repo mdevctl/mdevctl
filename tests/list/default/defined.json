@@ -1,0 +1,67 @@
+[
+  {
+    "0000:00:02.0": [
+      {
+        "4a0a190f-dcf3-4def-9342-c48768f0c940": {
+          "mdev_type": "i915-GVTg_V5_8",
+          "start": "auto",
+          "attrs": []
+        }
+      },
+      {
+        "9f579710-6ffc-4201-987a-4ffa0fb1f3a5": {
+          "mdev_type": "vfio_ap-passthrough",
+          "start": "manual",
+          "attrs": [
+            {
+              "assign_adapter": "5"
+            },
+            {
+              "assign_adapter": "6"
+            },
+            {
+              "assign_domain": "0xab"
+            },
+            {
+              "assign_control_domain": "0xab"
+            },
+            {
+              "assign_domain": "4"
+            },
+            {
+              "assign_control_domain": "4"
+            }
+          ]
+        }
+      }
+    ],
+    "0000:00:03.0": [
+      {
+        "9f579710-6ffc-4201-987a-4ffa0fb1f3a5": {
+          "mdev_type": "vfio_ap-passthrough",
+          "start": "manual",
+          "attrs": [
+            {
+              "assign_adapter": "5"
+            },
+            {
+              "assign_adapter": "6"
+            },
+            {
+              "assign_domain": "0xab"
+            },
+            {
+              "assign_control_domain": "0xab"
+            },
+            {
+              "assign_domain": "4"
+            },
+            {
+              "assign_control_domain": "4"
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

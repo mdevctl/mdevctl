@@ -1,0 +1,50 @@
+@@generated_notice@@
+
+PREFIX?=/usr
+UDEVDIR=$(shell pkg-config --variable=udevdir udev)
+SBINDIR=$(PREFIX)/sbin
+CONFDIR=/etc/mdevctl.d
+DATADIR=$(PREFIX)/share
+MANDIR=$(DATADIR)/man
+BASH_COMPLETION_DIR=$(DATADIR)/bash-completion/completions
+
+all:
+	@echo "Run 'make install' to install the program"
+
+# since we generate a Makefile, we have to use --no-verify to stop cargo from
+# complaining that we modified the source directory during build.
+archive:
+	cargo package --allow-dirty --no-verify
+	cargo vendor
+	tar -caf target/package/mdevctl-@@mdevctl_version@@-vendor.crate vendor/
+
+mdevctl.spec: mdevctl.spec.in
+	cargo build
+
+srpm: mdevctl.spec archive
+	rpmbuild -bs --define "_sourcedir $(PWD)/target/package" \
+		--define "_specdir $(PWD)" \
+		--define "_builddir $(PWD)" \
+		--define "_srcrpmdir $(PWD)" \
+		--define "_rpmdir $(PWD)" $<
+
+rpm: mdevctl.spec archive
+	rpmbuild -bb --define "_sourcedir $(PWD)/target/package" \
+		--define "_specdir $(PWD)" \
+		--define "_builddir $(PWD)" \
+		--define "_srcrpmdir $(PWD)" \
+		--define "_rpmdir $(PWD)" $<
+
+install:
+	mkdir -p $(DESTDIR)$(CONFDIR)
+	mkdir -p $(DESTDIR)$(UDEVDIR)/rules.d/
+	install -m 644 60-mdevctl.rules $(DESTDIR)$(UDEVDIR)/rules.d/
+	mkdir -p $(DESTDIR)$(SBINDIR)
+	install -m 755 @@mdevctl@@ $(DESTDIR)$(SBINDIR)/
+	ln -sf mdevctl $(DESTDIR)$(SBINDIR)/lsmdev
+	mkdir -p $(DESTDIR)$(MANDIR)/man8
+	install -m 644 mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
+	ln -sf mdevctl.8  $(DESTDIR)$(MANDIR)/man8/lsmdev.8
+	mkdir -p $(DESTDIR)$(BASH_COMPLETION_DIR)/
+	install -m 644 -T @@mdevctl.bash@@ $(DESTDIR)$(BASH_COMPLETION_DIR)/mdevctl
+	install -m 644 -T @@lsmdev.bash@@ $(DESTDIR)$(BASH_COMPLETION_DIR)/lsmdev

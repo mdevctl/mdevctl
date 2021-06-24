@@ -19,8 +19,11 @@ https://github.com/mdevctl/mdevctl
 
 ## Installation
 
-On RPM based systems, `make rpm` then install the resulting package.
-Otherwise, `make install`
+mdevctl is built with rust's `cargo` tool.  To build the executable, run `cargo
+build`. This will compile the code and also generate a Makefile that can be
+used for installing the executable and all support files into your system.  On
+RPM based systems, you can run `make rpm` then install the resulting package.
+Otherwise, run `make install`.
 
 ## Architecture
 

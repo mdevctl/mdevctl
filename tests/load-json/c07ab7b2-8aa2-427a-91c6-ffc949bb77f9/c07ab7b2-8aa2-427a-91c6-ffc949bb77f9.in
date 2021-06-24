@@ -1,0 +1,21 @@
+{
+    "mdev_type": "i915-GVTg_V5_8",
+        "start": "manual",
+        "attrs": [
+        {
+            "example-attribute": "attribute-value"
+        },
+        {
+            "foo": "bar"
+        },
+        {
+            "foo2": "bar2"
+        },
+        {
+            "example-attribute-2": "attribute-value-2"
+        },
+        {
+            "another-example-attribute": "zzz"
+        }
+        ]
+}

@@ -1,0 +1,25 @@
+[package]
+name = "mdevctl"
+# For now, just bump the y version on release (x.y.z)
+version = "1.0.0"
+authors = ["Jonathon Jongsma <jjongsma@redhat.com>"]
+edition = "2018"
+license = "LGPL-2.1"
+description = "A mediated device management utility for Linux"
+repository = "https://github.com/mdevctl/mdevctl"
+homepage = "https://github.com/mdevctl/mdevctl"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0"
+env_logger = "0.8.3"
+log = "0.4"
+serde_json = {version = "1.0", features = ["preserve_order"]}
+structopt = "0.3.13"
+uuid = {version = "0.8.2", features = ["v4"]}
+tempdir = "0.3"
+
+[build-dependencies]
+structopt = "0.3.13"
+uuid = "0.8.2"

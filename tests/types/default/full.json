@@ -1,0 +1,55 @@
+[
+  {
+    "0.0.26ab": [
+      {
+        "vfio_ccw-io": {
+          "available_instances": 4,
+          "device_api": "vfio_mdev",
+          "name": "name",
+          "description": "description"
+        }
+      }
+    ],
+    "0000:00:02.0": [
+      {
+        "mdev_type1": {
+          "available_instances": 5,
+          "device_api": "vfio-pci",
+          "name": "name1",
+          "description": "description 1"
+        }
+      },
+      {
+        "mdev_type2": {
+          "available_instances": 16,
+          "device_api": "vfio-pci",
+          "name": "name2"
+        }
+      },
+      {
+        "mdev_type3": {
+          "available_instances": 1,
+          "device_api": "vfio-pci",
+          "name": "name3",
+          "description": "description 3"
+        }
+      }
+    ],
+    "0000:00:03.0": [
+      {
+        "nvidia-155": {
+          "available_instances": 4,
+          "device_api": "vfio-pci",
+          "name": "GRID M10-2B"
+        }
+      },
+      {
+        "nvidia-36": {
+          "available_instances": 16,
+          "device_api": "vfio-pci",
+          "name": "GRID M10-0Q"
+        }
+      }
+    ]
+  }
+]

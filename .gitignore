@@ -1,4 +1,7 @@
+/target
+*.sw?
+Cargo.lock
+Makefile
 mdevctl.spec
-*.tar.gz
-*.rpm
-*/
+/vendor/
+/*.rpm
