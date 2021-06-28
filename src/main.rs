@@ -275,7 +275,7 @@ fn start_command_helper(
             }
         }
     }
-    Ok(dev.unwrap())
+    dev.ok_or_else(|| anyhow!("Unknown error"))
 }
 
 /// Implementation of the `mdevctl start` command
