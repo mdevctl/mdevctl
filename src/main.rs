@@ -7,6 +7,7 @@
 
 use anyhow::{anyhow, ensure, Context, Result};
 use log::{debug, warn};
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
@@ -225,22 +226,36 @@ fn start_command_helper(
             dev = Some(d);
         }
         _ => {
-            if mdev_type.is_some() && parent.is_none() {
-                return Err(anyhow!("can't provide type without parent"));
-            }
-
-            /* The device is not fully specified without TYPE, we must find a config file, with optional
-             * PARENT for disambiguation */
-            if mdev_type.is_none() {
-                if let Some(uuid) = uuid {
-                    dev = match get_defined_device(env, uuid, parent.as_ref()) {
-                        Ok(d) => Some(d),
-                        Err(e) => return Err(e),
-                    };
+            // if the user specified a uuid, check to see if they're referring to a defined device
+            if uuid.is_some() {
+                let devs = defined_devices(env, uuid.as_ref(), parent.as_ref())?;
+                let n = devs.values().flatten().count();
+                match n.cmp(&1) {
+                    Ordering::Greater => {
+                        return Err(anyhow!(
+                            "Multiple definitions found for device {}. Please specify a parent.",
+                            uuid.unwrap().to_hyphenated().to_string()
+                        ));
+                    }
+                    Ordering::Equal => {
+                        let d = devs.values().flatten().next();
+                        if let Some(d) = d {
+                            // See https://github.com/mdevctl/mdevctl/issues/38
+                            // If a user specifies the uuid (and optional parent) of a defined device
+                            if mdev_type.is_some() && mdev_type != d.mdev_type {
+                                return Err(anyhow!(
+                                    "Device {} already exists on parent {} with type {}",
+                                    d.uuid.to_hyphenated().to_string(),
+                                    d.parent().unwrap(),
+                                    d.mdev_type.as_ref().unwrap()
+                                ));
+                            } else {
+                                dev = Some(d.clone());
+                            }
+                        }
+                    }
+                    _ => (),
                 }
-            }
-            if uuid.is_none() && (parent.is_none() || mdev_type.is_none()) {
-                return Err(anyhow!("Device is insufficiently specified"));
             }
 
             if dev.is_none() {
@@ -248,6 +263,15 @@ fn start_command_helper(
                 d.parent = parent;
                 d.mdev_type = mdev_type;
                 dev = Some(d);
+            }
+
+            if let Some(ref d) = dev {
+                if d.mdev_type.is_some() && d.parent.is_none() {
+                    return Err(anyhow!("can't provide type without parent"));
+                }
+                if d.mdev_type.is_none() || d.parent.is_none() {
+                    return Err(anyhow!("Device is insufficiently specified"));
+                }
             }
         }
     }
