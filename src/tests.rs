@@ -112,6 +112,40 @@ impl TestEnvironment {
 
         (parentdir, parenttypedir)
     }
+
+    fn compare_to_file(&self, filename: &str, actual: &str) {
+        let path = self.datapath.join(filename);
+        let flag = get_flag(REGEN_FLAG);
+        if flag {
+            regen(&path, actual).expect("Failed to regenerate expected output");
+        }
+        let expected = fs::read_to_string(path).unwrap_or_else(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                println!(
+                    "File {:?} not found, run tests with {}=1 to automatically \
+                         generate expected output",
+                    filename, REGEN_FLAG
+                );
+            }
+            Default::default()
+        });
+
+        assert_eq!(expected, actual);
+    }
+
+    fn load_from_json<'a>(&'a self, uuid: &str, parent: &str, filename: &str) -> Result<MDev<'a>> {
+        let path = self.datapath.join(filename);
+        let uuid = Uuid::parse_str(uuid);
+        assert!(uuid.is_ok());
+        let uuid = uuid.unwrap();
+        let mut dev = MDev::new(self, uuid);
+
+        let jsonstr = fs::read_to_string(path)?;
+        let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
+        dev.load_from_json(parent.to_string(), &jsonval)?;
+
+        Ok(dev)
+    }
 }
 
 fn get_flag(varname: &str) -> bool {
@@ -140,53 +174,16 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
 
 const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
 
-fn compare_to_file(filename: &PathBuf, actual: &str) {
-    let flag = get_flag(REGEN_FLAG);
-    if flag {
-        regen(filename, actual).expect("Failed to regenerate expected output");
-    }
-    let expected = fs::read_to_string(filename).unwrap_or_else(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            println!(
-                "File {:?} not found, run tests with {}=1 to automatically \
-                         generate expected output",
-                filename, REGEN_FLAG
-            );
-        }
-        Default::default()
-    });
-
-    assert_eq!(expected, actual);
-}
-
-fn load_from_json<'a>(
-    env: &'a dyn Environment,
-    uuid: &str,
-    parent: &str,
-    filename: &PathBuf,
-) -> Result<MDev<'a>> {
-    let uuid = Uuid::parse_str(uuid);
-    assert!(uuid.is_ok());
-    let uuid = uuid.unwrap();
-    let mut dev = MDev::new(env, uuid);
-
-    let jsonstr = fs::read_to_string(filename)?;
-    let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
-    dev.load_from_json(parent.to_string(), &jsonval)?;
-
-    Ok(dev)
-}
-
 fn test_load_json_helper(uuid: &str, parent: &str) {
     let test = TestEnvironment::new("load-json", uuid);
-    let infile = test.datapath.join(format!("{}.in", uuid));
-    let outfile = test.datapath.join(format!("{}.out", uuid));
 
-    let dev = load_from_json(&test, uuid, parent, &infile).unwrap();
+    let dev = test
+        .load_from_json(uuid, parent, &format!("{}.in", uuid))
+        .unwrap();
     let jsonval = dev.to_json(false).unwrap();
     let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
-    compare_to_file(&outfile, &jsonstr);
+    test.compare_to_file(&format!("{}.out", uuid), &jsonstr);
     assert_eq!(uuid, dev.uuid.to_hyphenated().to_string());
     assert_eq!(Some(parent.to_string()), dev.parent);
 }
@@ -223,7 +220,6 @@ fn test_define_helper<F>(
 
     setupfn(&test);
 
-    let expectedfile = test.datapath.join(format!("{}.expected", testname));
     let def = define_command_helper(&test, uuid, auto, parent, mdev_type, jsonfile);
     if expect == Expect::Fail {
         def.expect_err("expected define command to fail");
@@ -237,7 +233,7 @@ fn test_define_helper<F>(
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    compare_to_file(&expectedfile, &filecontents);
+    test.compare_to_file(&format!("{}.expected", testname), &filecontents);
 }
 
 #[test]
@@ -398,7 +394,6 @@ fn test_modify_helper<F>(
 {
     use crate::modify_command;
     let test = TestEnvironment::new("modify", testname);
-    let expectedfile = test.datapath.join(format!("{}.expected", testname));
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
@@ -426,7 +421,7 @@ fn test_modify_helper<F>(
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    compare_to_file(&expectedfile, &filecontents);
+    test.compare_to_file(&format!("{}.expected", testname), &filecontents);
 }
 
 #[test]
@@ -992,7 +987,6 @@ fn test_list_helper<F>(
 
     setupfn(&test);
 
-    let expectedtext = test.datapath.join(format!("{}.text", subtest));
     let res = list_command_helper(&test, defined, false, verbose, uuid, parent.clone());
     if expect == Expect::Fail {
         res.expect_err("expected list command to fail");
@@ -1000,9 +994,8 @@ fn test_list_helper<F>(
     }
 
     let output = res.expect("list command failed unexpectedly");
-    compare_to_file(&expectedtext, &output);
+    test.compare_to_file(&format!("{}.text", subtest), &output);
 
-    let expectedjson = test.datapath.join(format!("{}.json", subtest));
     let res = list_command_helper(&test, defined, true, verbose, uuid, parent.clone());
     if expect == Expect::Fail {
         res.expect_err("expected list command to fail");
@@ -1010,7 +1003,7 @@ fn test_list_helper<F>(
     }
 
     let output = res.expect("list command failed unexpectedly");
-    compare_to_file(&expectedjson, &output);
+    test.compare_to_file(&format!("{}.json", subtest), &output);
 }
 
 #[test]
@@ -1215,7 +1208,6 @@ fn test_types_helper(
     use crate::types_command_helper;
 
     // test text output
-    let expectedtext = test.datapath.join(format!("{}.text", subtest));
     let res = types_command_helper(test, parent.clone(), false);
     if expect == Expect::Fail {
         res.expect_err("expected types command to fail");
@@ -1223,10 +1215,9 @@ fn test_types_helper(
     }
 
     let output = res.expect("types command failed unexpectedly");
-    compare_to_file(&expectedtext, &output);
+    test.compare_to_file(&format!("{}.text", subtest), &output);
 
     // test JSON output
-    let expectedjson = test.datapath.join(format!("{}.json", subtest));
     let res = types_command_helper(test, parent.clone(), true);
     if expect == Expect::Fail {
         res.expect_err("expected types command to fail");
@@ -1234,7 +1225,7 @@ fn test_types_helper(
     }
 
     let output = res.expect("types command failed unexpectedly");
-    compare_to_file(&expectedjson, &output);
+    test.compare_to_file(&format!("{}.json", subtest), &output);
 }
 
 #[test]
