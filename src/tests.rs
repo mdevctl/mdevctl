@@ -741,7 +741,7 @@ fn test_start_helper<F>(
     }
     let mut dev = dev.expect("Couldn't run start command");
 
-    let result = dev.start(false);
+    let result = dev.start();
     if expect_execute == Expect::Fail {
         result.expect_err("start command should have failed");
         return;

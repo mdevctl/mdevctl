@@ -287,7 +287,11 @@ fn start_command(
     jsonfile: Option<PathBuf>,
 ) -> Result<()> {
     let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
-    dev.start(uuid.is_none())
+    dev.start().map(|_| {
+        if uuid.is_none() {
+            println!("{}", dev.uuid.to_hyphenated());
+        }
+    })
 }
 
 /// Implementation of the `mdevctl stop` command
@@ -659,7 +663,7 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = child.start(false) {
+                if let Err(e) = child.start() {
                     for x in e.chain() {
                         warn!("{}", x);
                     }

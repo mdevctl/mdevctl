@@ -345,7 +345,7 @@ impl<'a> MDev<'a> {
         }
     }
 
-    pub fn start(&mut self, print_uuid: bool) -> Result<()> {
+    pub fn start(&mut self) -> Result<()> {
         self.create()?;
 
         debug!("Setting attributes for mdev {:?}", self.uuid);
@@ -354,10 +354,6 @@ impl<'a> MDev<'a> {
                 self.stop()?;
                 return Err(e);
             }
-        }
-
-        if print_uuid {
-            println!("{}", self.uuid.to_hyphenated().to_string());
         }
 
         Ok(())
