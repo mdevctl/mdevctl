@@ -174,12 +174,17 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
 
 const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
 
-fn test_load_json_helper(uuid: &str, parent: &str) {
+fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
     let test = TestEnvironment::new("load-json", uuid);
 
-    let dev = test
-        .load_from_json(uuid, parent, &format!("{}.in", uuid))
-        .unwrap();
+    let res = test.load_from_json(uuid, parent, &format!("{}.in", uuid));
+    if expect == Expect::Fail {
+        info!("{:?}", res);
+        res.expect_err("Expected command to fail");
+        return;
+    }
+
+    let dev = res.expect("Command failed unexpectedly");
     let jsonval = dev.to_json(false).unwrap();
     let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
@@ -192,9 +197,44 @@ fn test_load_json_helper(uuid: &str, parent: &str) {
 fn test_load_json() {
     init();
 
-    test_load_json_helper("c07ab7b2-8aa2-427a-91c6-ffc949bb77f9", "0000:00:02.0");
-    test_load_json_helper("783e6dbb-ea0e-411f-94e2-717eaad438bf", "0001:00:03.1");
-    test_load_json_helper("5269fe7a-18d1-48ad-88e1-3fda4176f536", "0000:00:03.0");
+    test_load_json_helper(
+        "c07ab7b2-8aa2-427a-91c6-ffc949bb77f9",
+        "0000:00:02.0",
+        Expect::Pass,
+    );
+    test_load_json_helper(
+        "783e6dbb-ea0e-411f-94e2-717eaad438bf",
+        "0001:00:03.1",
+        Expect::Pass,
+    );
+    test_load_json_helper(
+        "5269fe7a-18d1-48ad-88e1-3fda4176f536",
+        "0000:00:03.0",
+        Expect::Pass,
+    );
+    test_load_json_helper(
+        "5269fe7a-18d1-48ad-88e1-3fda4176f536",
+        "0000:00:03.0",
+        Expect::Pass,
+    );
+    // json file has malformed attributes - an array of one object with multiple fields
+    test_load_json_helper(
+        "b6f7e33f-ea28-4f9d-8c42-797ff0ec2888",
+        "0000:00:03.0",
+        Expect::Fail,
+    );
+    // json file has malformed attributes - an array of strings
+    test_load_json_helper(
+        "fe7a39db-973b-47b4-9b77-1d7b97267d59",
+        "0000:00:03.0",
+        Expect::Fail,
+    );
+    // json file has malformed attributes - no array
+    test_load_json_helper(
+        "37ccb149-a0ce-49e3-8391-a952ef07bdc2",
+        "0000:00:03.0",
+        Expect::Fail,
+    );
 }
 
 fn test_define_helper<F>(

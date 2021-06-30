@@ -155,9 +155,18 @@ impl<'a> MDev<'a> {
 
         if let Some(attrarray) = json["attrs"].as_array() {
             if !attrarray.is_empty() {
-                for attr in json["attrs"].as_array().unwrap() {
-                    let attrobj = attr.as_object().unwrap();
-                    for (key, val) in attrobj.iter() {
+                for attr in attrarray {
+                    let attrobj = attr.as_object().ok_or_else(|| {
+                        anyhow!("invalid JSON format for attribute: not an object")
+                    })?;
+                    // attributes are represented by JSON objects with a single field.
+                    if attrobj.len() != 1 {
+                        return Err(anyhow!(
+                            "invalid JSON format for attribute: too many fields"
+                        ));
+                    }
+                    // get the key and value from the first (only) map entry
+                    if let Some((key, val)) = attrobj.iter().next() {
                         let valstr = val.as_str().unwrap();
                         self.attrs.push((key.to_string(), valstr.to_string()));
                     }
