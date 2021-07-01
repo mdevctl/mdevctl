@@ -1,13 +1,13 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use structopt::clap::Shell;
 use structopt::StructOpt;
 
 #[path = "src/cli.rs"]
 mod cli;
 
-fn apply_template(template: &PathBuf) -> String {
+fn apply_template(template: &Path) -> String {
     let outdir =
         PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR environment variable not defined"));
     fs::create_dir_all(&outdir).expect("unable to create out dir");
@@ -17,7 +17,7 @@ fn apply_template(template: &PathBuf) -> String {
     let version = std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION not set");
 
     fs::read_to_string(template)
-        .expect(format!("Failed to read template {:?}", template).as_str())
+        .unwrap_or_else(|_| panic!("Failed to read template {:?}", template))
         .replace("@@mdevctl@@", mdevctl_bin_path.to_str().unwrap())
         .replace(
             "@@mdevctl.bash@@",
@@ -50,7 +50,7 @@ fn main() {
     let rpm_in = PathBuf::from("mdevctl.spec.in");
     let rpm_out = PathBuf::from(rpm_in.file_stem().unwrap());
     let contents = apply_template(&rpm_in);
-    std::fs::write(&rpm_out, contents).expect(format!("Failed to write {:?}", rpm_out).as_str());
+    std::fs::write(&rpm_out, contents).unwrap_or_else(|_| panic!("Failed to write {:?}", rpm_out));
     println!("cargo:rerun-if-changed={}", rpm_in.to_str().unwrap());
 
     // Generate a makefile for installing the auxiliary files based on the Makefile.in template
@@ -62,6 +62,6 @@ fn main() {
     // Makefile in a directory named ./target/$PROFILE/build/mdevctl-$HASH/out/ is very
     // undiscoverable and kind of defeats the purpose. Need to find a better solution.
     std::fs::write(&makefile_out, contents)
-        .expect(format!("Failed to write {:?}", makefile_out).as_str());
+        .unwrap_or_else(|_| panic!("Failed to write {:?}", makefile_out));
     println!("cargo:rerun-if-changed={}", makefile_in.to_str().unwrap());
 }
