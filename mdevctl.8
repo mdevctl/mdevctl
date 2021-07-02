@@ -148,11 +148,19 @@ are applied the next time the device is started.
 .PP
 \fBstart\fR \fIDEVICESPEC\fR
 .RS 4
-Start an mdev device, identified by its UUID and optionally its parent,
-or its parent and type and optionally its UUID, which is generated if
-not given.
-If specified via its parent and optionally its UUID, the type may be
-specified in a JSON configuration file, alongside additional parameters.
+Start a mediated device. This command can be used to start either a
+previously-defined device or a newly-created transient device.
+
+If the UUID and optional parent argument matches an existing device definition,
+then the existing device will be started. It is an error to specify a device
+type that conflicts with the existing device definition.
+
+If the UUID argument is omitted or if the specified UUID and parent does not
+match an existing device definition, a new transient device will be started.
+If the UUID is omitted, a new UUID will be automatically generated. When
+starting a new transient device, the parent and device type must be specified.
+A \fB--jsonfile\fR may replace the \fB--type\fR specification and also include
+additional attributes in JSON format to be applied to the started device.
 .RE
 
 .PP

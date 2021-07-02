@@ -733,6 +733,7 @@ fn test_start() {
 
     const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
     const PARENT: &str = "0000:00:03.0";
+    const PARENT2: &str = "0000:00:02.0";
     const MDEV_TYPE: &str = "arbitrary_type";
 
     test_start_helper(
@@ -754,6 +755,30 @@ fn test_start() {
         None,
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+    test_start_helper(
+        "no-uuid-no-parent",
+        Expect::Fail,
+        Expect::Fail,
+        None,
+        None,
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+    test_start_helper(
+        "no-uuid-no-type",
+        Expect::Fail,
+        Expect::Fail,
+        None,
+        Some(PARENT.to_string()),
+        None,
         None,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -795,6 +820,80 @@ fn test_start() {
         },
     );
     test_start_helper(
+        "no-type-parent-defined",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        None,
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+    test_start_helper(
+        "defined-with-type",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+    // if there are multiple defined devices with the same UUID, must disambiguate with parent
+    test_start_helper(
+        "defined-multiple-underspecified",
+        Expect::Fail,
+        Expect::Fail,
+        Some(UUID.to_string()),
+        None,
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+    test_start_helper(
+        "defined-multiple",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+    // test specifying a uuid and a parent matching an existing defined device but with a different
+    // type. See https://github.com/mdevctl/mdevctl/issues/38
+    test_start_helper(
+        "defined-diff-type",
+        Expect::Fail,
+        Expect::Fail,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some("wrong-type".to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+    test_start_helper(
         "already-running",
         Expect::Pass,
         Expect::Fail,
@@ -817,6 +916,19 @@ fn test_start() {
         None,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 0, "vfio-pci", "testdev", None);
+        },
+    );
+
+    test_start_helper(
+        "uuid-type-parent",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
     );
     // TODO: test attributes -- difficult because executing the 'start' command by writing to
