@@ -5,10 +5,13 @@ use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
 use std::convert::TryInto;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::vec::Vec;
 use uuid::Uuid;
+use std::process::{Command, Stdio, Output, ExitStatus};
+use libsystemd::logging::{self, Priority};
+use regex::Regex;
 
 #[derive(Clone, Copy)]
 pub enum FormatType {
@@ -478,5 +481,204 @@ impl MDevType {
         }
 
         Ok(serde_json::json!({ &self.typename: jsonobj }))
+    }
+}
+
+pub struct Callout<'a> {
+    mdev: MDev<'a>,
+    state: &'a str,
+    conf: String,
+    script: PathBuf,
+    sname: String,
+}
+
+impl<'a> Callout<'a> {
+    pub fn new(mdev: MDev<'a>) -> Callout<'a> {
+        Callout {
+            mdev: mdev,
+            state: "none",
+            conf: String::new(),
+            script: PathBuf::new(),
+            sname: String::new(),
+        }
+    }
+
+    pub fn set_state(&mut self, state: &'a str) {
+        self.state = state;
+    }
+
+    fn invoke_script<P: AsRef<Path>>(&mut self, script: P, event: &str, action: &str, stderr: bool, stdout: bool, autostart: bool) -> Result<ExitStatus> {
+        let mut cmd = Command::new(script.as_ref().as_os_str());
+        if event == "notify" {
+            cmd.arg("-e")
+                .arg(event)
+                .arg("-a")
+                .arg(action)
+                .arg("-s")
+                .arg(&self.state)
+                .arg("-u")
+                .arg(self.mdev.uuid.to_string())
+                .arg("-p")
+                .arg(self.mdev.parent.as_ref().unwrap())
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        } else {
+            cmd.arg("-t")
+                .arg(self.mdev.mdev_type.as_ref().unwrap())
+                .arg("-e")
+                .arg(event)
+                .arg("-a")
+                .arg(action)
+                .arg("-s")
+                .arg(&self.state)
+                .arg("-u")
+                .arg(self.mdev.uuid.to_string())
+                .arg("-p")
+                .arg(self.mdev.parent.as_ref().unwrap())
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped());
+        }
+
+        let mut child = cmd.spawn()?;
+
+        if let Some(mut child_stdin) = child.stdin.take() {
+            child_stdin
+                .write_all(&self.conf.as_bytes())
+                .with_context(|| "Failed to write to stdin of command")?;
+        }
+
+        let output = child.wait_with_output()?;
+
+        self.print_output(script, output, stderr, stdout, autostart)
+    }
+
+    fn print_output<P: AsRef<Path>>(&mut self, script: P, output: Output, stderr: bool, stdout: bool, autostart: bool) -> Result<ExitStatus> {
+        self.sname = script.as_ref().file_name().unwrap().to_str().unwrap().to_string();
+
+        if stderr {
+            let st = String::from_utf8_lossy(&output.stderr);
+            if !st.is_empty() {
+                let s = format!("{}: {}", &self.sname, st);
+                eprint!("{}", &s);
+
+                if autostart {
+                    let _ = logging::journal_print(Priority::Warning, &s);
+                }
+            }
+        }
+        if stdout {
+            let st = String::from_utf8_lossy(&output.stdout);
+            if !st.is_empty() {
+                let s = format!("{}: {}", &self.sname, st);
+                print!("{}", &s);
+
+                if autostart {
+                    let _ = logging::journal_print(Priority::Warning, &s);
+                }
+            }
+        }
+
+        Ok(output.status)
+    }
+
+    pub fn callout(&mut self, event: &str, action: &str) -> Result<()> {
+        if self.conf.is_empty() {
+            self.conf = self.mdev.to_json(false)?.to_string();
+        }
+
+        let mut rc = Some(0);
+
+        let dir = self.mdev.env.callout_script_base();
+        if dir.read_dir()?.count() == 0 {
+            return Ok(());
+        }
+
+        if self.script.to_str().unwrap().is_empty() {
+            for s in dir.read_dir()? {
+                let path = &s?.path();
+                let res = self.invoke_script(path, event, action, true, false, self.mdev.autostart);
+                rc = res?.code();
+                if rc != Some(2) {
+                    self.script = path.clone();
+                    break;
+                }
+            }
+        } else {
+            let res = self.invoke_script(self.script.clone(), event, action, true, false, self.mdev.autostart);
+            rc = res?.code();
+        }
+
+        match rc {
+            Some(0) => Ok(()),
+            _ => Err(anyhow!("aborting command due to results from callout script {:?}", self.script)),
+        }
+    }
+
+    pub fn callout_notify(&mut self, event: &str, action: &str) -> Result<()> {
+        let dir = self.mdev.env.callout_notification_base();
+
+        if dir.read_dir()?.count() == 0 {
+            return Ok(());
+        }
+
+        for s in dir.read_dir()? {
+            let path = &s?.path();
+            let _ = self.invoke_script(path, event, action, true, true, self.mdev.autostart);
+        }
+
+        Ok(())
+    }
+
+    pub fn callout_get(&mut self, event: &str, action: &str) -> Result<Vec<String>> {
+        let mut v: Vec<String> = Vec::new();
+        let mut st = String::new();
+
+        let dir = self.mdev.env.callout_script_base();
+
+        if dir.read_dir()?.count() == 0 {
+            return Ok(v);
+        }
+
+        for s in dir.read_dir()? {
+            let path = &s?.path();
+            let cmd = Command::new(path.as_os_str())
+                .arg("-t")
+                .arg(self.mdev.mdev_type.as_ref().unwrap())
+                .arg("-e")
+                .arg(event)
+                .arg("-a")
+                .arg(action)
+                .arg("-s")
+                .arg("none")
+                .arg("-u")
+                .arg(self.mdev.uuid.to_string())
+                .arg("-p")
+                .arg(self.mdev.parent.as_ref().unwrap())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()?;
+
+            let output = cmd.wait_with_output();
+
+            let rc = output.as_ref().unwrap().status.code();
+            if rc != Some(2) {
+                self.script = path.clone();
+                if output.as_ref().unwrap().status.success() {
+                    st = String::from_utf8_lossy(&output.as_ref().unwrap().stdout).to_string();
+                    break;
+                } else {
+                    return Err(anyhow!("failed to get attributes from {:?}", self.script));
+                }
+            }
+        }
+
+        let re = Regex::new(r"\w+").unwrap();
+        for cap in re.captures_iter(&st) {
+            v.push(cap[0].to_string());
+        }
+
+        Ok(v)
     }
 }

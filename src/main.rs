@@ -133,12 +133,26 @@ fn define_command(
 ) -> Result<()> {
     debug!("Defining mdev {:?}", uuid);
 
-    let dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
-    dev.define().map(|_| {
-        if uuid.is_none() {
-            println!("{}", dev.uuid.to_hyphenated());
+    let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
+
+    let p = env.mdev_base().join(dev.uuid.to_string());
+    if p.exists() {
+        match invoke_callout_get(&mut dev) {
+            Ok(_) =>
+                invoke_with_callout(&mut dev, "define", |dev| dev.define()).map(|_| {
+                    if uuid.is_none() {
+                        println!("{}", dev.uuid.to_hyphenated());
+                    }
+                }),
+            Err(e) => Err(e)
         }
-    })
+    } else {
+        invoke_with_callout(&mut dev, "define", |dev| dev.define()).map(|_| {
+            if uuid.is_none() {
+                println!("{}", dev.uuid.to_hyphenated());
+            }
+        })
+    }
 }
 
 /// Implementation of the `mdevctl undefine` command
@@ -150,7 +164,7 @@ fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            child.undefine()?;
+            let _ = invoke_with_callout(&mut child.clone(), "undefine", |_dev| child.undefine());
         }
     }
     Ok(())
@@ -193,7 +207,7 @@ fn modify_command(
         }
     }
 
-    dev.write_config()
+    invoke_with_callout(&mut dev, "modify", |dev| dev.write_config())
 }
 
 /// convert 'start' command arguments into a MDev struct
@@ -287,7 +301,8 @@ fn start_command(
     jsonfile: Option<PathBuf>,
 ) -> Result<()> {
     let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
-    dev.start(uuid.is_none())
+
+    invoke_with_callout(&mut dev, "start", |dev| dev.start(uuid.is_none()))
 }
 
 /// Implementation of the `mdevctl stop` command
@@ -295,7 +310,8 @@ fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
-    dev.stop()
+
+    invoke_with_callout(&mut dev, "stop", |dev| dev.stop())
 }
 
 /// convenience function to lookup a defined device by uuid and parent
@@ -469,6 +485,10 @@ fn list_command_helper(
                     }
 
                     let _ = dev.load_definition();
+
+                    if !dev.is_defined() {
+                        let _ = invoke_callout_get(&mut dev);
+                    }
 
                     let devparent = dev.parent()?;
                     if !devices.contains_key(devparent) {
@@ -659,7 +679,7 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = child.start(false) {
+                if let Err(e) = invoke_with_callout(child, "start", |child| child.start(false)) {
                     for x in e.chain() {
                         warn!("{}", x);
                     }
@@ -667,6 +687,44 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
             }
         }
     }
+    Ok(())
+}
+
+fn invoke_with_callout<F>(dev: &mut MDev, action: &str, mut func: F) -> Result<()>
+where F: FnMut(&mut MDev) -> Result<()>, {
+    let mut c = Callout::new(dev.clone());
+
+    let res = match c.callout("pre", action) {
+      Ok(_) => {
+        let tmp_res = func(dev);
+        match tmp_res {
+            Ok(_) => {
+                c.set_state("success")
+            }
+            Err(_) => {
+                c.set_state("failure")
+            }
+        }
+
+        let _ = c.callout("post", action);
+        tmp_res
+      }
+      Err(e) => Err(e)
+    };
+
+    let _ = c.callout_notify("notify", action);
+    res
+}
+
+fn invoke_callout_get(dev: &mut MDev) -> Result<()> {
+    let mut c = Callout::new(dev.clone());
+
+    let vec = c.callout_get("get", "attributes")?;
+
+    for i in (0..vec.len()).step_by(2) {
+        dev.add_attribute(vec[i].clone(), vec[i+1].clone(), None)?;
+    }
+
     Ok(())
 }
 

@@ -390,12 +390,6 @@ e2e73122-cc39-40ee-89eb-b0a47d334cae matrix vfio_ap-passthrough manual
     @{2}: {"assign_domain":"0xff"}
 .EE
 
-.SH FILES
-\fI/etc/mdevctl.d/*\fR
-
-Configuration files are in one subdirectory per parent device and named
-by UUID.
-
 .SH "CONFIGURATION FILE FORMAT"
 
 Configuration files are in JSON. Attributes in \fB"attrs"\fR are optional.
@@ -414,6 +408,186 @@ Configuration files are in JSON. Attributes in \fB"attrs"\fR are optional.
   ]
 }
 .EE
+
+.SH EXTERNAL SCRIPTS FOR DEVICE EVENTS
+
+.SS SYNOPSIS
+<CONFIG> | SCRIPT <\fB-t=\fR\fItype\fR \fB-e=\fR\fIevent\fR
+\fB-a=\fR\fIaction\fR \fB-s=\fR\fIstatus\fR \fB-u=\fR\fIUUID\fR
+\fB-p=\fR\fIparent\fR>
+
+.SS DESCRIPTION
+
+mdevctl supports invoking external scripts to handle additional device-specific
+configuration and event reporting. These scripts are invoked by mdevctl at
+various points during command execution depending on the "event" type and an
+"action". The scripts are provided a "status" flag signifying the success
+or failure of the respective mdevctl command. For pre-command and
+get-attributes call-outs, a status of "none" will be reported as the command
+has yet to complete. The device's "TYPE", "UUID", "PARENT" will also be
+provided, and the device's JSON configuration is conveyed via standard input.
+
+These scripts are invoked before and after an mdevctl's "primary command
+execution" (e.g. writing the device configuration file during define, or
+activating a device during start).
+
+All errors are redirected to stderr (except for auto-start call-out errors,
+which are reported to the system log).
+
+Essentially, the procedure in mdevctl looks like this:
+
+.RS
+.IP "1. command-line parsing & setup"
+.IP "2. invoke pre-command call-out"
+.IP "3. primary command execution*"
+.IP "4. invoke post-command call-out*"
+.IP "5. invoke notifier"
+.IP "* step is skipped if 2 fails."
+.RE
+
+.SS CALL-OUT EVENTS
+Call-out event scripts are invoked with the following parameters below. For
+"pre", "post", and "get" call-outs, the "TYPE" parameter must be checked by
+the script to ensure the device type is supported. The script must return
+error code 2 if it does not support the device type. mdevctl will attempt
+the next script in the callouts directory until either a different return
+code is observed or all scripts have been exhausted.
+
+.PP
+\fBPre-Command: \fR
+<\fICONFIG\fR> | SCRIPT \fR
+<\fB-t=\fR\fITYPE\fR \fB-e=\fR\fI"pre"\fR \fB-a=\fR\fIACTION\fR
+\fB-s=\fR\fI"none"\fR \fB-u=\fR\fIUUID\fR \fB-p=\fR\fIPARENT\fR>
+.RS 4
+
+A pre-command call-out is invoked once prior to primary command execution.
+Action is a string denoting the mdevctl command. Status will always be "none".
+
+Any non-zero return code (exempting 2) will prevent mdevctl from
+performing the primary command execution, and mdevctl will abort early.
+
+A notification event will follow only if an error occurred.
+
+This event is not supported for the \fBlist\fR, \fBtypes\fR, or \fBversion\fR
+commands.
+.RE
+
+.PP
+\fBPost-Command: \fR
+<\fICONFIG\fR> | SCRIPT \fR
+<\fB-t=\fR\fITYPE\fR \fB-e=\fR\fI"post"\fR \fB-a=\fR\fIACTION\fR
+\fB-s=\fR\fI"success"\fR|\fI"failure"\fR \fB-u=\fR\fIUUID\fR
+\fB-p=\fR\fIPARENT\fR>
+.RS 4
+
+A post-command call-out is invoked once after to primary command execution.
+Action is a string denoting the mdevctl command. Status will be "success" if
+mdevctl was able to finish primary command execution successfully, or "failure"
+otherwise.
+
+A non-zero return code is ignored.
+
+A notification event will always follow a post-command call-out.
+
+This event is not supported for the \fBlist\fR, \fBtypes\fR, or \fBversion\fR
+commands.
+.RE
+
+.PP
+\fBGet-attributes: \fR
+SCRIPT \fR
+<\fB-t=\fR\fITYPE\fR \fB-e=\fR\fI"get"\fR \fB-a=\fR\fI"attributes"\fR
+\fB-s=\fR\fI"none"\fR \fB-u=\fR\fIUUID\fR \fB-p=\fR\fIPARENT\fR>
+.RS 4
+
+A get call-out is invoked during a \fBdefine\fR and \fBlist\fR command to
+acquire device attributes of an active device. Action is the string
+"attributes". Status will be "none". Note that, unlike other call-outs,
+get-attributes does not expect a device config on stdin.
+
+For \fBdefine\fR, a non-zero return code will disrupt the define command
+entirely.
+
+For \fblist\fR, any return code will be ignored.
+
+A script must return a JSON formatted array of device attributes. Example
+output:
+
+.EX
+[
+    {
+        \fI"attribute0"\fR: \fI"VALUE"\fR
+    },
+    {
+        \fI"attribute1"\fR: \fI"VALUE"\fR
+    }
+]
+.EE
+.RE
+
+.SS NOTIFICATION EVENT
+Notification event scripts may be used to signal the state of the mediated
+device or the status of an mdevctl command to other programs / loggers. A
+notification event is invoked with the following parameters:
+
+.PP
+\fBNotifier: \fR
+<\fICONFIG\fR> | SCRIPT \fR
+<\fB-e=\fR\fI"notify"\fR \fB-a=\fR\fIACTION\fR
+\fB-s=\fR\fI"none"\fR|\fI"success"\fR|\fI"failure"\fR
+\fB-u=\fR\fIUUID\fR \fB-p=\fR\fIPARENT\fR>
+.RS 4
+
+A notify call-out is invoked once either after a pre-command call-out failure,
+or after a post-command call-out. Action is a string denoting the mdevctl
+command. If following a pre-command call-out, then status will be "none". If
+following a post-command call-out, then status will be "success" if mdevctl
+was able to finish primary command execution successfully, or "failure"
+otherwise.
+
+All installed notification scripts will be invoked during a notificaiton event.
+
+A non-zero return code is ignored.
+
+This event is not supported for the \fBlist\fR, \fBtypes\fR, or \fBversion\fR
+commands.
+.RE
+
+.SS AUTO-START CALL-OUTS
+For each device set to start automatically during system boot, mdevctl will
+invoke the pre- and post-command callouts. Action is the string "start".
+
+Return code and notification event behavior is the same as the pre/post-command
+call-outs, except any error reported by a script will disrupt the auto-start
+for that particular device and the message will be reported to the system log.
+
+Note that if a notification script is used to convey information to another
+program or daemon during the auto-start procedure, it is not guaranteed that
+the program will already be active prior to mdevctl's invocation (e.g.
+auto-start may occur before the libvirt daemon is activated).
+.RE
+
+.SS SCRIPT RETURN VALUES
+
+.RS
+.IP "0  if OK,
+.IP "1  if an error occurred,
+.IP "2  if the script does not support the device type
+.RE
+
+.SH FILES
+\fI/etc/mdevctl.d/*\fR
+
+Configuration files are in one subdirectory per parent device and named
+by UUID.
+
+\fI/etc/mdevctl.d/scripts.d/callouts/*\fR
+
+Scripts for pre/post/get call-out events.
+
+\fI/etc/mdevctl.d/scripts.d/notifiers/*\fR
+
+Scripts for notification call-out events.
 
 .SH "SEE ALSO"
 \fBudev\fR(7)
