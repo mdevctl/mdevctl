@@ -37,7 +37,7 @@ impl Environment for TestEnvironment {
 
 impl TestEnvironment {
     pub fn new(testname: &str, testcase: &str) -> TestEnvironment {
-        let path: PathBuf = [TEST_DATA_DIR, testname, testcase].iter().collect();
+        let path: PathBuf = [TEST_DATA_DIR, testname].iter().collect();
         let scratchdir = TempDir::new(format!("mdevctl-{}", testname).as_str()).unwrap();
         let test = TestEnvironment {
             datapath: path,
@@ -112,6 +112,40 @@ impl TestEnvironment {
 
         (parentdir, parenttypedir)
     }
+
+    fn compare_to_file(&self, filename: &str, actual: &str) {
+        let path = self.datapath.join(filename);
+        let flag = get_flag(REGEN_FLAG);
+        if flag {
+            regen(&path, actual).expect("Failed to regenerate expected output");
+        }
+        let expected = fs::read_to_string(path).unwrap_or_else(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                println!(
+                    "File {:?} not found, run tests with {}=1 to automatically \
+                         generate expected output",
+                    filename, REGEN_FLAG
+                );
+            }
+            Default::default()
+        });
+
+        assert_eq!(expected, actual);
+    }
+
+    fn load_from_json<'a>(&'a self, uuid: &str, parent: &str, filename: &str) -> Result<MDev<'a>> {
+        let path = self.datapath.join(filename);
+        let uuid = Uuid::parse_str(uuid);
+        assert!(uuid.is_ok());
+        let uuid = uuid.unwrap();
+        let mut dev = MDev::new(self, uuid);
+
+        let jsonstr = fs::read_to_string(path)?;
+        let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
+        dev.load_from_json(parent.to_string(), &jsonval)?;
+
+        Ok(dev)
+    }
 }
 
 fn get_flag(varname: &str) -> bool {
@@ -140,53 +174,21 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
 
 const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
 
-fn compare_to_file(filename: &PathBuf, actual: &str) {
-    let flag = get_flag(REGEN_FLAG);
-    if flag {
-        regen(filename, actual).expect("Failed to regenerate expected output");
-    }
-    let expected = fs::read_to_string(filename).unwrap_or_else(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            println!(
-                "File {:?} not found, run tests with {}=1 to automatically \
-                         generate expected output",
-                filename, REGEN_FLAG
-            );
-        }
-        Default::default()
-    });
-
-    assert_eq!(expected, actual);
-}
-
-fn load_from_json<'a>(
-    env: &'a dyn Environment,
-    uuid: &str,
-    parent: &str,
-    filename: &PathBuf,
-) -> Result<MDev<'a>> {
-    let uuid = Uuid::parse_str(uuid);
-    assert!(uuid.is_ok());
-    let uuid = uuid.unwrap();
-    let mut dev = MDev::new(env, uuid);
-
-    let jsonstr = fs::read_to_string(filename)?;
-    let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
-    dev.load_from_json(parent.to_string(), &jsonval)?;
-
-    Ok(dev)
-}
-
-fn test_load_json_helper(uuid: &str, parent: &str) {
+fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
     let test = TestEnvironment::new("load-json", uuid);
-    let infile = test.datapath.join(format!("{}.in", uuid));
-    let outfile = test.datapath.join(format!("{}.out", uuid));
 
-    let dev = load_from_json(&test, uuid, parent, &infile).unwrap();
+    let res = test.load_from_json(uuid, parent, &format!("{}.in", uuid));
+    if expect == Expect::Fail {
+        info!("{:?}", res);
+        res.expect_err("Expected command to fail");
+        return;
+    }
+
+    let dev = res.expect("Command failed unexpectedly");
     let jsonval = dev.to_json(false).unwrap();
     let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
-    compare_to_file(&outfile, &jsonstr);
+    test.compare_to_file(&format!("{}.out", uuid), &jsonstr);
     assert_eq!(uuid, dev.uuid.to_hyphenated().to_string());
     assert_eq!(Some(parent.to_string()), dev.parent);
 }
@@ -195,9 +197,44 @@ fn test_load_json_helper(uuid: &str, parent: &str) {
 fn test_load_json() {
     init();
 
-    test_load_json_helper("c07ab7b2-8aa2-427a-91c6-ffc949bb77f9", "0000:00:02.0");
-    test_load_json_helper("783e6dbb-ea0e-411f-94e2-717eaad438bf", "0001:00:03.1");
-    test_load_json_helper("5269fe7a-18d1-48ad-88e1-3fda4176f536", "0000:00:03.0");
+    test_load_json_helper(
+        "c07ab7b2-8aa2-427a-91c6-ffc949bb77f9",
+        "0000:00:02.0",
+        Expect::Pass,
+    );
+    test_load_json_helper(
+        "783e6dbb-ea0e-411f-94e2-717eaad438bf",
+        "0001:00:03.1",
+        Expect::Pass,
+    );
+    test_load_json_helper(
+        "5269fe7a-18d1-48ad-88e1-3fda4176f536",
+        "0000:00:03.0",
+        Expect::Pass,
+    );
+    test_load_json_helper(
+        "5269fe7a-18d1-48ad-88e1-3fda4176f536",
+        "0000:00:03.0",
+        Expect::Pass,
+    );
+    // json file has malformed attributes - an array of one object with multiple fields
+    test_load_json_helper(
+        "b6f7e33f-ea28-4f9d-8c42-797ff0ec2888",
+        "0000:00:03.0",
+        Expect::Fail,
+    );
+    // json file has malformed attributes - an array of strings
+    test_load_json_helper(
+        "fe7a39db-973b-47b4-9b77-1d7b97267d59",
+        "0000:00:03.0",
+        Expect::Fail,
+    );
+    // json file has malformed attributes - no array
+    test_load_json_helper(
+        "37ccb149-a0ce-49e3-8391-a952ef07bdc2",
+        "0000:00:03.0",
+        Expect::Fail,
+    );
 }
 
 fn test_define_helper<F>(
@@ -223,7 +260,6 @@ fn test_define_helper<F>(
 
     setupfn(&test);
 
-    let expectedfile = test.datapath.join("expected");
     let def = define_command_helper(&test, uuid, auto, parent, mdev_type, jsonfile);
     if expect == Expect::Fail {
         def.expect_err("expected define command to fail");
@@ -237,7 +273,7 @@ fn test_define_helper<F>(
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    compare_to_file(&expectedfile, &filecontents);
+    test.compare_to_file(&format!("{}.expected", testname), &filecontents);
 }
 
 #[test]
@@ -297,7 +333,7 @@ fn test_define() {
         false,
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
-        Some(PathBuf::from("in.json")),
+        Some(PathBuf::from("defined.json")),
         |_| {},
     );
     // specifying via jsonfile properly
@@ -308,7 +344,7 @@ fn test_define() {
         false,
         Some(DEFAULT_PARENT.to_string()),
         None,
-        Some(PathBuf::from("in.json")),
+        Some(PathBuf::from("defined.json")),
         |_| {},
     );
     // If uuid is already active, specifying mdev_type will result in an error
@@ -398,7 +434,6 @@ fn test_modify_helper<F>(
 {
     use crate::modify_command;
     let test = TestEnvironment::new("modify", testname);
-    let expectedfile = test.datapath.join("expected");
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
@@ -426,7 +461,7 @@ fn test_modify_helper<F>(
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    compare_to_file(&expectedfile, &filecontents);
+    test.compare_to_file(&format!("{}.expected", testname), &filecontents);
 }
 
 #[test]
@@ -706,7 +741,7 @@ fn test_start_helper<F>(
     }
     let mut dev = dev.expect("Couldn't run start command");
 
-    let result = dev.start(false);
+    let result = dev.start();
     if expect_execute == Expect::Fail {
         result.expect_err("start command should have failed");
         return;
@@ -975,44 +1010,45 @@ fn test_invalid_files() {
     assert!(result.is_ok());
 }
 
-fn test_list_helper(
-    test: &TestEnvironment,
+fn test_list_helper<F>(
     subtest: &str,
     expect: Expect,
     defined: bool,
     verbose: bool,
     uuid: Option<String>,
     parent: Option<String>,
-) {
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
     use crate::list_command_helper;
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
+    let test = TestEnvironment::new("list", "default");
 
-    let expectedtext = test.datapath.join(format!("{}.text", subtest));
-    let res = list_command_helper(test, defined, false, verbose, uuid, parent.clone());
+    setupfn(&test);
+
+    let res = list_command_helper(&test, defined, false, verbose, uuid, parent.clone());
     if expect == Expect::Fail {
         res.expect_err("expected list command to fail");
         return;
     }
 
     let output = res.expect("list command failed unexpectedly");
-    compare_to_file(&expectedtext, &output);
+    test.compare_to_file(&format!("{}.text", subtest), &output);
 
-    let expectedjson = test.datapath.join(format!("{}.json", subtest));
-    let res = list_command_helper(test, defined, true, verbose, uuid, parent.clone());
+    let res = list_command_helper(&test, defined, true, verbose, uuid, parent.clone());
     if expect == Expect::Fail {
         res.expect_err("expected list command to fail");
         return;
     }
 
     let output = res.expect("list command failed unexpectedly");
-    compare_to_file(&expectedjson, &output);
+    test.compare_to_file(&format!("{}.json", subtest), &output);
 }
 
 #[test]
 fn test_list() {
     init();
-
-    let test = TestEnvironment::new("list", "default");
 
     const UUID: &[&str] = &[
         "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9",
@@ -1023,164 +1059,183 @@ fn test_list() {
     ];
     const PARENT: &[&str] = &["0000:00:02.0", "0000:00:03.0"];
     const MDEV_TYPE: &[&str] = &["arbitrary_type1", "arbitrary_type2"];
+
     // first test with an empty environment -- nothing defined, nothing active
-    test_list_helper(&test, "active-none", Expect::Pass, false, false, None, None);
-    test_list_helper(&test, "defined-none", Expect::Pass, true, false, None, None);
+    test_list_helper(
+        "active-none",
+        Expect::Pass,
+        false,
+        false,
+        None,
+        None,
+        |_| {},
+    );
+    test_list_helper(
+        "defined-none",
+        Expect::Pass,
+        true,
+        false,
+        None,
+        None,
+        |_| {},
+    );
 
     // now setup test environment with some active devices and some defined devices. Include
     // multiple parents, multiple types, some parents with multiple devices, some with same UUID on
     // different parents, etc
-    test.populate_active_device(UUID[0], PARENT[0], MDEV_TYPE[0]);
-    test.populate_active_device(UUID[1], PARENT[1], MDEV_TYPE[1]);
-    test.populate_defined_device(UUID[2], PARENT[0], "device2.json");
-    test.populate_defined_device(UUID[3], PARENT[1], "device1.json");
-    test.populate_defined_device(UUID[3], PARENT[0], "device1.json");
+    let setup = |test: &TestEnvironment| {
+        test.populate_active_device(UUID[0], PARENT[0], MDEV_TYPE[0]);
+        test.populate_active_device(UUID[1], PARENT[1], MDEV_TYPE[1]);
+        test.populate_defined_device(UUID[2], PARENT[0], "device2.json");
+        test.populate_defined_device(UUID[3], PARENT[1], "device1.json");
+        test.populate_defined_device(UUID[3], PARENT[0], "device1.json");
+    };
 
-    test_list_helper(&test, "active", Expect::Pass, false, false, None, None);
+    test_list_helper("active", Expect::Pass, false, false, None, None, setup);
     test_list_helper(
-        &test,
         "active-verbose",
         Expect::Pass,
         false,
         true,
         None,
         None,
+        setup,
     );
     test_list_helper(
-        &test,
         "active-parent",
         Expect::Pass,
         false,
         false,
         None,
         Some(PARENT[0].to_string()),
+        setup,
     );
     test_list_helper(
-        &test,
         "active-parent-verbose",
         Expect::Pass,
         false,
         true,
         None,
         Some(PARENT[0].to_string()),
+        setup,
     );
     test_list_helper(
-        &test,
         "active-uuid",
         Expect::Pass,
         false,
         false,
         Some(UUID[0].to_string()),
         None,
+        setup,
     );
     test_list_helper(
-        &test,
         "active-uuid-verbose",
         Expect::Pass,
         false,
         true,
         Some(UUID[0].to_string()),
         None,
+        setup,
     );
     test_list_helper(
-        &test,
         "active-uuid-parent",
         Expect::Pass,
         false,
         false,
         Some(UUID[0].to_string()),
         Some(PARENT[0].to_string()),
+        setup,
     );
     test_list_helper(
-        &test,
         "active-uuid-parent-verbose",
         Expect::Pass,
         false,
         true,
         Some(UUID[0].to_string()),
         Some(PARENT[0].to_string()),
+        setup,
     );
-    test_list_helper(&test, "defined", Expect::Pass, true, false, None, None);
+    test_list_helper("defined", Expect::Pass, true, false, None, None, setup);
     test_list_helper(
-        &test,
         "defined-verbose",
         Expect::Pass,
         true,
         true,
         None,
         None,
+        setup,
     );
     test_list_helper(
-        &test,
         "defined-parent",
         Expect::Pass,
         true,
         false,
         None,
         Some(PARENT[0].to_string()),
+        setup,
     );
     test_list_helper(
-        &test,
         "defined-parent-verbose",
         Expect::Pass,
         true,
         true,
         None,
         Some(PARENT[0].to_string()),
+        setup,
     );
     test_list_helper(
-        &test,
         "defined-uuid",
         Expect::Pass,
         true,
         false,
         Some(UUID[3].to_string()),
         None,
+        setup,
     );
     test_list_helper(
-        &test,
         "defined-uuid-verbose",
         Expect::Pass,
         true,
         true,
         Some(UUID[3].to_string()),
         None,
+        setup,
     );
     test_list_helper(
-        &test,
         "defined-uuid-parent",
         Expect::Pass,
         true,
         false,
         Some(UUID[3].to_string()),
         Some(PARENT[0].to_string()),
+        setup,
     );
     test_list_helper(
-        &test,
         "defined-uuid-parent-verbose",
         Expect::Pass,
         true,
         true,
         Some(UUID[3].to_string()),
         Some(PARENT[0].to_string()),
+        setup,
     );
     test_list_helper(
-        &test,
         "no-match-uuid",
         Expect::Pass,
         true,
         true,
         Some("466983a3-1240-4543-8d02-01c29a08fb0c".to_string()),
         None,
+        setup,
     );
     test_list_helper(
-        &test,
         "no-match-parent",
         Expect::Pass,
         true,
         true,
         None,
         Some("nonexistent".to_string()),
+        setup,
     );
 }
 
@@ -1193,7 +1248,6 @@ fn test_types_helper(
     use crate::types_command_helper;
 
     // test text output
-    let expectedtext = test.datapath.join(format!("{}.text", subtest));
     let res = types_command_helper(test, parent.clone(), false);
     if expect == Expect::Fail {
         res.expect_err("expected types command to fail");
@@ -1201,10 +1255,9 @@ fn test_types_helper(
     }
 
     let output = res.expect("types command failed unexpectedly");
-    compare_to_file(&expectedtext, &output);
+    test.compare_to_file(&format!("{}.text", subtest), &output);
 
     // test JSON output
-    let expectedjson = test.datapath.join(format!("{}.json", subtest));
     let res = types_command_helper(test, parent.clone(), true);
     if expect == Expect::Fail {
         res.expect_err("expected types command to fail");
@@ -1212,7 +1265,7 @@ fn test_types_helper(
     }
 
     let output = res.expect("types command failed unexpectedly");
-    compare_to_file(&expectedjson, &output);
+    test.compare_to_file(&format!("{}.json", subtest), &output);
 }
 
 #[test]
