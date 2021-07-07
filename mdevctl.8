@@ -105,6 +105,12 @@ Increase output verbosity, currently only adds attribute output to the
 \fBlist\fR command.
 .RE
 
+.PP
+\fB-V|--version\fR
+.RS 4
+Print mdevctl version.
+.RE
+
 .SH COMMANDS
 
 .PP
@@ -184,12 +190,6 @@ Undefine, or remove the configuration for an mdev device, specified by
 its UUID and optionally its parent. If a UUID exists for multiple
 parents, all of them will be removed unless restricted to a single parent.
 Running devices are unaffected by this command.
-.RE
-
-.PP
-\fBversion\fR
-.RS 4
-Print mdevctl version.
 .RE
 
 .SH "NOTE ON DEVICE SPECIFICATION"
