@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempdir::TempDir;
+use tempfile::Builder;
+use tempfile::TempDir;
 use uuid::Uuid;
 
 use crate::environment::Environment;
@@ -38,7 +39,7 @@ impl Environment for TestEnvironment {
 impl TestEnvironment {
     pub fn new(testname: &str, testcase: &str) -> TestEnvironment {
         let path: PathBuf = [TEST_DATA_DIR, testname].iter().collect();
-        let scratchdir = TempDir::new(format!("mdevctl-{}", testname).as_str()).unwrap();
+        let scratchdir = Builder::new().prefix("mdevctl-test").tempdir().unwrap();
         let test = TestEnvironment {
             datapath: path,
             scratch: scratchdir,
