@@ -251,6 +251,8 @@ fn start_command_helper(
                         ));
                     }
                     Ordering::Equal => {
+                        // FIXME: use into_values() to consume the iterator and avoid cloning below
+                        // when we can require rust 1.54.0
                         let d = devs.values().flatten().next();
                         if let Some(d) = d {
                             // See https://github.com/mdevctl/mdevctl/issues/38
