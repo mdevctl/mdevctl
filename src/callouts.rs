@@ -36,6 +36,7 @@ impl Display for Event {
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub enum Action {
     Start,
     Stop,
@@ -43,6 +44,7 @@ pub enum Action {
     Undefine,
     Modify,
     Attributes,
+    Test, // used for tests only
 }
 
 impl Display for Action {
@@ -54,6 +56,7 @@ impl Display for Action {
             Action::Undefine => write!(f, "undefine"),
             Action::Modify => write!(f, "modify"),
             Action::Attributes => write!(f, "attributes"),
+            Action::Test => write!(f, "test"),
         }
     }
 }

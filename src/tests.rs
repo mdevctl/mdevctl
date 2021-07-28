@@ -8,6 +8,7 @@ use tempfile::Builder;
 use tempfile::TempDir;
 use uuid::Uuid;
 
+use crate::callouts::*;
 use crate::environment::Environment;
 use crate::logger::logger;
 use crate::mdev::MDev;
@@ -83,6 +84,16 @@ impl TestEnvironment {
 
         let typefile = devdir.join("mdev_type");
         symlink(&parenttypedir, &typefile).expect("Unable to setup mdev type");
+    }
+
+    // set up a script in the test environment to simulate a callout
+    fn populate_callout_script(&self, filename: &str) {
+        let calloutscriptdir: PathBuf = [TEST_DATA_DIR, "callouts"].iter().collect();
+        let calloutscript = calloutscriptdir.join(filename);
+        assert!(calloutscript.exists());
+
+        let dest = self.callout_script_base().join(filename);
+        fs::copy(calloutscript, dest).expect("Unable to copy callout script");
     }
 
     // set up a few files in the test environment to simulate a parent device that supports
@@ -1334,5 +1345,64 @@ fn test_types() {
         "parent-no-match",
         Expect::Pass,
         Some("missing".to_string()),
+    );
+}
+
+fn test_invoke_callout<F>(
+    testname: &str,
+    expect: Expect,
+    action: Action,
+    uuid: Uuid,
+    parent: &str,
+    mdev_type: &str,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("callouts", testname);
+    setupfn(&test);
+
+    let mut empty_mdev = MDev::new(&test, uuid);
+    empty_mdev.mdev_type = Some(mdev_type.to_string());
+    empty_mdev.parent = Some(parent.to_string());
+
+    let res = Callout::invoke(&mut empty_mdev, action, |_empty_mdev| Ok(()));
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
+}
+
+#[test]
+fn test_callouts() {
+    init();
+
+    const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+    const DEFAULT_TYPE: &str = "test_type";
+    const DEFAULT_PARENT: &str = "test_parent";
+    test_invoke_callout(
+        "test_callout_all_success",
+        Expect::Pass,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_all_fail",
+        Expect::Fail,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh");
+        },
     );
 }
