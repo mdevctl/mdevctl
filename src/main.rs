@@ -610,7 +610,7 @@ fn supported_types(
         }
     }
     for v in types.values_mut() {
-        v.sort_by_key(|t| t.typename.clone());
+        v.sort_by(|a, b| a.typename.cmp(&b.typename));
     }
     Ok(types)
 }
