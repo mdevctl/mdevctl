@@ -25,7 +25,7 @@ pub struct MDev<'a> {
     pub parent: Option<String>,
     pub mdev_type: Option<String>,
     pub attrs: Vec<(String, String)>,
-    env: &'a dyn Environment,
+    pub env: &'a dyn Environment,
 }
 
 impl<'a> MDev<'a> {

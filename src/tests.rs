@@ -48,6 +48,8 @@ impl TestEnvironment {
         fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
         fs::create_dir_all(test.persist_base()).expect("Unable to create persist_base");
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
+        fs::create_dir_all(test.callout_script_base())
+            .expect("Unable to create callout_script_base");
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }

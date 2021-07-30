@@ -21,6 +21,10 @@ pub trait Environment {
     fn parent_base(&self) -> PathBuf {
         self.root().join("sys/class/mdev_bus")
     }
+
+    fn callout_script_base(&self) -> PathBuf {
+        self.persist_base().join("scripts.d/callouts")
+    }
 }
 
 /// A default implementation of the Environment trait which uses '/' as the filesystem root.
