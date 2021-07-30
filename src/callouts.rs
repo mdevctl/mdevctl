@@ -12,6 +12,7 @@ use crate::mdev::*;
 pub enum Event {
     Pre,
     Post,
+    Notify,
 }
 
 impl Display for Event {
@@ -22,6 +23,9 @@ impl Display for Event {
             }
             Event::Post => {
                 write!(f, "post")
+            }
+            Event::Notify => {
+                write!(f, "notify")
             }
         }
     }
@@ -84,7 +88,7 @@ impl Callout {
     {
         let mut c = Callout::new();
 
-        c.callout(dev, Event::Pre, action).and_then(|_| {
+        let res = c.callout(dev, Event::Pre, action).and_then(|_| {
             let tmp_res = func(dev);
             c.state = match tmp_res {
                 Ok(_) => State::Success,
@@ -97,7 +101,10 @@ impl Callout {
             }
 
             tmp_res
-        })
+        });
+
+        let _ = c.notify(dev, action);
+        res
     }
 
     fn invoke_script<P: AsRef<Path>>(
@@ -225,5 +232,32 @@ impl Callout {
                 n
             )),
         }
+    }
+
+    fn notify(&mut self, dev: &mut MDev, action: Action) -> Result<()> {
+        let event = Event::Notify;
+        let dir = dev.env.callout_notification_base();
+
+        if !dir.is_dir() {
+            return Ok(());
+        }
+
+        for s in dir.read_dir()? {
+            let path = s?.path();
+
+            match self.invoke_script(dev, &path, event, action) {
+                Ok(output) => {
+                    if !output.status.success() {
+                        debug!("Error occurred when executing notify script {:?}", path);
+                    }
+                }
+                _ => {
+                    debug!("Failed to execute callout script {:?}", path);
+                    continue;
+                }
+            }
+        }
+
+        Ok(())
     }
 }

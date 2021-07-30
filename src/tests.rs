@@ -50,6 +50,8 @@ impl TestEnvironment {
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
         fs::create_dir_all(test.callout_script_base())
             .expect("Unable to create callout_script_base");
+        fs::create_dir_all(test.callout_notification_base())
+            .expect("Unable to create callout_notification_base");
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }

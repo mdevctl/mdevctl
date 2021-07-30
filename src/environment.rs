@@ -25,6 +25,10 @@ pub trait Environment {
     fn callout_script_base(&self) -> PathBuf {
         self.persist_base().join("scripts.d/callouts")
     }
+
+    fn callout_notification_base(&self) -> PathBuf {
+        self.persist_base().join("scripts.d/notifiers")
+    }
 }
 
 /// A default implementation of the Environment trait which uses '/' as the filesystem root.
