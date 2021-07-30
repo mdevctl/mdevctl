@@ -13,6 +13,7 @@ pub enum Event {
     Pre,
     Post,
     Notify,
+    Get,
 }
 
 impl Display for Event {
@@ -27,6 +28,9 @@ impl Display for Event {
             Event::Notify => {
                 write!(f, "notify")
             }
+            Event::Get => {
+                write!(f, "get")
+            }
         }
     }
 }
@@ -38,6 +42,7 @@ pub enum Action {
     Define,
     Undefine,
     Modify,
+    Attributes,
 }
 
 impl Display for Action {
@@ -48,6 +53,7 @@ impl Display for Action {
             Action::Define => write!(f, "define"),
             Action::Undefine => write!(f, "undefine"),
             Action::Modify => write!(f, "modify"),
+            Action::Attributes => write!(f, "attributes"),
         }
     }
 }
@@ -107,6 +113,52 @@ impl Callout {
         res
     }
 
+    pub fn get_attributes(dev: &mut MDev) -> Result<serde_json::Value> {
+        let event = Event::Get;
+        let action = Action::Attributes;
+        let c = Callout::new();
+        let dir = dev.env.callout_script_base();
+
+        if !dir.is_dir() {
+            return Ok(serde_json::Value::Null);
+        }
+
+        match c.invoke_first_matching_script(dev, dir, event, action) {
+            Some((path, output)) => {
+                if output.status.success() {
+                    debug!("Get attributes successfully from callout script");
+                    let mut st = String::from_utf8_lossy(&output.stdout).to_string();
+
+                    if st.is_empty() {
+                        return Ok(serde_json::Value::Null);
+                    }
+
+                    if &st == "[{}]" {
+                        debug!(
+                            "Attribute field for {} is empty",
+                            dev.uuid.to_hyphenated().to_string()
+                        );
+                        st = "[]".to_string();
+                    }
+
+                    serde_json::from_str(&st)
+                        .with_context(|| anyhow!("Unable to parse attributes from JSON"))
+                } else {
+                    c.print_err(&output, &path);
+
+                    return Err(anyhow!("failed to get attributes from {:?}", path));
+                }
+            }
+            None => {
+                debug!(
+                    "Device type {} unmatched by callout script",
+                    dev.mdev_type.as_ref().unwrap()
+                );
+                Ok(serde_json::Value::Null)
+            }
+        }
+    }
+
     fn invoke_script<P: AsRef<Path>>(
         &self,
         dev: &mut MDev,
@@ -139,12 +191,13 @@ impl Callout {
             .stderr(Stdio::piped());
 
         let mut child = cmd.spawn()?;
-
-        let conf = dev.to_json(false)?.to_string();
-        if let Some(mut child_stdin) = child.stdin.take() {
-            child_stdin
-                .write_all(conf.as_bytes())
-                .with_context(|| "Failed to write to stdin of command")?;
+        if event != Event::Get {
+            let conf = dev.to_json(false)?.to_string();
+            if let Some(mut child_stdin) = child.stdin.take() {
+                child_stdin
+                    .write_all(conf.as_bytes())
+                    .with_context(|| "Failed to write to stdin of command")?;
+            }
         }
 
         child.wait_with_output().map_err(anyhow::Error::from)

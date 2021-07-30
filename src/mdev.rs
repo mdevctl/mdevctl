@@ -123,6 +123,35 @@ impl<'a> MDev<'a> {
         Ok(())
     }
 
+    pub fn add_attributes(&mut self, attrs: &serde_json::Value) -> Result<()> {
+        if !attrs.is_array() && !attrs.is_null() {
+            return Err(anyhow!("attributes field is not an array"));
+        }
+
+        if let Some(attrarray) = attrs.as_array() {
+            if !attrarray.is_empty() {
+                for attr in attrarray {
+                    let attrobj = attr.as_object().ok_or_else(|| {
+                        anyhow!("invalid JSON format for attribute: not an object")
+                    })?;
+                    // attributes are represented by JSON objects with a single field.
+                    if attrobj.len() != 1 {
+                        return Err(anyhow!(
+                            "invalid JSON format for attribute: too many fields"
+                        ));
+                    }
+                    // get the key and value from the first (only) map entry
+                    if let Some((key, val)) = attrobj.iter().next() {
+                        let valstr = val.as_str().unwrap();
+                        self.attrs.push((key.to_string(), valstr.to_string()));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn load_from_json(&mut self, parent: String, json: &serde_json::Value) -> Result<()> {
         debug!(
             "Loading device '{:?}' from json (parent: {})",
@@ -153,26 +182,7 @@ impl<'a> MDev<'a> {
         let startval = json["start"].as_str();
         self.autostart = matches!(startval, Some("auto"));
 
-        if let Some(attrarray) = json["attrs"].as_array() {
-            if !attrarray.is_empty() {
-                for attr in attrarray {
-                    let attrobj = attr.as_object().ok_or_else(|| {
-                        anyhow!("invalid JSON format for attribute: not an object")
-                    })?;
-                    // attributes are represented by JSON objects with a single field.
-                    if attrobj.len() != 1 {
-                        return Err(anyhow!(
-                            "invalid JSON format for attribute: too many fields"
-                        ));
-                    }
-                    // get the key and value from the first (only) map entry
-                    if let Some((key, val)) = attrobj.iter().next() {
-                        let valstr = val.as_str().unwrap();
-                        self.attrs.push((key.to_string(), valstr.to_string()));
-                    }
-                }
-            }
-        };
+        self.add_attributes(&json["attrs"])?;
         debug!("loaded device {:?}", self);
 
         Ok(())

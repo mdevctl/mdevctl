@@ -137,6 +137,16 @@ fn define_command(
 
     let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
 
+    /*
+        Call Callout::get_attributes() when defining an active device without a config file.
+        This function allows callout script to acquire device-specific attributes from sysfs,
+        and populate the attrs field correspondingly before the device is defined in the system.
+        The device config file will contain the same attributes that were used to start this device。
+    */
+    if dev.active {
+        let attrs = Callout::get_attributes(&mut dev)?;
+        dev.add_attributes(&attrs)?;
+    }
     Callout::invoke(&mut dev, Action::Define, |dev| dev.define()).map(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.to_hyphenated());
@@ -478,6 +488,12 @@ fn list_command_helper(
                     }
 
                     let _ = dev.load_definition();
+
+                    if !dev.is_defined() {
+                        if let Ok(attrs) = Callout::get_attributes(&mut dev) {
+                            let _ = dev.add_attributes(&attrs);
+                        }
+                    }
 
                     let devparent = dev.parent()?;
                     if !devices.contains_key(devparent) {
