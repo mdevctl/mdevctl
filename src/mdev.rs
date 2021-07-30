@@ -207,9 +207,9 @@ impl<'a> MDev<'a> {
 
         let mut output = self.uuid.to_hyphenated().to_string();
         output.push(' ');
-        output.push_str(&self.parent()?);
+        output.push_str(self.parent()?);
         output.push(' ');
-        output.push_str(&self.mdev_type()?);
+        output.push_str(self.mdev_type()?);
         output.push(' ');
         output.push_str(match self.autostart {
             true => "auto",
@@ -350,7 +350,7 @@ impl<'a> MDev<'a> {
 
         debug!("Setting attributes for mdev {:?}", self.uuid);
         for (k, v) in self.attrs.iter() {
-            if let Err(e) = write_attr(&self.path(), &k, &v) {
+            if let Err(e) = write_attr(&self.path(), k, v) {
                 self.stop()?;
                 return Err(e);
             }
