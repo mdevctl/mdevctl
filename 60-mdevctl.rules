@@ -1,8 +1,8 @@
 # When registered with mdev, try to start any persistent devices. Note that
 # this uevent is not triggered on older kernels.
-ACTION=="change", ENV{MDEV_STATE}=="registered", TEST=="/etc/mdevctl.d/$kernel", RUN+="/bin/sh -c '/usr/sbin/mdevctl start-parent-mdevs %k'"
+ACTION=="change", ENV{MDEV_STATE}=="registered", TEST=="/etc/mdevctl.d/$kernel", RUN+="/bin/sh -c '{ /usr/sbin/mdevctl start-parent-mdevs %k 2>&3 | logger -t mdevctl; } 3>&1 1>&2 | logger -t mdevctl -p 2'"
 
 # For compatibility with kernels where mdev doesn't trigger the change uevent
 # on parent device registration, try to start mdevs when the device is added;
 # if the device is setup early this may still work.
-ACTION=="add", TEST=="/etc/mdevctl.d/$kernel", RUN+="/bin/sh -c '/usr/sbin/mdevctl start-parent-mdevs %k'"
+ACTION=="add", TEST=="/etc/mdevctl.d/$kernel", RUN+="/bin/sh -c '{ /usr/sbin/mdevctl start-parent-mdevs %k 2>&3 | logger -t mdevctl; } 3>&1 1>&2 | logger -t mdevctl -p 2'"

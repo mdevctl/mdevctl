@@ -668,7 +668,7 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = child.start() {
+                if let Err(e) = Callout::invoke(child, Action::Start, |child| child.start()) {
                     for x in e.chain() {
                         warn!("{}", x);
                     }
