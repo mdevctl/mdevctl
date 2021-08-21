@@ -1446,4 +1446,62 @@ fn test_callouts() {
             test.populate_callout_script("type-c.sh");
         },
     );
+    // Each pre/post function in the test script will check for
+    // a device type and parent with the command name appended
+    // to the end
+    test_invoke_callout(
+        "test_callout_params_define",
+        Expect::Pass,
+        Action::Define,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_define",
+        "test_type_define",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_modify",
+        Expect::Pass,
+        Action::Modify,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_modify",
+        "test_type_modify",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_start",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_start",
+        "test_type_start",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_stop",
+        Expect::Pass,
+        Action::Stop,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_stop",
+        "test_type_stop",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_undefine",
+        Expect::Pass,
+        Action::Undefine,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_undefine",
+        "test_type_undefine",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
 }
