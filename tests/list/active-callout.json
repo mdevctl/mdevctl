@@ -1,0 +1,30 @@
+[
+  {
+    "0000:00:02.0": [
+      {
+        "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9": {
+          "mdev_type": "arbitrary_type1",
+          "start": "manual",
+          "attrs": [
+            {
+              "attribute0": "VALUE"
+            }
+          ]
+        }
+      }
+    ],
+    "0000:00:03.0": [
+      {
+        "59e8b599-afdd-4766-a59e-415ef4f5a492": {
+          "mdev_type": "arbitrary_type2",
+          "start": "manual",
+          "attrs": [
+            {
+              "attribute0": "VALUE"
+            }
+          ]
+        }
+      }
+    ]
+  }
+]
