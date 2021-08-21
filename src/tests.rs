@@ -253,6 +253,30 @@ fn test_load_json() {
     );
 }
 
+fn test_define_command_callout<F>(
+    testname: &str,
+    expect: Expect,
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("define/callouts", testname);
+    setupfn(&test);
+
+    use crate::define_command;
+    let res = define_command(&test, uuid, false, parent, mdev_type, None);
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
+}
+
 fn test_define_helper<F>(
     testname: &str,
     expect: Expect,
@@ -428,6 +452,51 @@ fn test_define() {
         None,
         |test| {
             test.populate_defined_device(DEFAULT_UUID, DEFAULT_PARENT, "defined.json");
+        },
+    );
+
+    // test define with callouts
+    test_define_command_callout(
+        "define-with-callout-all-pass",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    test_define_command_callout(
+        "define-with-callout-all-fail",
+        Expect::Fail,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    // test define with get attributes
+    test_define_command_callout(
+        "define-with-callout-all-good-json",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
+            test.populate_callout_script("good-json.sh");
+        },
+    );
+    test_define_command_callout(
+        "define-with-callout-all-bad-json",
+        Expect::Fail,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
+            test.populate_callout_script("bad-json.sh");
         },
     );
 }
