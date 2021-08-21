@@ -802,6 +802,30 @@ fn test_undefine() {
     );
 }
 
+fn test_start_command_callout<F>(
+    testname: &str,
+    expect: Expect,
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("start", testname);
+    setupfn(&test);
+
+    use crate::start_command;
+    let res = start_command(&test, uuid, parent, mdev_type, None);
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
+}
+
 fn test_start_helper<F>(
     testname: &str,
     expect_setup: Expect,
@@ -1051,6 +1075,36 @@ fn test_start() {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
     );
+
+    test_start_command_callout(
+        "defined-multiple",
+        Expect::Pass,
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    test_start_command_callout(
+        "defined-multiple",
+        Expect::Fail,
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+
     // TODO: test attributes -- difficult because executing the 'start' command by writing to
     // the 'create' file in sysfs does not automatically create the device file structure in
     // the temporary test environment, so writing the sysfs attribute files fails.
