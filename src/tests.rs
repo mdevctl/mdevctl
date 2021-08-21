@@ -1376,6 +1376,33 @@ fn test_invoke_callout<F>(
     assert!(res.is_ok());
 }
 
+fn test_get_callout<F>(
+    testname: &str,
+    expect: Expect,
+    uuid: Uuid,
+    parent: &str,
+    mdev_type: &str,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("callouts", testname);
+    setupfn(&test);
+
+    let mut empty_mdev = MDev::new(&test, uuid);
+    empty_mdev.mdev_type = Some(mdev_type.to_string());
+    empty_mdev.parent = Some(parent.to_string());
+
+    let res = Callout::get_attributes(&mut empty_mdev);
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
+}
+
 #[test]
 fn test_callouts() {
     init();
@@ -1502,6 +1529,27 @@ fn test_callouts() {
         "test_type_undefine",
         |test| {
             test.populate_callout_script("params.sh");
+        },
+    );
+    // test the Get Attributes callouts
+    test_get_callout(
+        "test_callout_good_json",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("good-json.sh");
+        },
+    );
+    test_get_callout(
+        "test_callout_bad_json",
+        Expect::Fail,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("bad-json.sh");
         },
     );
 }
