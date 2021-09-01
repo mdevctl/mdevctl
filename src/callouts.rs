@@ -170,8 +170,9 @@ impl Callout {
         action: Action,
     ) -> Result<Output> {
         debug!(
-            "{} callout: executing {:?}",
-            event.to_string(),
+            "{}-{}: executing {:?}",
+            event,
+            action,
             script.as_ref().as_os_str()
         );
 
@@ -226,6 +227,12 @@ impl Callout {
         event: Event,
         action: Action,
     ) -> Option<(PathBuf, Output)> {
+        debug!(
+            "{}-{}: looking for a matching callout script for dev type '{}'",
+            event,
+            action,
+            dev.mdev_type.as_ref()?
+        );
         if dir.as_ref().read_dir().ok()?.count() == 0 {
             return None;
         }
@@ -236,13 +243,14 @@ impl Callout {
             match self.invoke_script(dev, &path, event, action).ok() {
                 Some(res) => {
                     if res.status.code().is_none() {
-                        warn!("Script was terminated by a signal");
+                        warn!("callout script {:?} was terminated by a signal", path);
                         continue;
                     } else if res.status.code() != Some(2) {
+                        debug!("found callout script {:?}", path);
                         return Some((path, res));
                     } else {
                         debug!(
-                            "Device type {} unmatched by callout script",
+                            "device type {} unmatched by callout script",
                             dev.mdev_type().ok()?
                         );
                     }
@@ -293,6 +301,10 @@ impl Callout {
     fn notify(&mut self, dev: &mut MDev, action: Action) -> Result<()> {
         let event = Event::Notify;
         let dir = dev.env.callout_notification_base();
+        debug!(
+            "{}-{}: executing notification scripts for device {}",
+            event, action, dev.uuid
+        );
 
         if !dir.is_dir() {
             return Ok(());
