@@ -8,6 +8,7 @@ use tempfile::Builder;
 use tempfile::TempDir;
 use uuid::Uuid;
 
+use crate::callouts::*;
 use crate::environment::Environment;
 use crate::logger::logger;
 use crate::mdev::MDev;
@@ -48,6 +49,10 @@ impl TestEnvironment {
         fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
         fs::create_dir_all(test.persist_base()).expect("Unable to create persist_base");
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
+        fs::create_dir_all(test.callout_script_base())
+            .expect("Unable to create callout_script_base");
+        fs::create_dir_all(test.callout_notification_base())
+            .expect("Unable to create callout_notification_base");
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }
@@ -79,6 +84,16 @@ impl TestEnvironment {
 
         let typefile = devdir.join("mdev_type");
         symlink(&parenttypedir, &typefile).expect("Unable to setup mdev type");
+    }
+
+    // set up a script in the test environment to simulate a callout
+    fn populate_callout_script(&self, filename: &str) {
+        let calloutscriptdir: PathBuf = [TEST_DATA_DIR, "callouts"].iter().collect();
+        let calloutscript = calloutscriptdir.join(filename);
+        assert!(calloutscript.exists());
+
+        let dest = self.callout_script_base().join(filename);
+        fs::copy(calloutscript, dest).expect("Unable to copy callout script");
     }
 
     // set up a few files in the test environment to simulate a parent device that supports
@@ -236,6 +251,30 @@ fn test_load_json() {
         "0000:00:03.0",
         Expect::Fail,
     );
+}
+
+fn test_define_command_callout<F>(
+    testname: &str,
+    expect: Expect,
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("define/callouts", testname);
+    setupfn(&test);
+
+    use crate::define_command;
+    let res = define_command(&test, uuid, false, parent, mdev_type, None);
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
 }
 
 fn test_define_helper<F>(
@@ -413,6 +452,51 @@ fn test_define() {
         None,
         |test| {
             test.populate_defined_device(DEFAULT_UUID, DEFAULT_PARENT, "defined.json");
+        },
+    );
+
+    // test define with callouts
+    test_define_command_callout(
+        "define-with-callout-all-pass",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    test_define_command_callout(
+        "define-with-callout-all-fail",
+        Expect::Fail,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    // test define with get attributes
+    test_define_command_callout(
+        "define-with-callout-all-good-json",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
+            test.populate_callout_script("good-json.sh");
+        },
+    );
+    test_define_command_callout(
+        "define-with-callout-all-bad-json",
+        Expect::Fail,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        |test| {
+            test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
+            test.populate_callout_script("bad-json.sh");
         },
     );
 }
@@ -718,6 +802,30 @@ fn test_undefine() {
     );
 }
 
+fn test_start_command_callout<F>(
+    testname: &str,
+    expect: Expect,
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("start", testname);
+    setupfn(&test);
+
+    use crate::start_command;
+    let res = start_command(&test, uuid, parent, mdev_type, None);
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
+}
+
 fn test_start_helper<F>(
     testname: &str,
     expect_setup: Expect,
@@ -967,6 +1075,36 @@ fn test_start() {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
     );
+
+    test_start_command_callout(
+        "defined-multiple",
+        Expect::Pass,
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    test_start_command_callout(
+        "defined-multiple",
+        Expect::Fail,
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+
     // TODO: test attributes -- difficult because executing the 'start' command by writing to
     // the 'create' file in sysfs does not automatically create the device file structure in
     // the temporary test environment, so writing the sysfs attribute files fails.
@@ -1238,6 +1376,33 @@ fn test_list() {
         Some("nonexistent".to_string()),
         setup,
     );
+
+    // test list with the Get Attributes callout
+    test_list_helper(
+        "active-callout",
+        Expect::Pass,
+        false,
+        false,
+        None,
+        None,
+        |test| {
+            setup(test);
+            test.populate_callout_script("good-json.sh");
+        },
+    );
+    // if a script returns an ill-formatted JSON, then then the output should be ignored
+    test_list_helper(
+        "active-callout-bad-json",
+        Expect::Pass,
+        false,
+        false,
+        None,
+        None,
+        |test| {
+            setup(test);
+            test.populate_callout_script("bad-json.sh");
+        },
+    );
 }
 
 fn test_types_helper(
@@ -1330,5 +1495,211 @@ fn test_types() {
         "parent-no-match",
         Expect::Pass,
         Some("missing".to_string()),
+    );
+}
+
+fn test_invoke_callout<F>(
+    testname: &str,
+    expect: Expect,
+    action: Action,
+    uuid: Uuid,
+    parent: &str,
+    mdev_type: &str,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("callouts", testname);
+    setupfn(&test);
+
+    let mut empty_mdev = MDev::new(&test, uuid);
+    empty_mdev.mdev_type = Some(mdev_type.to_string());
+    empty_mdev.parent = Some(parent.to_string());
+
+    let res = Callout::invoke(&mut empty_mdev, action, |_empty_mdev| Ok(()));
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
+}
+
+fn test_get_callout<F>(
+    testname: &str,
+    expect: Expect,
+    uuid: Uuid,
+    parent: &str,
+    mdev_type: &str,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("callouts", testname);
+    setupfn(&test);
+
+    let mut empty_mdev = MDev::new(&test, uuid);
+    empty_mdev.mdev_type = Some(mdev_type.to_string());
+    empty_mdev.parent = Some(parent.to_string());
+
+    let res = Callout::get_attributes(&mut empty_mdev);
+
+    if expect == Expect::Fail {
+        res.expect_err("expected callout to fail");
+        return;
+    }
+
+    assert!(res.is_ok());
+}
+
+#[test]
+fn test_callouts() {
+    init();
+
+    const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+    const DEFAULT_TYPE: &str = "test_type";
+    const DEFAULT_PARENT: &str = "test_parent";
+    test_invoke_callout(
+        "test_callout_all_success",
+        Expect::Pass,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_all_fail",
+        Expect::Fail,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    // Expected behavior: script will report that the requested device type / parent does not
+    // match the script's type / parent. mdevctl will continue with regularly scheduled programming.
+    test_invoke_callout(
+        "test_callout_wrong_type",
+        Expect::Pass,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc2.sh");
+        },
+    );
+    // This test is expected to fail. If the correct script is executed, then it will`
+    // return error code 1.
+    test_invoke_callout(
+        "test_callout_type_c",
+        Expect::Fail,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "parent_c",
+        "type_c",
+        |test| {
+            test.populate_callout_script("type-a.sh");
+            test.populate_callout_script("type-b.sh");
+            test.populate_callout_script("type-c.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_no_script",
+        Expect::Pass,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "parent_d",
+        "type_d",
+        |test| {
+            test.populate_callout_script("type-a.sh");
+            test.populate_callout_script("type-b.sh");
+            test.populate_callout_script("type-c.sh");
+        },
+    );
+    // Each pre/post function in the test script will check for
+    // a device type and parent with the command name appended
+    // to the end
+    test_invoke_callout(
+        "test_callout_params_define",
+        Expect::Pass,
+        Action::Define,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_define",
+        "test_type_define",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_modify",
+        Expect::Pass,
+        Action::Modify,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_modify",
+        "test_type_modify",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_start",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_start",
+        "test_type_start",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_stop",
+        Expect::Pass,
+        Action::Stop,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_stop",
+        "test_type_stop",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_params_undefine",
+        Expect::Pass,
+        Action::Undefine,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        "test_parent_undefine",
+        "test_type_undefine",
+        |test| {
+            test.populate_callout_script("params.sh");
+        },
+    );
+    // test the Get Attributes callouts
+    test_get_callout(
+        "test_callout_good_json",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("good-json.sh");
+        },
+    );
+    test_get_callout(
+        "test_callout_bad_json",
+        Expect::Fail,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("bad-json.sh");
+        },
     );
 }

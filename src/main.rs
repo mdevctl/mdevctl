@@ -16,11 +16,13 @@ use std::vec::Vec;
 use structopt::StructOpt;
 use uuid::Uuid;
 
+use crate::callouts::*;
 use crate::cli::{LsmdevOptions, MdevctlCommands};
 use crate::environment::{DefaultEnvironment, Environment};
 use crate::logger::logger;
 use crate::mdev::*;
 
+mod callouts;
 mod cli;
 mod environment;
 mod logger;
@@ -133,8 +135,19 @@ fn define_command(
 ) -> Result<()> {
     debug!("Defining mdev {:?}", uuid);
 
-    let dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
-    dev.define().map(|_| {
+    let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
+
+    /*
+        Call Callout::get_attributes() when defining an active device without a config file.
+        This function allows callout script to acquire device-specific attributes from sysfs,
+        and populate the attrs field correspondingly before the device is defined in the system.
+        The device config file will contain the same attributes that were used to start this device。
+    */
+    if dev.active {
+        let attrs = Callout::get_attributes(&mut dev)?;
+        dev.add_attributes(&attrs)?;
+    }
+    Callout::invoke(&mut dev, Action::Define, |dev| dev.define()).map(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.to_hyphenated());
         }
@@ -149,8 +162,8 @@ fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -
         return Err(anyhow!("No devices match the specified uuid"));
     }
     for (_, mut children) in devs {
-        for child in children.iter_mut() {
-            child.undefine()?;
+        for mut child in children.iter_mut() {
+            let _ = Callout::invoke(&mut child, Action::Undefine, |dev| dev.undefine());
         }
     }
     Ok(())
@@ -193,7 +206,7 @@ fn modify_command(
         }
     }
 
-    dev.write_config()
+    Callout::invoke(&mut dev, Action::Modify, |dev| dev.write_config())
 }
 
 /// convert 'start' command arguments into a MDev struct
@@ -287,7 +300,8 @@ fn start_command(
     jsonfile: Option<PathBuf>,
 ) -> Result<()> {
     let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
-    dev.start().map(|_| {
+
+    Callout::invoke(&mut dev, Action::Start, |dev| dev.start()).map(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.to_hyphenated());
         }
@@ -299,7 +313,8 @@ fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
-    dev.stop()
+
+    Callout::invoke(&mut dev, Action::Stop, |dev| dev.stop())
 }
 
 /// convenience function to lookup a defined device by uuid and parent
@@ -473,6 +488,12 @@ fn list_command_helper(
                     }
 
                     let _ = dev.load_definition();
+
+                    if !dev.is_defined() {
+                        if let Ok(attrs) = Callout::get_attributes(&mut dev) {
+                            let _ = dev.add_attributes(&attrs);
+                        }
+                    }
 
                     let devparent = dev.parent()?;
                     if !devices.contains_key(devparent) {
@@ -663,7 +684,7 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = child.start() {
+                if let Err(e) = Callout::invoke(child, Action::Start, |child| child.start()) {
                     for x in e.chain() {
                         warn!("{}", x);
                     }
