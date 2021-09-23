@@ -19,14 +19,7 @@ fn apply_template(template: &Path) -> String {
     fs::read_to_string(template)
         .unwrap_or_else(|_| panic!("Failed to read template {:?}", template))
         .replace("@@mdevctl@@", mdevctl_bin_path.to_str().unwrap())
-        .replace(
-            "@@mdevctl.bash@@",
-            outdir.join("mdevctl.bash").to_str().unwrap(),
-        )
-        .replace(
-            "@@lsmdev.bash@@",
-            outdir.join("lsmdev.bash").to_str().unwrap(),
-        )
+        .replace("@@outdir@@", outdir.to_str().unwrap())
         .replace("@@mdevctl_version@@", version.as_str())
         .replace(
             "@@generated_notice@@",
