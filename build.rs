@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use structopt::clap::Shell;
 use structopt::StructOpt;
 
@@ -19,14 +20,7 @@ fn apply_template(template: &Path) -> String {
     fs::read_to_string(template)
         .unwrap_or_else(|_| panic!("Failed to read template {:?}", template))
         .replace("@@mdevctl@@", mdevctl_bin_path.to_str().unwrap())
-        .replace(
-            "@@mdevctl.bash@@",
-            outdir.join("mdevctl.bash").to_str().unwrap(),
-        )
-        .replace(
-            "@@lsmdev.bash@@",
-            outdir.join("lsmdev.bash").to_str().unwrap(),
-        )
+        .replace("@@outdir@@", outdir.to_str().unwrap())
         .replace("@@mdevctl_version@@", version.as_str())
         .replace(
             "@@generated_notice@@",
@@ -38,6 +32,17 @@ fn apply_template(template: &Path) -> String {
         )
 }
 
+fn generate_manpage<P: AsRef<Path>>(outdir: P) {
+    let infile = PathBuf::from("mdevctl.rst");
+    println!("cargo:rerun-if-changed={}", infile.to_str().unwrap());
+    let outfile = outdir.as_ref().join("mdevctl.8");
+    Command::new("rst2man")
+        .arg(infile)
+        .arg(outfile)
+        .output()
+        .expect("Unable to generate manpage. is 'rst2man' installed?");
+}
+
 fn main() {
     let outdir =
         PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR environment variable not defined"));
@@ -45,6 +50,9 @@ fn main() {
     // generate bash completions for both executables
     cli::MdevctlCommands::clap().gen_completions("mdevctl", Shell::Bash, &outdir);
     cli::LsmdevOptions::clap().gen_completions("lsmdev", Shell::Bash, &outdir);
+
+    // generate manpage
+    generate_manpage(outdir);
 
     // generate a rpm spec file from the spec.in template
     let rpm_in = PathBuf::from("mdevctl.spec.in");

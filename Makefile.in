@@ -45,10 +45,10 @@ install:
 	install -m 755 @@mdevctl@@ $(DESTDIR)$(SBINDIR)/
 	ln -sf mdevctl $(DESTDIR)$(SBINDIR)/lsmdev
 	mkdir -p $(DESTDIR)$(MANDIR)/man8
-	install -m 644 mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
+	install -m 644 @@outdir@@/mdevctl.8 $(DESTDIR)$(MANDIR)/man8/
 	ln -sf mdevctl.8  $(DESTDIR)$(MANDIR)/man8/lsmdev.8
 	mkdir -p $(DESTDIR)$(BASH_COMPLETION_DIR)/
-	install -m 644 -T @@mdevctl.bash@@ $(DESTDIR)$(BASH_COMPLETION_DIR)/mdevctl
-	install -m 644 -T @@lsmdev.bash@@ $(DESTDIR)$(BASH_COMPLETION_DIR)/lsmdev
+	install -m 644 -T @@outdir@@/mdevctl.bash $(DESTDIR)$(BASH_COMPLETION_DIR)/mdevctl
+	install -m 644 -T @@outdir@@/lsmdev.bash $(DESTDIR)$(BASH_COMPLETION_DIR)/lsmdev
 	mkdir -p $(DESTDIR)$(CALLOUT_CMD_DIR)
 	mkdir -p $(DESTDIR)$(CALLOUT_NOTIFIER_DIR)
