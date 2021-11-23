@@ -56,6 +56,8 @@ Summary:        %{summary}
 %{_sbindir}/lsmdev
 %{_udevrulesdir}/60-mdevctl.rules
 %dir %{_sysconfdir}/mdevctl.d
+%dir %{_sysconfdir}/mdevctl.d/scripts.d/callouts
+%dir %{_sysconfdir}/mdevctl.d/scripts.d/notifiers
 %{_mandir}/man8/mdevctl.8*
 %{_mandir}/man8/lsmdev.8*
 %{_datadir}/bash-completion/completions/mdevctl
