@@ -1,2 +1,2 @@
-#!/usr/bin/env bash
+#!/bin/sh
 echo "[{\"attribute0\": \"VALUE\"}]"

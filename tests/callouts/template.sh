@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/sh
 # A basic utility script used for debugging notification call-out events
 # in mdevctl. Output can be observed via system logs.
 

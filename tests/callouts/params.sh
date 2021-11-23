@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/sh
 # A basic utility script used for debugging notification call-out events
 # in mdevctl. Output can be observed via system logs.
 
@@ -23,16 +23,16 @@ test_params() {
     test_state=$3
     test_uuid="976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9"
 
-    if [[ "$parent" != "$test_parent" ]]; then
+    if [ "$parent" != "$test_parent" ]; then
         exit 1
     fi
-    if [[ "$type" != "$test_type" ]]; then
+    if [ "$type" != "$test_type" ]; then
         exit 1
     fi
-    if [[ "$state" != "$test_state" ]]; then
+    if [ "$state" != "$test_state" ]; then
         exit 1
     fi
-    if [[ "$uuid" != "$test_uuid" ]]; then
+    if [ "$uuid" != "$test_uuid" ]; then
         exit 1
     fi
     exit 0

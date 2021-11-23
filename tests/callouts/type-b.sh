@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/bin/sh
 # A basic utility script used for debugging notification call-out events
 # in mdevctl. Output can be observed via system logs.
 
@@ -17,7 +17,7 @@ shift 2
 parent=$1
 json=$(</dev/stdin)
 
-if [[ "$type" == "type_b" ]]; then
+if [ "$type" = "type_b" ]; then
 	exit 0
 fi
 

@@ -1,2 +1,2 @@
-#!/usr/bin/env bash
+#!/bin/sh
 exit 0
