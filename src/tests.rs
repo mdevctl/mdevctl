@@ -49,10 +49,8 @@ impl TestEnvironment {
         fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
         fs::create_dir_all(test.persist_base()).expect("Unable to create persist_base");
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
-        fs::create_dir_all(test.callout_script_base())
-            .expect("Unable to create callout_script_base");
-        fs::create_dir_all(test.callout_notification_base())
-            .expect("Unable to create callout_notification_base");
+        fs::create_dir_all(test.callout_dir()).expect("Unable to create callout_dir");
+        fs::create_dir_all(test.notification_dir()).expect("Unable to create notification_dir");
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }
@@ -92,7 +90,7 @@ impl TestEnvironment {
         let calloutscript = calloutscriptdir.join(filename);
         assert!(calloutscript.exists());
 
-        let dest = self.callout_script_base().join(filename);
+        let dest = self.callout_dir().join(filename);
         fs::copy(calloutscript, dest).expect("Unable to copy callout script");
     }
 
