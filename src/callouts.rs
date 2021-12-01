@@ -120,7 +120,7 @@ impl Callout {
         let event = Event::Get;
         let action = Action::Attributes;
         let c = Callout::new();
-        let dir = dev.env.callout_script_base();
+        let dir = dev.env.callout_dir();
 
         if !dir.is_dir() {
             return Ok(serde_json::Value::Null);
@@ -274,7 +274,7 @@ impl Callout {
                     output.status.code()
                 }),
             _ => {
-                let dir = dev.env.callout_script_base();
+                let dir = dev.env.callout_dir();
 
                 if !dir.is_dir() {
                     return Ok(());
@@ -300,7 +300,7 @@ impl Callout {
 
     fn notify(&mut self, dev: &mut MDev, action: Action) -> Result<()> {
         let event = Event::Notify;
-        let dir = dev.env.callout_notification_base();
+        let dir = dev.env.notification_dir();
         debug!(
             "{}-{}: executing notification scripts for device {}",
             event, action, dev.uuid

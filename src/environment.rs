@@ -22,12 +22,16 @@ pub trait Environment {
         self.root().join("sys/class/mdev_bus")
     }
 
-    fn callout_script_base(&self) -> PathBuf {
-        self.persist_base().join("scripts.d/callouts")
+    fn scripts_base(&self) -> PathBuf {
+        self.persist_base().join("scripts.d")
     }
 
-    fn callout_notification_base(&self) -> PathBuf {
-        self.persist_base().join("scripts.d/notifiers")
+    fn callout_dir(&self) -> PathBuf {
+        self.scripts_base().join("callouts")
+    }
+
+    fn notification_dir(&self) -> PathBuf {
+        self.scripts_base().join("notifiers")
     }
 }
 
