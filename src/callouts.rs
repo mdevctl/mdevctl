@@ -240,8 +240,8 @@ impl Callout {
         for s in dir.as_ref().read_dir().ok()? {
             let path = s.ok()?.path();
 
-            match self.invoke_script(dev, &path, event, action).ok() {
-                Some(res) => {
+            match self.invoke_script(dev, &path, event, action) {
+                Ok(res) => {
                     if res.status.code().is_none() {
                         warn!("callout script {:?} was terminated by a signal", path);
                         continue;
@@ -255,8 +255,8 @@ impl Callout {
                         );
                     }
                 }
-                _ => {
-                    debug!("failed to execute callout script {:?}", path);
+                Err(e) => {
+                    debug!("failed to execute callout script {:?}: {:?}", path, e);
                     continue;
                 }
             }
