@@ -162,8 +162,8 @@ fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -
         return Err(anyhow!("No devices match the specified uuid"));
     }
     for (_, mut children) in devs {
-        for mut child in children.iter_mut() {
-            let _ = Callout::invoke(&mut child, Action::Undefine, |dev| dev.undefine());
+        for child in children.iter_mut() {
+            let _ = Callout::invoke(child, Action::Undefine, |dev| dev.undefine());
         }
     }
     Ok(())
