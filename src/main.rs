@@ -388,40 +388,60 @@ fn defined_devices<'a>(
 
         let mut childdevices = Vec::new();
 
-        for child in parentpath.path().read_dir()? {
-            let child = child?;
-            if !child.metadata()?.is_file() {
-                continue;
+        match parentpath.path().read_dir() {
+            Ok(res) => {
+                for child in res {
+                    let child = child?;
+                    match child.metadata() {
+                        Ok(metadata) => {
+                            if !metadata.is_file() {
+                                continue;
+                            }
+                        }
+                        Err(e) => {
+                            warn!("unable to access file {:?}: {}", child.path(), e);
+                            continue;
+                        }
+                    }
+
+                    let path = child.path();
+                    let basename = path.file_name().unwrap().to_str().unwrap();
+                    let u = Uuid::parse_str(basename);
+                    if u.is_err() {
+                        warn!("Can't determine uuid for file '{}'", basename);
+                        continue;
+                    }
+                    let u = u.unwrap();
+
+                    debug!("found mdev {:?}", u);
+                    if uuid.is_some() && uuid != Some(&u) {
+                        debug!(
+                            "Ignoring device {} because it doesn't match uuid {}",
+                            u,
+                            uuid.unwrap()
+                        );
+                        continue;
+                    }
+
+                    match fs::File::open(&path) {
+                        Ok(mut f) => {
+                            let mut contents = String::new();
+                            f.read_to_string(&mut contents)?;
+                            let val = serde_json::from_str(&contents)?;
+                            let mut dev = MDev::new(env, u);
+                            dev.load_from_json(parentname.to_string(), &val)?;
+                            dev.load_from_sysfs()?;
+
+                            childdevices.push(dev);
+                        }
+                        Err(e) => {
+                            warn!("Unable to open file {:?}: {}", path, e);
+                            continue;
+                        }
+                    };
+                }
             }
-
-            let path = child.path();
-            let basename = path.file_name().unwrap().to_str().unwrap();
-            let u = Uuid::parse_str(basename);
-            if u.is_err() {
-                warn!("Can't determine uuid for file '{}'", basename);
-                continue;
-            }
-            let u = u.unwrap();
-
-            debug!("found mdev {:?}", u);
-            if uuid.is_some() && uuid != Some(&u) {
-                debug!(
-                    "Ignoring device {} because it doesn't match uuid {}",
-                    u,
-                    uuid.unwrap()
-                );
-                continue;
-            }
-
-            let mut f = fs::File::open(path)?;
-            let mut contents = String::new();
-            f.read_to_string(&mut contents)?;
-            let val = serde_json::from_str(&contents)?;
-            let mut dev = MDev::new(env, u);
-            dev.load_from_json(parentname.to_string(), &val)?;
-            dev.load_from_sysfs()?;
-
-            childdevices.push(dev);
+            Err(e) => warn!("Unable to read directory {:?}: {}", parentpath.path(), e),
         }
         if !childdevices.is_empty() {
             devices.insert(parentname.to_string(), childdevices);
