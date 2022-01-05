@@ -727,6 +727,10 @@ fn main() -> Result<()> {
 
     let env = DefaultEnvironment::new();
     debug!("{:?}", env);
+
+    // make sure the environment is sane
+    env.self_check()?;
+
     // check if we're running as the symlink executable 'lsmdev'. If so, just execute the 'list'
     // command directly
     let exe = std::env::args_os().next().unwrap();
