@@ -347,7 +347,7 @@ impl<'a> MDev<'a> {
             Err(e) => Err(e).with_context(|| {
                 format!(
                     "Failed to create mdev {}, type {} on {}",
-                    self.uuid.to_hyphenated().to_string(),
+                    self.uuid.to_hyphenated(),
                     mdev_type,
                     parent
                 )
