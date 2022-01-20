@@ -1,5 +1,7 @@
 //! A filesystem environment for mdevctl
 
+use anyhow::{anyhow, Result};
+use log::debug;
 use std::path::{Path, PathBuf};
 
 /// A trait which provides filesystem paths for certain system resources.
@@ -32,6 +34,22 @@ pub trait Environment {
 
     fn notification_dir(&self) -> PathBuf {
         self.scripts_base().join("notifiers")
+    }
+
+    fn self_check(&self) -> Result<()> {
+        debug!("checking that the environment is sane");
+        // ensure required system dirs exist. Generally distro packages or 'make install' should
+        // create these dirs.
+        for dir in vec![
+            self.persist_base(),
+            self.callout_dir(),
+            self.notification_dir(),
+        ] {
+            if !dir.exists() {
+                return Err(anyhow!("Required directory {:?} doesn't exist. This may indicate a packaging or installation error", dir));
+            }
+        }
+        Ok(())
     }
 }
 
