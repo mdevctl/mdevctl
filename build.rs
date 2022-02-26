@@ -15,7 +15,7 @@ fn apply_template(template: &Path) -> String {
 
     let profile = env::var_os("PROFILE").expect("PROFILE environment variable not defined");
     let mdevctl_bin_path = PathBuf::from("target").join(profile).join("mdevctl");
-    let version = std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION not set");
+    let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION not set");
 
     fs::read_to_string(template)
         .unwrap_or_else(|_| panic!("Failed to read template {:?}", template))
