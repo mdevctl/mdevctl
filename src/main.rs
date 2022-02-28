@@ -625,7 +625,7 @@ fn supported_types(
                 if path.exists() {
                     t.description = fs::read_to_string(&path)?
                         .trim()
-                        .replace("\n", ", ")
+                        .replace('\n', ", ")
                         .to_string();
                 }
 
