@@ -15,7 +15,7 @@ fn apply_template(template: &Path) -> String {
 
     let profile = env::var_os("PROFILE").expect("PROFILE environment variable not defined");
     let mdevctl_bin_path = PathBuf::from("target").join(profile).join("mdevctl");
-    let version = std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION not set");
+    let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION not set");
 
     fs::read_to_string(template)
         .unwrap_or_else(|_| panic!("Failed to read template {:?}", template))
@@ -33,14 +33,15 @@ fn apply_template(template: &Path) -> String {
 }
 
 fn generate_manpage<P: AsRef<Path>>(outdir: P) {
+    let rst2man = env::var("RST2MAN").unwrap_or_else(|_| "rst2man".to_owned());
     let infile = PathBuf::from("mdevctl.rst");
     println!("cargo:rerun-if-changed={}", infile.to_str().unwrap());
     let outfile = outdir.as_ref().join("mdevctl.8");
-    Command::new("rst2man")
+    Command::new(rst2man)
         .arg(infile)
         .arg(outfile)
         .output()
-        .expect("Unable to generate manpage. is 'rst2man' installed?");
+        .expect("Unable to generate manpage. Is 'rst2man' installed? You can specify a custom 'rst2man' executable by setting the RST2MAN environment variable.");
 }
 
 fn main() {
