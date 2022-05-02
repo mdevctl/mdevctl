@@ -287,7 +287,7 @@ impl<'a> MDev<'a> {
         }
     }
 
-    pub fn create(&mut self) -> Result<()> {
+    fn create(&mut self) -> Result<()> {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
