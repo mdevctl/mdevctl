@@ -21,8 +21,11 @@ fn init() {
 
 fn assert_result<T: std::fmt::Debug>(res: Result<T>, expect: Expect, testname: &str) -> Result<T> {
     match expect {
-        Expect::Fail => {
+        Expect::Fail(msg) => {
             let e = res.expect_err(format!("Expected {} to fail", testname).as_str());
+            if let Some(msg) = msg {
+                assert_eq!(msg, e.to_string());
+            }
             Err(anyhow!(e))
         }
         Expect::Pass => Ok(res.expect(format!("Expected {} to pass", testname).as_str())),
@@ -30,9 +33,9 @@ fn assert_result<T: std::fmt::Debug>(res: Result<T>, expect: Expect, testname: &
 }
 
 #[derive(PartialEq, Clone, Copy)]
-enum Expect {
+enum Expect<'a> {
     Pass,
-    Fail,
+    Fail(Option<&'a str>),
 }
 
 #[derive(Debug)]
@@ -240,19 +243,19 @@ fn test_load_json() {
     test_load_json_helper(
         "b6f7e33f-ea28-4f9d-8c42-797ff0ec2888",
         "0000:00:03.0",
-        Expect::Fail,
+        Expect::Fail(None),
     );
     // json file has malformed attributes - an array of strings
     test_load_json_helper(
         "fe7a39db-973b-47b4-9b77-1d7b97267d59",
         "0000:00:03.0",
-        Expect::Fail,
+        Expect::Fail(None),
     );
     // json file has malformed attributes - no array
     test_load_json_helper(
         "37ccb149-a0ce-49e3-8391-a952ef07bdc2",
         "0000:00:03.0",
-        Expect::Fail,
+        Expect::Fail(None),
     );
 }
 
@@ -318,7 +321,7 @@ fn test_define() {
     const DEFAULT_PARENT: &str = "0000:00:03.0";
     test_define_helper(
         "no-uuid-no-type",
-        Expect::Fail,
+        Expect::Fail(None),
         None,
         true,
         Some(DEFAULT_PARENT.to_string()),
@@ -362,7 +365,7 @@ fn test_define() {
     // invalid to specify an separate mdev_type if defining via jsonfile
     test_define_helper(
         "jsonfile-type",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         Some(DEFAULT_PARENT.to_string()),
@@ -384,7 +387,7 @@ fn test_define() {
     // If uuid is already active, specifying mdev_type will result in an error
     test_define_helper(
         "uuid-running-no-parent",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         None,
@@ -438,7 +441,7 @@ fn test_define() {
     // defining a device that is already defined should result in an error
     test_define_helper(
         "uuid-already-defined",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         Some(DEFAULT_PARENT.to_string()),
@@ -462,7 +465,7 @@ fn test_define() {
     );
     test_define_command_callout(
         "define-with-callout-all-fail",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
@@ -484,7 +487,7 @@ fn test_define() {
     );
     test_define_command_callout(
         "define-with-callout-all-bad-json",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
@@ -548,7 +551,7 @@ fn test_modify() {
     const PARENT: &str = "0000:00:03.0";
     test_modify_helper(
         "device-not-defined",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         None,
         None,
@@ -674,7 +677,7 @@ fn test_modify() {
     );
     test_modify_helper(
         "multiple-noparent",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         None,
         None,
@@ -708,7 +711,7 @@ fn test_modify() {
     );
     test_modify_helper(
         "auto-manual",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
         None,
@@ -783,7 +786,7 @@ fn test_undefine() {
     });
     test_undefine_helper(
         "nonexistent",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
         |_| {},
@@ -882,8 +885,8 @@ fn test_start() {
     );
     test_start_helper(
         "no-uuid-no-parent",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         None,
         None,
         Some(MDEV_TYPE.to_string()),
@@ -894,8 +897,8 @@ fn test_start() {
     );
     test_start_helper(
         "no-uuid-no-type",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         None,
         Some(PARENT.to_string()),
         None,
@@ -906,8 +909,8 @@ fn test_start() {
     );
     test_start_helper(
         "no-parent",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         None,
         Some(MDEV_TYPE.to_string()),
@@ -917,8 +920,8 @@ fn test_start() {
     // should fail if there is no defined device with the given uuid
     test_start_helper(
         "no-type",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         None,
@@ -970,8 +973,8 @@ fn test_start() {
     // if there are multiple defined devices with the same UUID, must disambiguate with parent
     test_start_helper(
         "defined-multiple-underspecified",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         None,
         None,
@@ -1002,8 +1005,8 @@ fn test_start() {
     // type. See https://github.com/mdevctl/mdevctl/issues/38
     test_start_helper(
         "defined-diff-type",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some("wrong-type".to_string()),
@@ -1016,7 +1019,7 @@ fn test_start() {
     test_start_helper(
         "already-running",
         Expect::Pass,
-        Expect::Fail,
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -1029,7 +1032,7 @@ fn test_start() {
     test_start_helper(
         "no-instances",
         Expect::Pass,
-        Expect::Fail,
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -1068,7 +1071,7 @@ fn test_start() {
     );
     test_start_command_callout(
         "defined-multiple",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(UUID).ok(),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -1521,7 +1524,7 @@ fn test_callouts() {
     );
     test_invoke_callout(
         "test_callout_all_fail",
-        Expect::Fail,
+        Expect::Fail(None),
         Action::Test,
         Uuid::parse_str(DEFAULT_UUID).unwrap(),
         DEFAULT_PARENT,
@@ -1547,7 +1550,7 @@ fn test_callouts() {
     // return error code 1.
     test_invoke_callout(
         "test_callout_type_c",
-        Expect::Fail,
+        Expect::Fail(None),
         Action::Test,
         Uuid::parse_str(DEFAULT_UUID).unwrap(),
         "parent_c",
@@ -1642,7 +1645,7 @@ fn test_callouts() {
     );
     test_get_callout(
         "test_callout_bad_json",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).unwrap(),
         DEFAULT_PARENT,
         DEFAULT_TYPE,
