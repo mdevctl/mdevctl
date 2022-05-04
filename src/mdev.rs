@@ -287,6 +287,30 @@ impl<'a> MDev<'a> {
         }
     }
 
+    fn find_parent_dir(&self) -> Result<PathBuf> {
+        let parent = self.parent()?;
+        let path: PathBuf = self.env.parent_base().join(&parent);
+
+        if path.is_dir() {
+            return Ok(path);
+        }
+
+        // check if there's a similar parent dir with different capitalization
+        let parentsdir = self.env.parent_base().read_dir()?;
+        for subdir in parentsdir {
+            let dir = subdir?;
+            let parentname = dir.file_name();
+            if parentname.to_string_lossy().to_lowercase() == parent.to_lowercase() {
+                return Err(anyhow!(
+                    "Unable to find parent device '{}'. Did you mean '{}'?",
+                    parent,
+                    parentname.to_string_lossy()
+                ));
+            }
+        }
+        Err(anyhow!("Unable to find parent device '{}'", parent))
+    }
+
     fn create(&mut self) -> Result<()> {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
@@ -303,11 +327,8 @@ impl<'a> MDev<'a> {
             return Err(anyhow!("Device already exists"));
         }
 
-        let mut path: PathBuf = self
-            .env
-            .parent_base()
-            .join(&parent)
-            .join("mdev_supported_types");
+        let mut path = self.find_parent_dir()?;
+        path.push("mdev_supported_types");
         debug!("Checking parent for mdev support: {:?}", path);
         if !path.is_dir() {
             return Err(anyhow!(

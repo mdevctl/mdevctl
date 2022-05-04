@@ -857,6 +857,7 @@ fn test_start() {
     const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
     const PARENT: &str = "0000:00:03.0";
     const PARENT2: &str = "0000:00:02.0";
+    const PARENT3: &str = "0000:2b:00.0";
     const MDEV_TYPE: &str = "arbitrary_type";
 
     test_start_helper(
@@ -1081,6 +1082,37 @@ fn test_start() {
             test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT2, "defined.json");
             test.populate_callout_script("rc1.sh");
+        },
+    );
+    test_start_helper(
+        "missing-parent",
+        Expect::Pass,
+        Expect::Fail(Some(
+            format!("Unable to find parent device '{}'", PARENT).as_str(),
+        )),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |_| {},
+    );
+    test_start_helper(
+        "parent-case",
+        Expect::Pass,
+        Expect::Fail(Some(
+            format!(
+                "Unable to find parent device '{}'. Did you mean '{}'?",
+                PARENT3.to_string().to_uppercase(),
+                PARENT3.to_string()
+            )
+            .as_str(),
+        )),
+        Some(UUID.to_string()),
+        Some(PARENT3.to_string().to_uppercase()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT3, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
     );
 
