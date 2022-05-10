@@ -63,7 +63,8 @@ The following options are understood:
     for the ``modify`` command.
 
 ``-p|--parent=PARENT``
-    Specify or identify the device by its parent device.
+    Specify or identify the device by its parent device. Note that the parent
+    device is specified by its kernel sysfs name and is case-sensitive.
 
 ``-t|--type=TYPE``
     Specify or identify the device by its type.

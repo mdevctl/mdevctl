@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use log::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -19,10 +19,23 @@ fn init() {
     let _ = logger().is_test(true).try_init();
 }
 
-#[derive(PartialEq)]
-enum Expect {
+fn assert_result<T: std::fmt::Debug>(res: Result<T>, expect: Expect, testname: &str) -> Result<T> {
+    match expect {
+        Expect::Fail(msg) => {
+            let e = res.expect_err(format!("Expected {} to fail", testname).as_str());
+            if let Some(msg) = msg {
+                assert_eq!(msg, e.to_string());
+            }
+            Err(anyhow!(e))
+        }
+        Expect::Pass => Ok(res.expect(format!("Expected {} to pass", testname).as_str())),
+    }
+}
+
+#[derive(PartialEq, Clone, Copy)]
+enum Expect<'a> {
     Pass,
-    Fail,
+    Fail(Option<&'a str>),
 }
 
 #[derive(Debug)]
@@ -192,19 +205,14 @@ fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
     let test = TestEnvironment::new("load-json", uuid);
 
     let res = test.load_from_json(uuid, parent, &format!("{}.in", uuid));
-    if expect == Expect::Fail {
-        info!("{:?}", res);
-        res.expect_err("Expected command to fail");
-        return;
+    if let Ok(dev) = assert_result(res, expect, "load-json") {
+        let jsonval = dev.to_json(false).unwrap();
+        let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
+
+        test.compare_to_file(&format!("{}.out", uuid), &jsonstr);
+        assert_eq!(uuid, dev.uuid.to_hyphenated().to_string());
+        assert_eq!(Some(parent.to_string()), dev.parent);
     }
-
-    let dev = res.expect("Command failed unexpectedly");
-    let jsonval = dev.to_json(false).unwrap();
-    let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
-
-    test.compare_to_file(&format!("{}.out", uuid), &jsonstr);
-    assert_eq!(uuid, dev.uuid.to_hyphenated().to_string());
-    assert_eq!(Some(parent.to_string()), dev.parent);
 }
 
 #[test]
@@ -235,19 +243,19 @@ fn test_load_json() {
     test_load_json_helper(
         "b6f7e33f-ea28-4f9d-8c42-797ff0ec2888",
         "0000:00:03.0",
-        Expect::Fail,
+        Expect::Fail(None),
     );
     // json file has malformed attributes - an array of strings
     test_load_json_helper(
         "fe7a39db-973b-47b4-9b77-1d7b97267d59",
         "0000:00:03.0",
-        Expect::Fail,
+        Expect::Fail(None),
     );
     // json file has malformed attributes - no array
     test_load_json_helper(
         "37ccb149-a0ce-49e3-8391-a952ef07bdc2",
         "0000:00:03.0",
-        Expect::Fail,
+        Expect::Fail(None),
     );
 }
 
@@ -267,12 +275,7 @@ fn test_define_command_callout<F>(
     use crate::define_command;
     let res = define_command(&test, uuid, false, parent, mdev_type, None);
 
-    if expect == Expect::Fail {
-        res.expect_err("expected callout to fail");
-        return;
-    }
-
-    assert!(res.is_ok());
+    let _ = assert_result(res, expect, "define callout");
 }
 
 fn test_define_helper<F>(
@@ -298,20 +301,16 @@ fn test_define_helper<F>(
 
     setupfn(&test);
 
-    let def = define_command_helper(&test, uuid, auto, parent, mdev_type, jsonfile);
-    if expect == Expect::Fail {
-        def.expect_err("expected define command to fail");
-        return;
+    let res = define_command_helper(&test, uuid, auto, parent, mdev_type, jsonfile);
+    if let Ok(def) = assert_result(res, expect, "define command") {
+        let path = def.persist_path().unwrap();
+        assert!(!path.exists());
+        def.define().expect("Failed to define device");
+        assert!(path.exists());
+        assert!(def.is_defined());
+        let filecontents = fs::read_to_string(&path).unwrap();
+        test.compare_to_file(&format!("{}.expected", testname), &filecontents);
     }
-
-    let def = def.expect("define command failed unexpectedly");
-    let path = def.persist_path().unwrap();
-    assert!(!path.exists());
-    def.define().expect("Failed to define device");
-    assert!(path.exists());
-    assert!(def.is_defined());
-    let filecontents = fs::read_to_string(&path).unwrap();
-    test.compare_to_file(&format!("{}.expected", testname), &filecontents);
 }
 
 #[test]
@@ -322,7 +321,7 @@ fn test_define() {
     const DEFAULT_PARENT: &str = "0000:00:03.0";
     test_define_helper(
         "no-uuid-no-type",
-        Expect::Fail,
+        Expect::Fail(None),
         None,
         true,
         Some(DEFAULT_PARENT.to_string()),
@@ -366,7 +365,7 @@ fn test_define() {
     // invalid to specify an separate mdev_type if defining via jsonfile
     test_define_helper(
         "jsonfile-type",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         Some(DEFAULT_PARENT.to_string()),
@@ -388,7 +387,7 @@ fn test_define() {
     // If uuid is already active, specifying mdev_type will result in an error
     test_define_helper(
         "uuid-running-no-parent",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         None,
@@ -442,7 +441,7 @@ fn test_define() {
     // defining a device that is already defined should result in an error
     test_define_helper(
         "uuid-already-defined",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         Some(DEFAULT_PARENT.to_string()),
@@ -466,7 +465,7 @@ fn test_define() {
     );
     test_define_command_callout(
         "define-with-callout-all-fail",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
@@ -488,7 +487,7 @@ fn test_define() {
     );
     test_define_command_callout(
         "define-with-callout-all-bad-json",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
@@ -531,12 +530,9 @@ fn test_modify_helper<F>(
         auto,
         manual,
     );
-    if expect == Expect::Fail {
-        assert!(result.is_err());
+    if assert_result(result, expect, "modify command").is_err() {
         return;
     }
-
-    result.expect("Modify command failed unexpectedly");
 
     let def = crate::get_defined_device(&test, uuid, parent.as_ref())
         .expect("Couldn't find defined device");
@@ -555,7 +551,7 @@ fn test_modify() {
     const PARENT: &str = "0000:00:03.0";
     test_modify_helper(
         "device-not-defined",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         None,
         None,
@@ -681,7 +677,7 @@ fn test_modify() {
     );
     test_modify_helper(
         "multiple-noparent",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         None,
         None,
@@ -715,7 +711,7 @@ fn test_modify() {
     );
     test_modify_helper(
         "auto-manual",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
         None,
@@ -744,12 +740,9 @@ fn test_undefine_helper<F>(
 
     let result = crate::undefine_command(&test, uuid, parent.clone());
 
-    if expect == Expect::Fail {
-        result.expect_err("undefine command should have failed");
+    if assert_result(result, expect, "undefine command").is_err() {
         return;
     }
-
-    result.expect("undefine command should have succeeded");
 
     let devs = crate::defined_devices(&test, Some(&uuid), parent.as_ref())
         .expect("failed to query defined devices");
@@ -793,7 +786,7 @@ fn test_undefine() {
     });
     test_undefine_helper(
         "nonexistent",
-        Expect::Fail,
+        Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
         |_| {},
@@ -815,13 +808,7 @@ fn test_start_command_callout<F>(
 
     use crate::start_command;
     let res = start_command(&test, uuid, parent, mdev_type, None);
-
-    if expect == Expect::Fail {
-        res.expect_err("expected callout to fail");
-        return;
-    }
-
-    assert!(res.is_ok());
+    let _ = assert_result(res, expect, "start callout");
 }
 
 fn test_start_helper<F>(
@@ -840,33 +827,27 @@ fn test_start_helper<F>(
     setupfn(&test);
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
 
-    let dev = crate::start_command_helper(&test, uuid, parent, mdev_type, jsonfile);
+    let result = crate::start_command_helper(&test, uuid, parent, mdev_type, jsonfile);
 
-    if expect_setup == Expect::Fail {
-        dev.expect_err("start command should have failed");
-        return;
-    }
-    let mut dev = dev.expect("Couldn't run start command");
+    if let Ok(mut dev) = assert_result(result, expect_setup, "start command setup") {
+        let result = dev.start();
+        if assert_result(result, expect_execute, "start command").is_err() {
+            return;
+        }
 
-    let result = dev.start();
-    if expect_execute == Expect::Fail {
-        result.expect_err("start command should have failed");
-        return;
+        let create_path = test
+            .parent_base()
+            .join(dev.parent.unwrap())
+            .join("mdev_supported_types")
+            .join(dev.mdev_type.unwrap())
+            .join("create");
+        assert!(create_path.exists());
+        if uuid.is_some() {
+            assert_eq!(uuid.unwrap(), dev.uuid);
+        }
+        let contents = fs::read_to_string(create_path).expect("Unable to read 'create' file");
+        assert_eq!(dev.uuid.to_hyphenated().to_string(), contents);
     }
-    result.expect("Couldn't start the device");
-
-    let create_path = test
-        .parent_base()
-        .join(dev.parent.unwrap())
-        .join("mdev_supported_types")
-        .join(dev.mdev_type.unwrap())
-        .join("create");
-    assert!(create_path.exists());
-    if uuid.is_some() {
-        assert_eq!(uuid.unwrap(), dev.uuid);
-    }
-    let contents = fs::read_to_string(create_path).expect("Unable to read 'create' file");
-    assert_eq!(dev.uuid.to_hyphenated().to_string(), contents);
 }
 
 #[test]
@@ -876,6 +857,7 @@ fn test_start() {
     const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
     const PARENT: &str = "0000:00:03.0";
     const PARENT2: &str = "0000:00:02.0";
+    const PARENT3: &str = "0000:2b:00.0";
     const MDEV_TYPE: &str = "arbitrary_type";
 
     test_start_helper(
@@ -904,8 +886,8 @@ fn test_start() {
     );
     test_start_helper(
         "no-uuid-no-parent",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         None,
         None,
         Some(MDEV_TYPE.to_string()),
@@ -916,8 +898,8 @@ fn test_start() {
     );
     test_start_helper(
         "no-uuid-no-type",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         None,
         Some(PARENT.to_string()),
         None,
@@ -928,8 +910,8 @@ fn test_start() {
     );
     test_start_helper(
         "no-parent",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         None,
         Some(MDEV_TYPE.to_string()),
@@ -939,8 +921,8 @@ fn test_start() {
     // should fail if there is no defined device with the given uuid
     test_start_helper(
         "no-type",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         None,
@@ -992,8 +974,8 @@ fn test_start() {
     // if there are multiple defined devices with the same UUID, must disambiguate with parent
     test_start_helper(
         "defined-multiple-underspecified",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         None,
         None,
@@ -1024,8 +1006,8 @@ fn test_start() {
     // type. See https://github.com/mdevctl/mdevctl/issues/38
     test_start_helper(
         "defined-diff-type",
-        Expect::Fail,
-        Expect::Fail,
+        Expect::Fail(None),
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some("wrong-type".to_string()),
@@ -1038,7 +1020,7 @@ fn test_start() {
     test_start_helper(
         "already-running",
         Expect::Pass,
-        Expect::Fail,
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -1051,7 +1033,7 @@ fn test_start() {
     test_start_helper(
         "no-instances",
         Expect::Pass,
-        Expect::Fail,
+        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -1090,7 +1072,7 @@ fn test_start() {
     );
     test_start_command_callout(
         "defined-multiple",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(UUID).ok(),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -1100,6 +1082,37 @@ fn test_start() {
             test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT2, "defined.json");
             test.populate_callout_script("rc1.sh");
+        },
+    );
+    test_start_helper(
+        "missing-parent",
+        Expect::Pass,
+        Expect::Fail(Some(
+            format!("Unable to find parent device '{}'", PARENT).as_str(),
+        )),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |_| {},
+    );
+    test_start_helper(
+        "parent-case",
+        Expect::Pass,
+        Expect::Fail(Some(
+            format!(
+                "Unable to find parent device '{}'. Did you mean '{}'?",
+                PARENT3.to_string().to_uppercase(),
+                PARENT3.to_string()
+            )
+            .as_str(),
+        )),
+        Some(UUID.to_string()),
+        Some(PARENT3.to_string().to_uppercase()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT3, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
     );
 
@@ -1165,22 +1178,14 @@ fn test_list_helper<F>(
     setupfn(&test);
 
     let res = list_command_helper(&test, defined, false, verbose, uuid, parent.clone());
-    if expect == Expect::Fail {
-        res.expect_err("expected list command to fail");
-        return;
+    if let Ok(output) = assert_result(res, expect, "list json command") {
+        test.compare_to_file(&format!("{}.text", subtest), &output);
     }
-
-    let output = res.expect("list command failed unexpectedly");
-    test.compare_to_file(&format!("{}.text", subtest), &output);
 
     let res = list_command_helper(&test, defined, true, verbose, uuid, parent.clone());
-    if expect == Expect::Fail {
-        res.expect_err("expected list command to fail");
-        return;
+    if let Ok(output) = assert_result(res, expect, "list command") {
+        test.compare_to_file(&format!("{}.json", subtest), &output);
     }
-
-    let output = res.expect("list command failed unexpectedly");
-    test.compare_to_file(&format!("{}.json", subtest), &output);
 }
 
 #[test]
@@ -1413,23 +1418,15 @@ fn test_types_helper(
 
     // test text output
     let res = types_command_helper(test, parent.clone(), false);
-    if expect == Expect::Fail {
-        res.expect_err("expected types command to fail");
-        return;
+    if let Ok(output) = assert_result(res, expect, "types command") {
+        test.compare_to_file(&format!("{}.text", subtest), &output);
     }
-
-    let output = res.expect("types command failed unexpectedly");
-    test.compare_to_file(&format!("{}.text", subtest), &output);
 
     // test JSON output
     let res = types_command_helper(test, parent.clone(), true);
-    if expect == Expect::Fail {
-        res.expect_err("expected types command to fail");
-        return;
+    if let Ok(output) = assert_result(res, expect, "types json command") {
+        test.compare_to_file(&format!("{}.json", subtest), &output);
     }
-
-    let output = res.expect("types command failed unexpectedly");
-    test.compare_to_file(&format!("{}.json", subtest), &output);
 }
 
 #[test]
@@ -1515,13 +1512,7 @@ fn test_invoke_callout<F>(
     empty_mdev.parent = Some(parent.to_string());
 
     let res = Callout::invoke(&mut empty_mdev, action, |_empty_mdev| Ok(()));
-
-    if expect == Expect::Fail {
-        res.expect_err("expected callout to fail");
-        return;
-    }
-
-    assert!(res.is_ok());
+    let _ = assert_result(res, expect, "invoke callout");
 }
 
 fn test_get_callout<F>(
@@ -1542,13 +1533,7 @@ fn test_get_callout<F>(
     empty_mdev.parent = Some(parent.to_string());
 
     let res = Callout::get_attributes(&mut empty_mdev);
-
-    if expect == Expect::Fail {
-        res.expect_err("expected callout to fail");
-        return;
-    }
-
-    assert!(res.is_ok());
+    let _ = assert_result(res, expect, "get callout");
 }
 
 #[test]
@@ -1571,7 +1556,7 @@ fn test_callouts() {
     );
     test_invoke_callout(
         "test_callout_all_fail",
-        Expect::Fail,
+        Expect::Fail(None),
         Action::Test,
         Uuid::parse_str(DEFAULT_UUID).unwrap(),
         DEFAULT_PARENT,
@@ -1597,7 +1582,7 @@ fn test_callouts() {
     // return error code 1.
     test_invoke_callout(
         "test_callout_type_c",
-        Expect::Fail,
+        Expect::Fail(None),
         Action::Test,
         Uuid::parse_str(DEFAULT_UUID).unwrap(),
         "parent_c",
@@ -1692,7 +1677,7 @@ fn test_callouts() {
     );
     test_get_callout(
         "test_callout_bad_json",
-        Expect::Fail,
+        Expect::Fail(None),
         Uuid::parse_str(DEFAULT_UUID).unwrap(),
         DEFAULT_PARENT,
         DEFAULT_TYPE,
