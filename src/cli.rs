@@ -1,21 +1,21 @@
 //! Command line options for mdevctl
 
+pub use clap::Parser;
 use std::path::PathBuf;
-pub use structopt::StructOpt;
 use uuid::Uuid;
 
-#[derive(StructOpt, Debug)]
-#[structopt(about = "List mediated devices")]
+#[derive(Parser, Debug)]
+#[clap(version, about = "List mediated devices", name = "lsmdev")]
 pub struct LsmdevOptions {
-    #[structopt(short, long, help = "Show defined devices")]
+    #[clap(short, long, help = "Show defined devices")]
     pub defined: bool,
-    #[structopt(long, help = "Output device list in json format")]
+    #[clap(long, help = "Output device list in json format")]
     pub dumpjson: bool,
-    #[structopt(short, long, help = "Print additional information about the devices")]
+    #[clap(short, long, help = "Print additional information about the devices")]
     pub verbose: bool,
-    #[structopt(short, long, help = "List devices matching the specified UUID")]
+    #[clap(short, long, help = "List devices matching the specified UUID")]
     pub uuid: Option<Uuid>,
-    #[structopt(
+    #[clap(
         short,
         long,
         help = "List devices associated with the specified Parent device"
@@ -24,16 +24,10 @@ pub struct LsmdevOptions {
 }
 
 // command-line argument definitions.
-#[derive(StructOpt)]
-#[structopt(
-    about = "A mediated device management utility for Linux",
-    global_settings = &[
-        structopt::clap::AppSettings::VersionlessSubcommands,
-        structopt::clap::AppSettings::UnifiedHelpMessage,
-    ]
-)]
+#[derive(Parser)]
+#[clap(version, about = "A mediated device management utility for Linux")]
 pub enum MdevctlCommands {
-    #[structopt(
+    #[clap(
         about = "Define a persistent mediated device",
         long_about = "Define a persistent mediated device\n\n\
                 If the device specified by the UUID currently exists, 'parent' and 'type' may be \
@@ -43,34 +37,34 @@ pub enum MdevctlCommands {
                 Running devices are unaffected by this command."
     )]
     Define {
-        #[structopt(
+        #[clap(
             short,
             long,
-            required_unless("parent"),
+            required_unless_present("parent"),
             help = "Assign UUID to the device"
         )]
         uuid: Option<Uuid>,
-        #[structopt(
+        #[clap(
             short,
             long,
             help = "Automatically start device on parent availability"
         )]
         auto: bool,
-        #[structopt(
+        #[clap(
             short,
             long,
-            required_unless("uuid"),
+            required_unless_present("uuid"),
             help = "Specify the parent of the device"
         )]
         parent: Option<String>,
-        #[structopt(
+        #[clap(
             name = "type",
             short,
             long,
             help = "Specify the mdev type of the device"
         )]
         mdev_type: Option<String>,
-        #[structopt(
+        #[clap(
             long, parse(from_os_str),
             conflicts_with_all(&["type", "auto"]),
             help = "Specify device details in JSON format"
@@ -78,7 +72,7 @@ pub enum MdevctlCommands {
         jsonfile: Option<PathBuf>,
     },
 
-    #[structopt(
+    #[clap(
         about = "Undefine a persistent mediated device",
         long_about = "Undefine, or remove a config for an mdev device\n\n\
                 If a UUID exists for multiple parents, all will be removed unless a parent is
@@ -86,13 +80,13 @@ pub enum MdevctlCommands {
                 Running devices are unaffected by this command."
     )]
     Undefine {
-        #[structopt(short, long, help = "UUID of the device to be undefined")]
+        #[clap(short, long, help = "UUID of the device to be undefined")]
         uuid: Uuid,
-        #[structopt(short, long, help = "Parent of the device to be undefined")]
+        #[clap(short, long, help = "Parent of the device to be undefined")]
         parent: Option<String>,
     },
 
-    #[structopt(
+    #[clap(
         about = "Modify the definition of a mediated device",
         long_about = "Modify the definition of a mediated device\n\n\
                 The 'parent' option further identifies a UUID if it is not unique. The parent for a \
@@ -107,18 +101,18 @@ pub enum MdevctlCommands {
                 Running devices are unaffected by this command."
     )]
     Modify {
-        #[structopt(short, long, help = "UUID of the mdev to modify")]
+        #[clap(short, long, help = "UUID of the mdev to modify")]
         uuid: Uuid,
-        #[structopt(short, long, help = "Parent of the mdev to modify")]
+        #[clap(short, long, help = "Parent of the mdev to modify")]
         parent: Option<String>,
-        #[structopt(
+        #[clap(
             name = "type",
             short,
             long,
             help = "Modify the mdev type for this device"
         )]
         mdev_type: Option<String>,
-        #[structopt(
+        #[clap(
             long,
             conflicts_with("delattr"),
             requires("value"),
@@ -126,19 +120,19 @@ pub enum MdevctlCommands {
             value_name = "attr_name"
         )]
         addattr: Option<String>,
-        #[structopt(long, help = "Delete an attribute")]
+        #[clap(long, help = "Delete an attribute")]
         delattr: bool,
-        #[structopt(long, short, help = "Index of the attribute to modify")]
+        #[clap(long, short, help = "Index of the attribute to modify")]
         index: Option<u32>,
-        #[structopt(
+        #[clap(
             long,
             help = "Value for the attribute specified by --addattr",
             value_name = "attr_value"
         )]
         value: Option<String>,
-        #[structopt(short, long, help = "Device will be started automatically")]
+        #[clap(short, long, help = "Device will be started automatically")]
         auto: bool,
-        #[structopt(
+        #[clap(
             short,
             long,
             conflicts_with("auto"),
@@ -146,7 +140,7 @@ pub enum MdevctlCommands {
         )]
         manual: bool,
     },
-    #[structopt(
+    #[clap(
         about = "Start a mediated device",
         long_about = "Start a mediated device\n\n\
                 If the UUID is previously defined and unique, the UUID is sufficient to start the \
@@ -159,23 +153,23 @@ pub enum MdevctlCommands {
                 attributes to be applied to the started device."
     )]
     Start {
-        #[structopt(
+        #[clap(
             short,
             long,
-            required_unless("parent"),
+            required_unless_present("parent"),
             help = "UUID of the device to start"
         )]
         uuid: Option<Uuid>,
-        #[structopt(
+        #[clap(
             short,
             long,
-            required_unless("uuid"),
+            required_unless_present("uuid"),
             help = "Parent of the device to start"
         )]
         parent: Option<String>,
-        #[structopt(name = "type", short, long, help = "Mdev type of the device to start")]
+        #[clap(name = "type", short, long, help = "Mdev type of the device to start")]
         mdev_type: Option<String>,
-        #[structopt(
+        #[clap(
             long,
             parse(from_os_str),
             conflicts_with("type"),
@@ -183,12 +177,12 @@ pub enum MdevctlCommands {
         )]
         jsonfile: Option<PathBuf>,
     },
-    #[structopt(about = "Stop a mediated device")]
+    #[clap(about = "Stop a mediated device")]
     Stop {
-        #[structopt(short, long, help = "UUID of the device to stop")]
+        #[clap(short, long, help = "UUID of the device to stop")]
         uuid: Uuid,
     },
-    #[structopt(
+    #[clap(
         about = "List mediated devices",
         long_about = "List mediated devices\n\n\
                 With no options, information about the currently running mediated devices is \
@@ -202,18 +196,18 @@ pub enum MdevctlCommands {
                 include attributes for the device(s)."
     )]
     List(LsmdevOptions),
-    #[structopt(
+    #[clap(
         about = "List available mediated device types",
         long_about = "List available mediated device types\n\n\
                 Specifying a 'parent' lists only the types provided by the given parent device. \
                 The 'dumpjson' option provides output in machine readable JSON format."
     )]
     Types {
-        #[structopt(short, long, help = "Show supported types for the specified parent")]
+        #[clap(short, long, help = "Show supported types for the specified parent")]
         parent: Option<String>,
-        #[structopt(long, help = "Output mdev types list in JSON format")]
+        #[clap(long, help = "Output mdev types list in JSON format")]
         dumpjson: bool,
     },
-    #[structopt(setting = structopt::clap::AppSettings::Hidden)]
+    #[clap(hide = true)]
     StartParentMdevs { parent: String },
 }

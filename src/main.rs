@@ -6,6 +6,7 @@
 //! See `mdevctl help` or the manpage for more information.
 
 use anyhow::{anyhow, ensure, Context, Result};
+use clap::Parser;
 use log::{debug, warn};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -13,7 +14,6 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 use std::vec::Vec;
-use structopt::StructOpt;
 use uuid::Uuid;
 
 use crate::callouts::*;
@@ -737,7 +737,7 @@ fn main() -> Result<()> {
     match exe.to_str() {
         Some(val) if val.ends_with("lsmdev") => {
             debug!("running as 'lsmdev'");
-            let opts = LsmdevOptions::from_args();
+            let opts = LsmdevOptions::parse();
             list_command(
                 &env,
                 opts.defined,
@@ -747,7 +747,7 @@ fn main() -> Result<()> {
                 opts.parent,
             )
         }
-        _ => match MdevctlCommands::from_args() {
+        _ => match MdevctlCommands::parse() {
             MdevctlCommands::Define {
                 uuid,
                 auto,
