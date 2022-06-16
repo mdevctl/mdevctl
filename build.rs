@@ -1,9 +1,9 @@
+use clap::CommandFactory;
+use clap_complete::{generate_to, Shell};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use structopt::clap::Shell;
-use structopt::StructOpt;
 
 #[path = "src/cli.rs"]
 mod cli;
@@ -44,13 +44,18 @@ fn generate_manpage<P: AsRef<Path>>(outdir: P) {
         .expect("Unable to generate manpage. Is 'rst2man' installed? You can specify a custom 'rst2man' executable by setting the RST2MAN environment variable.");
 }
 
+fn generate_completion(cmd: &mut clap::Command, outdir: &PathBuf) {
+    let name = cmd.get_name().to_string();
+    generate_to(Shell::Bash, cmd, name, outdir).expect("Unable to generate shell completion files");
+}
+
 fn main() {
     let outdir =
         PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR environment variable not defined"));
 
     // generate bash completions for both executables
-    cli::MdevctlCommands::clap().gen_completions("mdevctl", Shell::Bash, &outdir);
-    cli::LsmdevOptions::clap().gen_completions("lsmdev", Shell::Bash, &outdir);
+    generate_completion(&mut cli::MdevctlCommands::command(), &outdir);
+    generate_completion(&mut cli::LsmdevOptions::command(), &outdir);
 
     // generate manpage
     generate_manpage(outdir);
