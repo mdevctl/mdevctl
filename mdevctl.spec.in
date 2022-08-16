@@ -83,6 +83,8 @@ make DESTDIR=%{buildroot} install
 
 %if %{with check}
 %check
+export RUST_BACKTRACE=1
+export MDEVCTL_LOG=debug
 %cargo_test
 %endif
 
