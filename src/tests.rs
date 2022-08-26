@@ -64,8 +64,14 @@ impl TestEnvironment {
         fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
         fs::create_dir_all(test.config_base()).expect("Unable to create config_base");
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
-        fs::create_dir_all(test.callout_dir()).expect("Unable to create callout_dir");
-        fs::create_dir_all(test.notification_dir()).expect("Unable to create notification_dir");
+        for dir in test.callout_dirs() {
+            fs::create_dir_all(&dir)
+                .expect(format!("Unable to create callout_dir {:?}", &dir).as_str());
+        }
+        for dir in test.notification_dirs() {
+            fs::create_dir_all(&dir)
+                .expect(format!("Unable to create notification_dir '{:?}'", &dir).as_str());
+        }
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }

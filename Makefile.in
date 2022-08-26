@@ -4,8 +4,9 @@ PREFIX?=/usr
 UDEVDIR=$(shell pkg-config --variable=udevdir udev)
 SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
-CALLOUT_CMD_DIR=$(CONFDIR)/scripts.d/callouts
-CALLOUT_NOTIFIER_DIR=$(CONFDIR)/scripts.d/notifiers
+SCRIPTDIR=$(PREFIX)/lib/mdevctl/scripts.d
+CALLOUTS_DIR=$(SCRIPTDIR)/callouts
+NOTIFIERS_DIR=$(SCRIPTDIR)/notifiers
 DATADIR=$(PREFIX)/share
 MANDIR=$(DATADIR)/man
 BASH_COMPLETION_DIR=$(DATADIR)/bash-completion/completions
@@ -50,5 +51,5 @@ install:
 	mkdir -p $(DESTDIR)$(BASH_COMPLETION_DIR)/
 	install -m 644 -T @@outdir@@/mdevctl.bash $(DESTDIR)$(BASH_COMPLETION_DIR)/mdevctl
 	install -m 644 -T @@outdir@@/lsmdev.bash $(DESTDIR)$(BASH_COMPLETION_DIR)/lsmdev
-	mkdir -p $(DESTDIR)$(CALLOUT_CMD_DIR)
-	mkdir -p $(DESTDIR)$(CALLOUT_NOTIFIER_DIR)
+	mkdir -p $(DESTDIR)$(CALLOUTS_DIR)
+	mkdir -p $(DESTDIR)$(NOTIFIERS_DIR)

@@ -25,16 +25,36 @@ pub trait Environment {
         self.root().join("sys/class/mdev_bus")
     }
 
-    fn scripts_base(&self) -> PathBuf {
+    fn config_scripts_base(&self) -> PathBuf {
         self.config_base().join("scripts.d")
+    }
+
+    fn scripts_base(&self) -> PathBuf {
+        self.root().join("usr/lib/mdevctl/scripts.d")
     }
 
     fn callout_dir(&self) -> PathBuf {
         self.scripts_base().join("callouts")
     }
 
+    fn old_callout_dir(&self) -> PathBuf {
+        self.config_scripts_base().join("callouts")
+    }
+
+    fn callout_dirs(&self) -> Vec<PathBuf> {
+        vec![self.callout_dir(), self.old_callout_dir()]
+    }
+
     fn notification_dir(&self) -> PathBuf {
         self.scripts_base().join("notifiers")
+    }
+
+    fn old_notification_dir(&self) -> PathBuf {
+        self.config_scripts_base().join("notifiers")
+    }
+
+    fn notification_dirs(&self) -> Vec<PathBuf> {
+        vec![self.notification_dir(), self.old_notification_dir()]
     }
 
     fn self_check(&self) -> Result<()> {
