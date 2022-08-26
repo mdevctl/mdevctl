@@ -10,6 +10,7 @@ use clap::Parser;
 use log::{debug, warn};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
@@ -327,7 +328,7 @@ fn get_defined_device<'a>(
 ) -> Result<MDev<'a>> {
     let devs = defined_devices(env, Some(&uuid), parent)?;
     if devs.is_empty() {
-        return match parent {
+        match parent {
             None => Err(anyhow!(
                 "Mediated device {} is not defined",
                 uuid.to_hyphenated().to_string()
@@ -337,9 +338,9 @@ fn get_defined_device<'a>(
                 p,
                 uuid.to_hyphenated().to_string()
             )),
-        };
+        }
     } else if devs.len() > 1 {
-        return match parent {
+        match parent {
             None => Err(anyhow!(
                 "Multiple definitions found for {}, specify a parent",
                 uuid.to_hyphenated().to_string()
@@ -349,7 +350,7 @@ fn get_defined_device<'a>(
                 p,
                 uuid.to_hyphenated().to_string()
             )),
-        };
+        }
     } else {
         let (parent, children) = devs.iter().next().unwrap();
         if children.len() > 1 {
@@ -359,7 +360,7 @@ fn get_defined_device<'a>(
                 uuid.to_hyphenated().to_string()
             ));
         }
-        return Ok(children.get(0).unwrap().clone());
+        Ok(children.get(0).unwrap().clone())
     }
 }
 
@@ -668,19 +669,20 @@ fn types_command_helper(
         output.push_str(&jsonstr);
     } else {
         for (parent, children) in types {
-            output.push_str(&format!("{}\n", parent));
+            let _ = writeln!(output, "{}", parent);
             for child in children {
-                output.push_str(&format!("  {}\n", child.typename));
-                output.push_str(&format!(
-                    "    Available instances: {}\n",
+                let _ = writeln!(output, "  {}", child.typename);
+                let _ = writeln!(
+                    output,
+                    "    Available instances: {}",
                     child.available_instances
-                ));
-                output.push_str(&format!("    Device API: {}\n", child.device_api));
+                );
+                let _ = writeln!(output, "    Device API: {}", child.device_api);
                 if !child.name.is_empty() {
-                    output.push_str(&format!("    Name: {}\n", child.name));
+                    let _ = writeln!(output, "    Name: {}", child.name);
                 }
                 if !child.description.is_empty() {
-                    output.push_str(&format!("    Description: {}\n", child.description));
+                    let _ = writeln!(output, "    Description: {}", child.description);
                 }
             }
         }

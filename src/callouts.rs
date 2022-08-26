@@ -8,7 +8,7 @@ use std::process::{Command, Output, Stdio};
 
 use crate::mdev::*;
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     Pre,
     Post,
@@ -149,7 +149,7 @@ impl Callout {
                 } else {
                     c.print_err(&output, &path);
 
-                    return Err(anyhow!("failed to get attributes from {:?}", path));
+                    Err(anyhow!("failed to get attributes from {:?}", path))
                 }
             }
             None => {

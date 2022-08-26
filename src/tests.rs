@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
 use log::info;
+use nix::sys::wait::waitpid;
+use nix::unistd::{fork, ForkResult};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -101,10 +103,31 @@ impl TestEnvironment {
     fn populate_callout_script(&self, filename: &str) {
         let calloutscriptdir: PathBuf = [TEST_DATA_DIR, "callouts"].iter().collect();
         let calloutscript = calloutscriptdir.join(filename);
+        let dest = self.callout_dir().join(filename);
         assert!(calloutscript.exists());
 
-        let dest = self.callout_dir().join(filename);
-        fs::copy(calloutscript, dest).expect("Unable to copy callout script");
+        /* Because the test suite is multi-threaded, we end up having the same flaky failures
+         * described in this bug: https://github.com/golang/go/issues/22315. When we copy the
+         * callout script into the test environment, another thread might be in the middle of
+         * forking. This fork would then inherit the open writable file descriptor from the parent.
+         * If that child process file descriptor stays open until we try to execute this callout
+         * script, the script will fail to run and we'll get an ETXTBSY error from the OS. In order
+         * to avoid this, we need to avoid the possibility of having any open writable file
+         * descriptors to executable files in the parent process that could be inherited by forks
+         * in other threads. Copying executable files in a child process avoid this. */
+        match unsafe { fork() }.expect("failed to fork") {
+            ForkResult::Parent { child } => {
+                println!("parent");
+                waitpid(child, None).expect("Failed to wait for child");
+            }
+            ForkResult::Child => {
+                println!("child");
+                fs::copy(calloutscript, &dest).expect("Unable to copy callout script");
+                unsafe {
+                    libc::_exit(0);
+                }
+            }
+        }
     }
 
     // set up a few files in the test environment to simulate a parent device that supports
