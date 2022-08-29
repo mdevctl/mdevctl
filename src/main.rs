@@ -82,7 +82,7 @@ fn define_command_helper(
             return Err(anyhow!(
                 "Cowardly refusing to overwrite existing config for {}/{}",
                 parent,
-                uuid.to_hyphenated().to_string()
+                uuid.hyphenated().to_string()
             ));
         }
 
@@ -116,7 +116,7 @@ fn define_command_helper(
         if dev.is_defined() {
             return Err(anyhow!(
                 "Device {} on {} already defined",
-                dev.uuid.to_hyphenated().to_string(),
+                dev.uuid.hyphenated().to_string(),
                 dev.parent()?
             ));
         }
@@ -150,7 +150,7 @@ fn define_command(
     }
     Callout::invoke(&mut dev, Action::Define, |dev| dev.define()).map(|_| {
         if uuid.is_none() {
-            println!("{}", dev.uuid.to_hyphenated());
+            println!("{}", dev.uuid.hyphenated());
         }
     })
 }
@@ -248,7 +248,7 @@ fn start_command_helper(
                     Ordering::Greater => {
                         return Err(anyhow!(
                             "Multiple definitions found for device {}. Please specify a parent.",
-                            uuid.unwrap().to_hyphenated().to_string()
+                            uuid.unwrap().hyphenated().to_string()
                         ));
                     }
                     Ordering::Equal => {
@@ -261,7 +261,7 @@ fn start_command_helper(
                             if mdev_type.is_some() && mdev_type != d.mdev_type {
                                 return Err(anyhow!(
                                     "Device {} already exists on parent {} with type {}",
-                                    d.uuid.to_hyphenated().to_string(),
+                                    d.uuid.hyphenated().to_string(),
                                     d.parent().unwrap(),
                                     d.mdev_type.as_ref().unwrap()
                                 ));
@@ -306,7 +306,7 @@ fn start_command(
 
     Callout::invoke(&mut dev, Action::Start, |dev| dev.start()).map(|_| {
         if uuid.is_none() {
-            println!("{}", dev.uuid.to_hyphenated());
+            println!("{}", dev.uuid.hyphenated());
         }
     })
 }
@@ -331,24 +331,24 @@ fn get_defined_device<'a>(
         match parent {
             None => Err(anyhow!(
                 "Mediated device {} is not defined",
-                uuid.to_hyphenated().to_string()
+                uuid.hyphenated().to_string()
             )),
             Some(p) => Err(anyhow!(
                 "Mediated device {}/{} is not defined",
                 p,
-                uuid.to_hyphenated().to_string()
+                uuid.hyphenated().to_string()
             )),
         }
     } else if devs.len() > 1 {
         match parent {
             None => Err(anyhow!(
                 "Multiple definitions found for {}, specify a parent",
-                uuid.to_hyphenated().to_string()
+                uuid.hyphenated().to_string()
             )),
             Some(p) => Err(anyhow!(
                 "Multiple definitions found for {}/{}",
                 p,
-                uuid.to_hyphenated().to_string()
+                uuid.hyphenated().to_string()
             )),
         }
     } else {
@@ -357,7 +357,7 @@ fn get_defined_device<'a>(
             return Err(anyhow!(
                 "Multiple definitions found for {}/{}",
                 parent,
-                uuid.to_hyphenated().to_string()
+                uuid.hyphenated().to_string()
             ));
         }
         Ok(children.get(0).unwrap().clone())

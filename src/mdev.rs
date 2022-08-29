@@ -43,7 +43,7 @@ impl<'a> MDev<'a> {
 
     pub fn path(&self) -> PathBuf {
         let mut p = self.env.mdev_base();
-        p.push(self.uuid.to_hyphenated().to_string());
+        p.push(self.uuid.hyphenated().to_string());
         p
     }
 
@@ -52,7 +52,7 @@ impl<'a> MDev<'a> {
         self.parent.as_ref().ok_or_else(|| {
             anyhow!(
                 "Device {} is missing a parent",
-                self.uuid.to_hyphenated().to_string()
+                self.uuid.hyphenated().to_string()
             )
         })
     }
@@ -62,7 +62,7 @@ impl<'a> MDev<'a> {
         self.mdev_type.as_ref().ok_or_else(|| {
             anyhow!(
                 "Device {} is missing a mdev_type",
-                self.uuid.to_hyphenated().to_string()
+                self.uuid.hyphenated().to_string()
             )
         })
     }
@@ -71,7 +71,7 @@ impl<'a> MDev<'a> {
         self.parent.as_ref().map(|x| {
             let mut path = self.env.persist_base();
             path.push(x);
-            path.push(self.uuid.to_hyphenated().to_string());
+            path.push(self.uuid.hyphenated().to_string());
             path
         })
     }
@@ -215,7 +215,7 @@ impl<'a> MDev<'a> {
             }
         }
 
-        let mut output = self.uuid.to_hyphenated().to_string();
+        let mut output = self.uuid.hyphenated().to_string();
         output.push(' ');
         output.push_str(self.parent()?);
         output.push(' ');
@@ -265,7 +265,7 @@ impl<'a> MDev<'a> {
             .collect();
         partial.insert("attrs".to_string(), jsonattrs.into());
 
-        let full = serde_json::json!({ self.uuid.to_hyphenated().to_string(): partial });
+        let full = serde_json::json!({ self.uuid.hyphenated().to_string(): partial });
 
         match include_uuid {
             true => Ok(full),
@@ -360,7 +360,7 @@ impl<'a> MDev<'a> {
         path.pop();
         path.push("create");
         debug!("Creating mediated device: {:?} -> {:?}", self.uuid, path);
-        match fs::write(path, self.uuid.to_hyphenated().to_string()) {
+        match fs::write(path, self.uuid.hyphenated().to_string()) {
             Ok(_) => {
                 self.active = true;
                 Ok(())
@@ -368,7 +368,7 @@ impl<'a> MDev<'a> {
             Err(e) => Err(e).with_context(|| {
                 format!(
                     "Failed to create mdev {}, type {} on {}",
-                    self.uuid.to_hyphenated(),
+                    self.uuid.hyphenated(),
                     mdev_type,
                     parent
                 )
@@ -406,12 +406,9 @@ impl<'a> MDev<'a> {
     }
 
     pub fn undefine(&mut self) -> Result<()> {
-        let p = self.persist_path().ok_or_else(|| {
-            anyhow!(
-                "Failed to undefine {}",
-                self.uuid.to_hyphenated().to_string()
-            )
-        })?;
+        let p = self
+            .persist_path()
+            .ok_or_else(|| anyhow!("Failed to undefine {}", self.uuid.hyphenated().to_string()))?;
 
         fs::remove_file(&p).with_context(|| format!("Failed to remove file {:?}", p))?;
         Ok(())

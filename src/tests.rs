@@ -233,7 +233,7 @@ fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
         let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
         test.compare_to_file(&format!("{}.out", uuid), &jsonstr);
-        assert_eq!(uuid, dev.uuid.to_hyphenated().to_string());
+        assert_eq!(uuid, dev.uuid.hyphenated().to_string());
         assert_eq!(Some(parent.to_string()), dev.parent);
     }
 }
@@ -869,7 +869,7 @@ fn test_start_helper<F>(
             assert_eq!(uuid.unwrap(), dev.uuid);
         }
         let contents = fs::read_to_string(create_path).expect("Unable to read 'create' file");
-        assert_eq!(dev.uuid.to_hyphenated().to_string(), contents);
+        assert_eq!(dev.uuid.hyphenated().to_string(), contents);
     }
 }
 
