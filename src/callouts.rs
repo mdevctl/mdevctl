@@ -234,9 +234,12 @@ impl Callout {
             dev.mdev_type.as_ref()?
         );
 
-        for s in dir.as_ref().read_dir().ok()? {
-            let path = s.ok()?.path();
-
+        for path in dir
+            .as_ref()
+            .read_dir()
+            .ok()?
+            .filter_map(|k| k.ok().map(|e| e.path()))
+        {
             match self.invoke_script(dev, &path, event, action) {
                 Ok(res) => {
                     if res.status.code().is_none() {
