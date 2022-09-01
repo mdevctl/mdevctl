@@ -101,9 +101,14 @@ impl TestEnvironment {
 
     // set up a script in the test environment to simulate a callout
     fn populate_callout_script(&self, filename: &str) {
+        self.populate_callout_script_full(filename, None)
+    }
+
+    // set up a script in the test environment to simulate a callout
+    fn populate_callout_script_full(&self, filename: &str, destname: Option<&str>) {
         let calloutscriptdir: PathBuf = [TEST_DATA_DIR, "callouts"].iter().collect();
         let calloutscript = calloutscriptdir.join(filename);
-        let dest = self.callout_dir().join(filename);
+        let dest = self.callout_dir().join(destname.unwrap_or(filename));
         assert!(calloutscript.exists());
 
         /* Because the test suite is multi-threaded, we end up having the same flaky failures
@@ -1706,6 +1711,30 @@ fn test_callouts() {
         DEFAULT_TYPE,
         |test| {
             test.populate_callout_script("bad-json.sh");
+        },
+    );
+    test_invoke_callout(
+        "test_callout_order_fail",
+        Expect::Fail(None),
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script_full("rc1.sh", Some("00.sh"));
+            test.populate_callout_script_full("rc0.sh", Some("99.sh"));
+        },
+    );
+    test_invoke_callout(
+        "test_callout_order_pass",
+        Expect::Pass,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script_full("rc0.sh", Some("00.sh"));
+            test.populate_callout_script_full("rc1.sh", Some("99.sh"));
         },
     );
 }
