@@ -233,9 +233,6 @@ impl Callout {
             action,
             dev.mdev_type.as_ref()?
         );
-        if dir.as_ref().read_dir().ok()?.count() == 0 {
-            return None;
-        }
 
         for s in dir.as_ref().read_dir().ok()? {
             let path = s.ok()?.path();
