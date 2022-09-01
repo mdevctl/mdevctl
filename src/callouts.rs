@@ -234,12 +234,16 @@ impl Callout {
             dev.mdev_type.as_ref()?
         );
 
-        for path in dir
+        let mut sorted_paths = dir
             .as_ref()
             .read_dir()
             .ok()?
             .filter_map(|k| k.ok().map(|e| e.path()))
-        {
+            .collect::<Vec<_>>();
+
+        sorted_paths.sort();
+
+        for path in sorted_paths {
             match self.invoke_script(dev, &path, event, action) {
                 Ok(res) => {
                     if res.status.code().is_none() {
