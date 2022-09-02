@@ -310,10 +310,6 @@ impl Callout {
             event, action, dev.uuid
         );
 
-        if !dir.is_dir() {
-            return Ok(());
-        }
-
         for path in dir.read_dir()?.filter_map(|x| x.ok().map(|y| y.path())) {
             match self.invoke_script(dev, &path, event, action) {
                 Ok(output) => {
