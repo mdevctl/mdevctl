@@ -139,7 +139,7 @@ impl Callout {
                     if &st == "[{}]" {
                         debug!(
                             "Attribute field for {} is empty",
-                            dev.uuid.to_hyphenated().to_string()
+                            dev.uuid.hyphenated().to_string()
                         );
                         st = "[]".to_string();
                     }
