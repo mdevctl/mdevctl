@@ -112,7 +112,7 @@ impl Callout {
             tmp_res
         });
 
-        let _ = c.notify(dev, action);
+        c.notify(dev, action);
         res
     }
 
@@ -302,7 +302,7 @@ impl Callout {
         }
     }
 
-    fn notify(&mut self, dev: &mut MDev, action: Action) -> Result<()> {
+    fn notify(&mut self, dev: &mut MDev, action: Action) {
         let event = Event::Notify;
         let dir = dev.env.notification_dir();
         debug!(
@@ -310,20 +310,20 @@ impl Callout {
             event, action, dev.uuid
         );
 
-        for path in dir.read_dir()?.filter_map(|x| x.ok().map(|y| y.path())) {
-            match self.invoke_script(dev, &path, event, action) {
-                Ok(output) => {
-                    if !output.status.success() {
-                        debug!("Error occurred when executing notify script {:?}", path);
+        if let Ok(readdir) = dir.read_dir() {
+            for path in readdir.filter_map(|x| x.ok().map(|y| y.path())) {
+                match self.invoke_script(dev, &path, event, action) {
+                    Ok(output) => {
+                        if !output.status.success() {
+                            debug!("Error occurred when executing notify script {:?}", path);
+                        }
                     }
-                }
-                _ => {
-                    debug!("Failed to execute callout script {:?}", path);
-                    continue;
+                    _ => {
+                        debug!("Failed to execute callout script {:?}", path);
+                        continue;
+                    }
                 }
             }
         }
-
-        Ok(())
     }
 }
