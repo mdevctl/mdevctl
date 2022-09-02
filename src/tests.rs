@@ -107,14 +107,23 @@ impl TestEnvironment {
 
     // set up a script in the test environment to simulate a callout
     fn populate_callout_script(&self, filename: &str) {
-        self.populate_callout_script_full(filename, None)
+        self.populate_callout_script_full(filename, None, true)
     }
 
     // set up a script in the test environment to simulate a callout
-    fn populate_callout_script_full(&self, filename: &str, destname: Option<&str>) {
+    fn populate_callout_script_full(
+        &self,
+        filename: &str,
+        destname: Option<&str>,
+        default_dir: bool,
+    ) {
         let calloutscriptdir: PathBuf = [TEST_DATA_DIR, "callouts"].iter().collect();
         let calloutscript = calloutscriptdir.join(filename);
-        let dest = self.callout_dir().join(destname.unwrap_or(filename));
+        let dest = match default_dir {
+            true => self.callout_dir(),
+            false => self.old_callout_dir(),
+        }
+        .join(destname.unwrap_or(filename));
         assert!(calloutscript.exists());
 
         /* Because the test suite is multi-threaded, we end up having the same flaky failures
@@ -1727,8 +1736,8 @@ fn test_callouts() {
         DEFAULT_PARENT,
         DEFAULT_TYPE,
         |test| {
-            test.populate_callout_script_full("rc1.sh", Some("00.sh"));
-            test.populate_callout_script_full("rc0.sh", Some("99.sh"));
+            test.populate_callout_script_full("rc1.sh", Some("00.sh"), true);
+            test.populate_callout_script_full("rc0.sh", Some("99.sh"), true);
         },
     );
     test_invoke_callout(
@@ -1739,8 +1748,56 @@ fn test_callouts() {
         DEFAULT_PARENT,
         DEFAULT_TYPE,
         |test| {
-            test.populate_callout_script_full("rc0.sh", Some("00.sh"));
-            test.populate_callout_script_full("rc1.sh", Some("99.sh"));
+            test.populate_callout_script_full("rc0.sh", Some("00.sh"), true);
+            test.populate_callout_script_full("rc1.sh", Some("99.sh"), true);
+        },
+    );
+    test_invoke_callout(
+        "test_callout_location_priority_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script_full("rc0.sh", None, true);
+            test.populate_callout_script_full("rc1.sh", None, false);
+        },
+    );
+    test_invoke_callout(
+        "test_callout_location_priority_fail",
+        Expect::Fail(None),
+        Action::Start,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script_full("rc0.sh", None, false);
+            test.populate_callout_script_full("rc1.sh", None, true);
+        },
+    );
+    test_invoke_callout(
+        "test_callout_location_priority_skip_fail",
+        Expect::Fail(None),
+        Action::Start,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script_full("rc2.sh", None, true);
+            test.populate_callout_script_full("rc1.sh", None, false);
+        },
+    );
+    test_invoke_callout(
+        "test_callout_location_priority_skip_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script_full("rc2.sh", None, true);
+            test.populate_callout_script_full("rc0.sh", None, false);
         },
     );
 }
