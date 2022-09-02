@@ -314,9 +314,7 @@ impl Callout {
             return Ok(());
         }
 
-        for s in dir.read_dir()? {
-            let path = s?.path();
-
+        for path in dir.read_dir()?.filter_map(|x| x.ok().map(|y| y.path())) {
             match self.invoke_script(dev, &path, event, action) {
                 Ok(output) => {
                     if !output.status.success() {
