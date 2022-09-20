@@ -112,7 +112,7 @@ impl Callout {
             tmp_res
         });
 
-        let _ = c.notify(dev, action);
+        c.notify(dev, action);
         res
     }
 
@@ -233,13 +233,17 @@ impl Callout {
             action,
             dev.mdev_type.as_ref()?
         );
-        if dir.as_ref().read_dir().ok()?.count() == 0 {
-            return None;
-        }
 
-        for s in dir.as_ref().read_dir().ok()? {
-            let path = s.ok()?.path();
+        let mut sorted_paths = dir
+            .as_ref()
+            .read_dir()
+            .ok()?
+            .filter_map(|k| k.ok().map(|e| e.path()))
+            .collect::<Vec<_>>();
 
+        sorted_paths.sort();
+
+        for path in sorted_paths {
             match self.invoke_script(dev, &path, event, action) {
                 Ok(res) => {
                     if res.status.code().is_none() {
@@ -298,7 +302,7 @@ impl Callout {
         }
     }
 
-    fn notify(&mut self, dev: &mut MDev, action: Action) -> Result<()> {
+    fn notify(&mut self, dev: &mut MDev, action: Action) {
         let event = Event::Notify;
         let dir = dev.env.notification_dir();
         debug!(
@@ -306,26 +310,20 @@ impl Callout {
             event, action, dev.uuid
         );
 
-        if !dir.is_dir() {
-            return Ok(());
-        }
-
-        for s in dir.read_dir()? {
-            let path = s?.path();
-
-            match self.invoke_script(dev, &path, event, action) {
-                Ok(output) => {
-                    if !output.status.success() {
-                        debug!("Error occurred when executing notify script {:?}", path);
+        if let Ok(readdir) = dir.read_dir() {
+            for path in readdir.filter_map(|x| x.ok().map(|y| y.path())) {
+                match self.invoke_script(dev, &path, event, action) {
+                    Ok(output) => {
+                        if !output.status.success() {
+                            debug!("Error occurred when executing notify script {:?}", path);
+                        }
                     }
-                }
-                _ => {
-                    debug!("Failed to execute callout script {:?}", path);
-                    continue;
+                    _ => {
+                        debug!("Failed to execute callout script {:?}", path);
+                        continue;
+                    }
                 }
             }
         }
-
-        Ok(())
     }
 }
