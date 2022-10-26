@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use log::debug;
+use std::env;
 use std::path::{Path, PathBuf};
 
 /// A trait which provides filesystem paths for certain system resources.
@@ -77,8 +78,12 @@ impl Environment for DefaultEnvironment {
 
 impl DefaultEnvironment {
     pub fn new() -> DefaultEnvironment {
+        let root = match env::var("MDEVCTL_ENV_ROOT") {
+            Ok(d) => d,
+            _ => "/".to_string(),
+        };
         DefaultEnvironment {
-            rootpath: PathBuf::from("/"),
+            rootpath: PathBuf::from(root),
         }
     }
 }
