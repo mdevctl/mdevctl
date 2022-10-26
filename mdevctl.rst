@@ -407,7 +407,7 @@ ensure the specified device type is supported, otherwise error code 2 should be
 returned. If no script is found for the specified device type, then mdevctl
 will carry on as normal.
 
-These scripts are stored in */etc/mdevctl.d/scripts.d/callouts*. The same
+These scripts are stored in */usr/lib/mdevctl/scripts.d/callouts*. The same
 script is invoked for ``pre``, ``post``, and ``get`` call-out events for
 the device type.
 
@@ -498,7 +498,7 @@ call-out scripts, notifier scripts are device-type agnostic.
     pre event, then status will be ``none``. If following a post event, then
     status will mirror the value passed to the post-command call-out.
 
-    These scripts are stored in */etc/mdevctl.d/scripts.d/notifiers*. **All
+    These scripts are stored in */usr/lib/mdevctl/scripts.d/notifiers*. **All
     notification scripts will be invoked during a notification event**.
 
     A non-zero return code is ignored.
@@ -523,13 +523,17 @@ FILES
 Configuration files are in one subdirectory per parent device and named
 by UUID.
 
-*/etc/mdevctl.d/scripts.d/callouts/**
+*/usr/lib/mdevctl/scripts.d/callouts/**
 
-Scripts for pre/post/get call-out events.
+Scripts for pre/post/get call-out events. **NOTE**: these scripts were
+previously located at */etc/mdevctl.d/scripts.d/callouts/**, but that location
+is now deprecated.
 
-*/etc/mdevctl.d/scripts.d/notifiers/**
+*/usr/lib/mdevctl/scripts.d/notifiers/**
 
-Scripts for notification call-out events.
+Scripts for notification call-out events. **NOTE**: these scripts were
+previously located at */etc/mdevctl.d/scripts.d/notifiers/**, but that location
+is now deprecated.
 
 SEE ALSO
 ========

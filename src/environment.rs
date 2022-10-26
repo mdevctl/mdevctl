@@ -2,6 +2,7 @@
 
 use anyhow::{anyhow, Result};
 use log::debug;
+use std::env;
 use std::path::{Path, PathBuf};
 
 /// A trait which provides filesystem paths for certain system resources.
@@ -16,7 +17,7 @@ pub trait Environment {
         self.root().join("sys/bus/mdev/devices")
     }
 
-    fn persist_base(&self) -> PathBuf {
+    fn config_base(&self) -> PathBuf {
         self.root().join("etc/mdevctl.d")
     }
 
@@ -24,16 +25,36 @@ pub trait Environment {
         self.root().join("sys/class/mdev_bus")
     }
 
+    fn config_scripts_base(&self) -> PathBuf {
+        self.config_base().join("scripts.d")
+    }
+
     fn scripts_base(&self) -> PathBuf {
-        self.persist_base().join("scripts.d")
+        self.root().join("usr/lib/mdevctl/scripts.d")
     }
 
     fn callout_dir(&self) -> PathBuf {
         self.scripts_base().join("callouts")
     }
 
+    fn old_callout_dir(&self) -> PathBuf {
+        self.config_scripts_base().join("callouts")
+    }
+
+    fn callout_dirs(&self) -> Vec<PathBuf> {
+        vec![self.callout_dir(), self.old_callout_dir()]
+    }
+
     fn notification_dir(&self) -> PathBuf {
         self.scripts_base().join("notifiers")
+    }
+
+    fn old_notification_dir(&self) -> PathBuf {
+        self.config_scripts_base().join("notifiers")
+    }
+
+    fn notification_dirs(&self) -> Vec<PathBuf> {
+        vec![self.notification_dir(), self.old_notification_dir()]
     }
 
     fn self_check(&self) -> Result<()> {
@@ -41,7 +62,7 @@ pub trait Environment {
         // ensure required system dirs exist. Generally distro packages or 'make install' should
         // create these dirs.
         for dir in vec![
-            self.persist_base(),
+            self.config_base(),
             self.callout_dir(),
             self.notification_dir(),
         ] {
@@ -63,7 +84,7 @@ impl std::fmt::Debug for &dyn Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Environment")
             .field("mdev_base", &self.mdev_base())
-            .field("persist_base", &self.persist_base())
+            .field("config_base", &self.config_base())
             .field("parent_base", &self.parent_base())
             .finish()
     }
@@ -77,8 +98,12 @@ impl Environment for DefaultEnvironment {
 
 impl DefaultEnvironment {
     pub fn new() -> DefaultEnvironment {
+        let root = match env::var("MDEVCTL_ENV_ROOT") {
+            Ok(d) => d,
+            _ => "/".to_string(),
+        };
         DefaultEnvironment {
-            rootpath: PathBuf::from("/"),
+            rootpath: PathBuf::from(root),
         }
     }
 }

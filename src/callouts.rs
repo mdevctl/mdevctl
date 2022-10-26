@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use log::{debug, warn};
 use std::ffi::OsStr;
 use std::fmt::{self, Display, Formatter};
@@ -14,6 +14,42 @@ pub enum Event {
     Post,
     Notify,
     Get,
+}
+
+#[derive(Debug)]
+enum CalloutError {
+    NoMatchingScript,
+    InvocationFailure(PathBuf, Option<i32>),
+    InvalidJSON(serde_json::Error),
+}
+
+impl Display for CalloutError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CalloutError::NoMatchingScript => write!(f, "No matching script for device"),
+            CalloutError::InvocationFailure(p, i) => write!(
+                f,
+                "Script '{:?}' failed with status '{}'",
+                p,
+                match i {
+                    Some(i) => i.to_string(),
+                    None => "unknown".to_string(),
+                }
+            ),
+            CalloutError::InvalidJSON(_) => {
+                write!(f, "Invalid JSON received from callout script")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CalloutError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            CalloutError::InvalidJSON(e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
 impl Display for Event {
@@ -116,15 +152,10 @@ impl Callout {
         res
     }
 
-    pub fn get_attributes(dev: &mut MDev) -> Result<serde_json::Value> {
+    fn get_attributes_dir(dev: &mut MDev, dir: PathBuf) -> Result<serde_json::Value, CalloutError> {
         let event = Event::Get;
         let action = Action::Attributes;
         let c = Callout::new();
-        let dir = dev.env.callout_dir();
-
-        if !dir.is_dir() {
-            return Ok(serde_json::Value::Null);
-        }
 
         match c.invoke_first_matching_script(dev, dir, event, action) {
             Some((path, output)) => {
@@ -144,12 +175,11 @@ impl Callout {
                         st = "[]".to_string();
                     }
 
-                    serde_json::from_str(&st)
-                        .with_context(|| anyhow!("Unable to parse attributes from JSON"))
+                    serde_json::from_str(&st).map_err(CalloutError::InvalidJSON)
                 } else {
                     c.print_err(&output, &path);
 
-                    Err(anyhow!("failed to get attributes from {:?}", path))
+                    Err(CalloutError::InvocationFailure(path, output.status.code()))
                 }
             }
             None => {
@@ -157,9 +187,23 @@ impl Callout {
                     "Device type {} unmatched by callout script",
                     dev.mdev_type.as_ref().unwrap()
                 );
-                Ok(serde_json::Value::Null)
+                Err(CalloutError::NoMatchingScript)
             }
         }
+    }
+
+    pub fn get_attributes(dev: &mut MDev) -> Result<serde_json::Value> {
+        for dir in dev.env.callout_dirs() {
+            if dir.is_dir() {
+                let res = Self::get_attributes_dir(dev, dir);
+                if let Err(CalloutError::NoMatchingScript) = res {
+                    continue;
+                }
+
+                return res.map_err(anyhow::Error::from);
+            }
+        }
+        Ok(serde_json::Value::Null)
     }
 
     fn invoke_script<P: AsRef<Path>>(
@@ -220,7 +264,7 @@ impl Callout {
         }
     }
 
-    fn invoke_first_matching_script<P: AsRef<Path>>(
+    fn invoke_first_matching_script<P: AsRef<Path> + std::fmt::Debug>(
         &self,
         dev: &mut MDev,
         dir: P,
@@ -228,10 +272,11 @@ impl Callout {
         action: Action,
     ) -> Option<(PathBuf, Output)> {
         debug!(
-            "{}-{}: looking for a matching callout script for dev type '{}'",
+            "{}-{}: looking for a matching callout script for dev type '{}' in {:?}",
             event,
             action,
-            dev.mdev_type.as_ref()?
+            dev.mdev_type.as_ref()?,
+            dir
         );
 
         let mut sorted_paths = dir
@@ -268,7 +313,13 @@ impl Callout {
         None
     }
 
-    fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<()> {
+    fn callout_dir(
+        &mut self,
+        dev: &mut MDev,
+        event: Event,
+        action: Action,
+        dir: PathBuf,
+    ) -> Result<(), CalloutError> {
         let rc = match self.script {
             Some(ref s) => self
                 .invoke_script(dev, s, event, action)
@@ -278,10 +329,8 @@ impl Callout {
                     output.status.code()
                 }),
             _ => {
-                let dir = dev.env.callout_dir();
-
                 if !dir.is_dir() {
-                    return Ok(());
+                    return Err(CalloutError::NoMatchingScript);
                 }
                 self.invoke_first_matching_script(dev, dir, event, action)
                     .and_then(|(path, output)| {
@@ -293,34 +342,53 @@ impl Callout {
         };
 
         match rc {
-            Some(0) | None => Ok(()),
-            Some(n) => Err(anyhow!(
-                "callout script {:?} failed with return code {}",
-                self.script.as_ref().unwrap(),
-                n
+            Some(0) => Ok(()),
+            Some(n) => Err(CalloutError::InvocationFailure(
+                self.script.as_ref().unwrap().to_path_buf(),
+                Some(n),
             )),
+            None => Err(CalloutError::NoMatchingScript),
         }
+    }
+
+    fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<()> {
+        for dir in dev.env.callout_dirs() {
+            let res = self.callout_dir(dev, event, action, dir);
+
+            if let Err(CalloutError::NoMatchingScript) = res {
+                continue;
+            }
+
+            return res.map_err(anyhow::Error::from);
+        }
+        Ok(())
     }
 
     fn notify(&mut self, dev: &mut MDev, action: Action) {
         let event = Event::Notify;
-        let dir = dev.env.notification_dir();
+        let dirs = dev.env.notification_dirs();
         debug!(
             "{}-{}: executing notification scripts for device {}",
             event, action, dev.uuid
         );
 
-        if let Ok(readdir) = dir.read_dir() {
-            for path in readdir.filter_map(|x| x.ok().map(|y| y.path())) {
-                match self.invoke_script(dev, &path, event, action) {
-                    Ok(output) => {
-                        if !output.status.success() {
-                            debug!("Error occurred when executing notify script {:?}", path);
+        for dir in dirs {
+            if !dir.is_dir() {
+                continue;
+            }
+
+            if let Ok(readdir) = dir.read_dir() {
+                for path in readdir.filter_map(|x| x.ok().map(|y| y.path())) {
+                    match self.invoke_script(dev, &path, event, action) {
+                        Ok(output) => {
+                            if !output.status.success() {
+                                debug!("Error occurred when executing notify script {:?}", path);
+                            }
                         }
-                    }
-                    _ => {
-                        debug!("Failed to execute callout script {:?}", path);
-                        continue;
+                        _ => {
+                            debug!("Failed to execute callout script {:?}", path);
+                            continue;
+                        }
                     }
                 }
             }
