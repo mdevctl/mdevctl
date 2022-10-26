@@ -375,7 +375,7 @@ fn defined_devices<'a>(
         "Looking up defined mdevs: uuid={:?}, parent={:?}",
         uuid, parent
     );
-    for parentpath in env.persist_base().read_dir()?.skip_while(|x| match x {
+    for parentpath in env.config_base().read_dir()?.skip_while(|x| match x {
         Ok(d) => d.path() == env.scripts_base(),
         _ => false,
     }) {

@@ -16,7 +16,7 @@ pub trait Environment {
         self.root().join("sys/bus/mdev/devices")
     }
 
-    fn persist_base(&self) -> PathBuf {
+    fn config_base(&self) -> PathBuf {
         self.root().join("etc/mdevctl.d")
     }
 
@@ -25,7 +25,7 @@ pub trait Environment {
     }
 
     fn scripts_base(&self) -> PathBuf {
-        self.persist_base().join("scripts.d")
+        self.config_base().join("scripts.d")
     }
 
     fn callout_dir(&self) -> PathBuf {
@@ -41,7 +41,7 @@ pub trait Environment {
         // ensure required system dirs exist. Generally distro packages or 'make install' should
         // create these dirs.
         for dir in vec![
-            self.persist_base(),
+            self.config_base(),
             self.callout_dir(),
             self.notification_dir(),
         ] {
@@ -63,7 +63,7 @@ impl std::fmt::Debug for &dyn Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Environment")
             .field("mdev_base", &self.mdev_base())
-            .field("persist_base", &self.persist_base())
+            .field("config_base", &self.config_base())
             .field("parent_base", &self.parent_base())
             .finish()
     }

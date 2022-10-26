@@ -62,7 +62,7 @@ impl TestEnvironment {
         };
         // populate the basic directories in the environment
         fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
-        fs::create_dir_all(test.persist_base()).expect("Unable to create persist_base");
+        fs::create_dir_all(test.config_base()).expect("Unable to create config_base");
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
         fs::create_dir_all(test.callout_dir()).expect("Unable to create callout_dir");
         fs::create_dir_all(test.notification_dir()).expect("Unable to create notification_dir");
@@ -73,7 +73,7 @@ impl TestEnvironment {
     // set up a few files in the test environment to simulate an defined mediated device
     fn populate_defined_device(&self, uuid: &str, parent: &str, filename: &str) {
         let jsonfile = self.datapath.join(filename);
-        let parentdir = self.persist_base().join(parent);
+        let parentdir = self.config_base().join(parent);
         fs::create_dir_all(&parentdir).expect("Unable to setup parent dir");
         let deffile = parentdir.join(uuid);
         assert!(jsonfile.exists());

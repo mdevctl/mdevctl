@@ -69,7 +69,7 @@ impl<'a> MDev<'a> {
 
     pub fn persist_path(&self) -> Option<PathBuf> {
         self.parent.as_ref().map(|x| {
-            let mut path = self.env.persist_base();
+            let mut path = self.env.config_base();
             path.push(x);
             path.push(self.uuid.hyphenated().to_string());
             path
