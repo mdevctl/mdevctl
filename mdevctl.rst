@@ -414,7 +414,7 @@ the device type.
 ``Pre-Command``
 
     A pre-command call-out event is invoked once prior to primary command execution.
-    Event type is ``pre``. Status will always be ``none``.
+    Event type is ``pre``. State will always be ``none``.
 
     Any non-zero return code (exempting 2) will prevent mdevctl from performing
     the primary command execution and mdevctl will abort early.
@@ -428,7 +428,7 @@ the device type.
 ``Post-Command``
 
     A post-command call-out event is invoked once after primary command execution.
-    Event type is ``post``. Status will be ``success`` if mdevctl was able to
+    Event type is ``post``. State will be ``success`` if mdevctl was able to
     finish primary command execution successfully, or ``failure`` otherwise.
 
     The same script used for the pre event is used for the post event.
@@ -444,7 +444,7 @@ the device type.
 
     A get event is invoked during a ``define`` and ``list`` command to
     acquire device attributes from an active device. Event type is ``get``. Action
-    is ``attributes``. Status is ``none``. Note that, unlike other call-outs
+    is ``attributes``. State is ``none``. Note that, unlike other call-outs
     events, **get-attributes does not expect a device config on stdin, and an
     array of JSON formatted device attributes is returned via stdout**.
 
@@ -488,15 +488,15 @@ NOTIFICATION EVENT SCRIPTS
 --------------------------
 
 Notification event scripts may be used to signal the state of the mediated
-device or the status of an mdevctl command to other programs or loggers. Unlike
+device or the state of an mdevctl command to other programs or loggers. Unlike
 call-out scripts, notifier scripts are device-type agnostic.
 
 ``Notify``
 
     A notification event is invoked once either following a pre-command call-out
     failure or after a post-command call-out. Event is ``notify``. If following a
-    pre event, then status will be ``none``. If following a post event, then
-    status will mirror the value passed to the post-command call-out.
+    pre event, then state will be ``none``. If following a post event, then
+    state will mirror the value passed to the post-command call-out.
 
     These scripts are stored in */usr/lib/mdevctl/scripts.d/notifiers*. **All
     notification scripts will be invoked during a notification event**.
