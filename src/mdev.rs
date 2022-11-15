@@ -289,7 +289,7 @@ impl<'a> MDev<'a> {
 
     fn find_parent_dir(&self) -> Result<PathBuf> {
         let parent = self.parent()?;
-        let path: PathBuf = self.env.parent_base().join(&parent);
+        let path: PathBuf = self.env.parent_base().join(parent);
 
         if path.is_dir() {
             return Ok(path);
@@ -336,7 +336,7 @@ impl<'a> MDev<'a> {
                 parent
             ));
         }
-        path.push(&mdev_type);
+        path.push(mdev_type);
         debug!("Checking parent for mdev type {}: {:?}", mdev_type, path);
         if !path.is_dir() {
             return Err(anyhow!(
