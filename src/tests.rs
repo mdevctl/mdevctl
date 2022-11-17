@@ -553,13 +553,22 @@ fn test_modify_helper<F>(
     value: Option<String>,
     auto: bool,
     manual: bool,
+    jsonfile: Option<PathBuf>,
     setupfn: F,
 ) where
     F: Fn(&TestEnvironment),
 {
     use crate::modify_command;
     let test = TestEnvironment::new("modify", testname);
+
+    // load the jsonfile from the test path.
+    let jsonfile = match jsonfile {
+        Some(f) => Some(test.datapath.join(f)),
+        None => None,
+    };
+
     setupfn(&test);
+
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
         &test,
@@ -572,8 +581,11 @@ fn test_modify_helper<F>(
         value,
         auto,
         manual,
+        jsonfile,
     );
-    if assert_result(result, expect, "modify command").is_err() {
+
+    let testmsg = &format!("modify command testcase {}", testname);
+    if assert_result(result, expect, testmsg).is_err() {
         return;
     }
 
@@ -604,6 +616,7 @@ fn test_modify() {
         None,
         false,
         false,
+        None,
         |_| {},
     );
     test_modify_helper(
@@ -618,6 +631,7 @@ fn test_modify() {
         None,
         true,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -634,6 +648,7 @@ fn test_modify() {
         None,
         false,
         true,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -650,6 +665,7 @@ fn test_modify() {
         None,
         false,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -666,6 +682,7 @@ fn test_modify() {
         None,
         false,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -682,6 +699,7 @@ fn test_modify() {
         Some("added-attr-value".to_string()),
         false,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -698,6 +716,7 @@ fn test_modify() {
         Some("added-attr-value".to_string()),
         false,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -714,6 +733,7 @@ fn test_modify() {
         None,
         false,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -730,6 +750,7 @@ fn test_modify() {
         None,
         true,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_defined_device(UUID, "0000:00:02.0", "defined.json");
@@ -747,6 +768,7 @@ fn test_modify() {
         None,
         true,
         false,
+        None,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_defined_device(UUID, "0000:00:02.0", "defined.json");
@@ -764,6 +786,25 @@ fn test_modify() {
         None,
         true,
         true,
+        None,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+    // specifying via jsonfile properly
+    test_modify_helper(
+        "jsonfile",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        Some(PathBuf::from("modified.json")),
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },

@@ -183,30 +183,44 @@ fn modify_command(
     value: Option<String>,
     auto: bool,
     manual: bool,
+    jsonfile: Option<PathBuf>,
 ) -> Result<()> {
     let mut dev = get_defined_device(env, uuid, parent.as_ref())?;
-    if mdev_type.is_some() {
-        dev.mdev_type = mdev_type;
-    }
 
-    if auto && manual {
-        return Err(anyhow!("'auto' and 'manual' are mutually exclusive"));
-    }
+    if let Some(jsonfile) = jsonfile {
+        let _ = std::fs::File::open(&jsonfile)
+            .with_context(|| format!("Unable to read file {:?}", jsonfile));
 
-    if auto {
-        dev.autostart = true;
-    } else if manual {
-        dev.autostart = false;
-    }
+        let mut d = MDev::new(env, uuid);
+        let filecontents = fs::read_to_string(&jsonfile)
+            .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
+        let jsonval = serde_json::from_str(&filecontents)?;
+        d.load_from_json(dev.parent().unwrap().to_string(), &jsonval)?;
+        dev = d;
+    } else {
+        if mdev_type.is_some() {
+            dev.mdev_type = mdev_type;
+        }
 
-    match addattr {
-        Some(attr) => match value {
-            None => return Err(anyhow!("No attribute value provided")),
-            Some(v) => dev.add_attribute(attr, v, index)?,
-        },
-        None => {
-            if delattr {
-                dev.delete_attribute(index)?;
+        if auto && manual {
+            return Err(anyhow!("'auto' and 'manual' are mutually exclusive"));
+        }
+
+        if auto {
+            dev.autostart = true;
+        } else if manual {
+            dev.autostart = false;
+        }
+
+        match addattr {
+            Some(attr) => match value {
+                None => return Err(anyhow!("No attribute value provided")),
+                Some(v) => dev.add_attribute(attr, v, index)?,
+            },
+            None => {
+                if delattr {
+                    dev.delete_attribute(index)?;
+                }
             }
         }
     }
@@ -776,8 +790,10 @@ fn main() -> Result<()> {
                 value,
                 auto,
                 manual,
+                jsonfile,
             } => modify_command(
                 &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
+                jsonfile,
             ),
             MdevctlCommands::Start {
                 uuid,
