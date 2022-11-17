@@ -97,7 +97,8 @@ pub enum MdevctlCommands {
                 format that is accepted by the attribute. Upon device start, mdevctl will go \
                 through each attribute in order, writing the value into the corresponding sysfs \
                 attribute for the device. The startup mode of the device can also be selected, auto \
-                or manual. \n\n\
+                or manual. Alternatively, the 'jsonfile' option may be used to replace the startup \
+                mode and any attributes with the contents of the specified file.\n\n\
                 Running devices are unaffected by this command."
     )]
     Modify {
@@ -139,6 +140,12 @@ pub enum MdevctlCommands {
             help = "Device must be started manually"
         )]
         manual: bool,
+        #[clap(
+            long, value_parser,
+            conflicts_with_all(&["type", "addattr", "delattr", "index", "value", "auto", "manual"]),
+            help = "Specify device details in JSON format"
+        )]
+        jsonfile: Option<PathBuf>,
     },
     #[clap(
         about = "Start a mediated device",
