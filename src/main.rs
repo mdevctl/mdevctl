@@ -516,8 +516,8 @@ fn list_command_helper(
                     let _ = dev.load_definition();
 
                     if let Ok(attrs) = Callout::get_attributes(&mut dev) {
-                        dev.remove_all_attributes();
                         if !attrs.is_null() {
+                            dev.remove_all_attributes();
                             let _ = dev.add_attributes(&attrs);
                         }
                     }
