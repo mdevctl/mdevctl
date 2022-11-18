@@ -123,12 +123,6 @@ impl<'a> MDev<'a> {
         Ok(())
     }
 
-    pub fn remove_all_attributes(&mut self) {
-        if !self.attrs.is_empty() {
-            self.attrs.clear();
-        }
-    }
-
     pub fn add_attributes(&mut self, attrs: &serde_json::Value) -> Result<()> {
         if !attrs.is_array() && !attrs.is_null() {
             return Err(anyhow!("attributes field is not an array"));
