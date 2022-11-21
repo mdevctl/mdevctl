@@ -515,10 +515,14 @@ fn list_command_helper(
 
                     let _ = dev.load_definition();
 
-                    if !dev.is_defined() {
-                        if let Ok(attrs) = Callout::get_attributes(&mut dev) {
-                            let _ = dev.add_attributes(&attrs);
-                        }
+                    // don't show attributes from the persistent definition if we're listing
+                    // active mdevs. The definition may have changed since the mdev was started
+                    dev.attrs.clear();
+
+                    // if the device is supported by a callout script that gets attributes, show
+                    // those in the output
+                    if let Ok(attrs) = Callout::get_attributes(&mut dev) {
+                        let _ = dev.add_attributes(&attrs);
                     }
 
                     let devparent = dev.parent()?;
