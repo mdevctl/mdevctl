@@ -433,7 +433,7 @@ impl<'a> MDev<'a> {
         match index {
             Some(i) => {
                 let i: usize = i.try_into().unwrap();
-                if i > self.attrs.len() {
+                if i >= self.attrs.len() {
                     return Err(anyhow!("Attribute index {} is invalid", i));
                 }
                 self.attrs.remove(i);
