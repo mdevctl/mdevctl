@@ -764,7 +764,9 @@ fn test_modify() {
         None,
         true,
         true,
-        |_| {},
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
     );
 }
 

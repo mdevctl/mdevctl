@@ -189,6 +189,10 @@ fn modify_command(
         dev.mdev_type = mdev_type;
     }
 
+    if auto && manual {
+        return Err(anyhow!("'auto' and 'manual' are mutually exclusive"));
+    }
+
     if auto {
         dev.autostart = true;
     } else if manual {
