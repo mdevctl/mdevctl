@@ -65,7 +65,7 @@ pub enum MdevctlCommands {
         )]
         mdev_type: Option<String>,
         #[clap(
-            long, parse(from_os_str),
+            long, value_parser,
             conflicts_with_all(&["type", "auto"]),
             help = "Specify device details in JSON format"
         )]
@@ -171,7 +171,7 @@ pub enum MdevctlCommands {
         mdev_type: Option<String>,
         #[clap(
             long,
-            parse(from_os_str),
+            value_parser,
             conflicts_with("type"),
             help = "Details of the device to be started, in JSON format"
         )]
