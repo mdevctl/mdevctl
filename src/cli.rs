@@ -211,3 +211,9 @@ pub enum MdevctlCommands {
     #[clap(hide = true)]
     StartParentMdevs { parent: String },
 }
+
+#[test]
+fn test_cli() {
+    use clap::CommandFactory;
+    MdevctlCommands::command().debug_assert()
+}
