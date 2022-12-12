@@ -1,0 +1,5 @@
+{
+  "mdev_type": "vfio_ap-passthrough",
+  "start": "manual",
+  "attrs": []
+}
