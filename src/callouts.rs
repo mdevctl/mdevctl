@@ -535,7 +535,6 @@ impl Callout {
         }
     }
 
-    #[allow(dead_code)]
     pub fn invoke_modify_live(dev: &mut MDev) -> Result<()> {
         let mut c = Callout::new();
 

@@ -156,6 +156,15 @@ pub enum MdevctlCommands {
         )]
         manual: bool,
         #[clap(
+            short,
+            long,
+            conflicts_with_all(&["type", "addattr", "delattr", "index", "value", "auto", "manual"]),
+            help = "Modify the running device definition only unless used together with defined option"
+        )]
+        live: bool,
+        #[clap(short, long, help = "Modify the stored device definition")]
+        defined: bool,
+        #[clap(
             long, value_parser,
             conflicts_with_all(&["type", "addattr", "delattr", "index", "value", "auto", "manual"]),
             help = "Specify device details in JSON format"
