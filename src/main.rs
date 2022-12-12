@@ -498,6 +498,77 @@ fn defined_devices<'a>(
     Ok(devices)
 }
 
+/// Get a map of all active devices, optionally filtered by uuid and parent
+fn active_devices<'a>(
+    env: &'a dyn Environment,
+    uuid: Option<&Uuid>,
+    parent: Option<&String>,
+) -> Result<BTreeMap<String, Vec<MDev<'a>>>> {
+    let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
+    debug!(
+        "Looking up active mdevs: uuid={:?}, parent={:?}",
+        uuid, parent
+    );
+    if let Ok(dir) = env.mdev_base().read_dir() {
+        for dir_dev in dir {
+            let dir_dev = dir_dev?;
+            let fname = dir_dev.file_name();
+            let basename = fname.to_str().unwrap();
+            debug!("found defined mdev {}", basename);
+            let u = Uuid::parse_str(basename);
+
+            if u.is_err() {
+                warn!("Can't determine uuid for file '{}'", basename);
+                continue;
+            }
+            let u = u.unwrap();
+
+            if uuid.is_some() && uuid != Some(&u) {
+                debug!(
+                    "Ignoring device {} because it doesn't match uuid {}",
+                    u,
+                    uuid.unwrap()
+                );
+                continue;
+            }
+
+            let mut dev = MDev::new(env, u);
+            if dev.load_from_sysfs().is_ok() {
+                if parent.is_some() && (parent != dev.parent.as_ref()) {
+                    debug!(
+                        "Ignoring device {} because it doesn't match parent {}",
+                        dev.uuid,
+                        parent.as_ref().unwrap()
+                    );
+                    continue;
+                }
+
+                // retrieve autostart from persisted mdev if possible
+                let mut per_dev = MDev::new(env, u);
+                per_dev.parent = dev.parent.clone();
+                if per_dev.load_definition().is_ok() {
+                    dev.autostart = per_dev.autostart;
+                }
+
+                // if the device is supported by a callout script that gets attributes, show
+                // those in the output
+                let mut c = callout(&mut dev);
+                if let Ok(attrs) = c.get_attributes() {
+                    let _ = c.dev.add_attributes(&attrs);
+                }
+
+                let devparent = dev.parent()?;
+                if !devices.contains_key(devparent) {
+                    devices.insert(devparent.clone(), Vec::new());
+                };
+
+                devices.get_mut(devparent).unwrap().push(dev);
+            };
+        }
+    }
+    Ok(devices)
+}
+
 /// Implementation of the `mdevctl list` command
 fn list_command(
     env: &dyn Environment,
@@ -521,68 +592,11 @@ fn list_command_helper(
     uuid: Option<Uuid>,
     parent: Option<String>,
 ) -> Result<String> {
-    let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
+    let mut devices: BTreeMap<String, Vec<MDev>>;
     if defined {
         devices = defined_devices(env, uuid.as_ref(), parent.as_ref())?;
     } else {
-        debug!("Looking up active mdevs");
-        if let Ok(dir) = env.mdev_base().read_dir() {
-            for dev in dir {
-                let dev = dev?;
-                let fname = dev.file_name();
-                let basename = fname.to_str().unwrap();
-                debug!("found defined mdev {}", basename);
-                let u = Uuid::parse_str(basename);
-
-                if u.is_err() {
-                    warn!("Can't determine uuid for file '{}'", basename);
-                    continue;
-                }
-                let u = u.unwrap();
-
-                if uuid.is_some() && uuid != Some(u) {
-                    debug!(
-                        "Ignoring device {} because it doesn't match uuid {}",
-                        u,
-                        uuid.unwrap()
-                    );
-                    continue;
-                }
-
-                let mut dev = MDev::new(env, u);
-                if dev.load_from_sysfs().is_ok() {
-                    if parent.is_some() && (parent != dev.parent) {
-                        debug!(
-                            "Ignoring device {} because it doesn't match parent {}",
-                            dev.uuid,
-                            parent.as_ref().unwrap()
-                        );
-                        continue;
-                    }
-
-                    // retrieve autostart from persisted mdev if possible
-                    let mut per_dev = MDev::new(env, u);
-                    per_dev.parent = dev.parent.clone();
-                    if per_dev.load_definition().is_ok() {
-                        dev.autostart = per_dev.autostart;
-                    }
-
-                    // if the device is supported by a callout script that gets attributes, show
-                    // those in the output
-                    let mut c = callout(&mut dev);
-                    if let Ok(attrs) = c.get_attributes() {
-                        let _ = c.dev.add_attributes(&attrs);
-                    }
-
-                    let devparent = dev.parent()?;
-                    if !devices.contains_key(devparent) {
-                        devices.insert(devparent.clone(), Vec::new());
-                    };
-
-                    devices.get_mut(devparent).unwrap().push(dev);
-                };
-            }
-        }
+        devices = active_devices(env, uuid.as_ref(), parent.as_ref())?;
     }
 
     // ensure that devices are sorted in a stable order
