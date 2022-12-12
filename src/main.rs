@@ -225,28 +225,75 @@ fn modify_command(
     value: Option<String>,
     auto: bool,
     manual: bool,
+    live: bool,
+    defined: bool,
     jsonfile: Option<PathBuf>,
     force: bool,
 ) -> Result<()> {
-    let mut dev = get_defined_device(env, uuid, parent.as_ref())?;
-
-    if let Some(f) = jsonfile {
-        let parent = parent
-            .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
-        dev = dev_from_jsonfile(env, uuid, parent, f)?;
-    } else {
+    debug!("Modifying mdev {:?}", uuid);
+    if live {
         if mdev_type.is_some() {
-            dev.mdev_type = mdev_type;
+            return Err(anyhow!("'type' cannot be changed on active mdev"));
         }
-
-        if auto && manual {
-            return Err(anyhow!("'auto' and 'manual' are mutually exclusive"));
-        }
-
         if auto {
-            dev.autostart = true;
-        } else if manual {
-            dev.autostart = false;
+            return Err(anyhow!("'auto' cannot be changed on active mdev"));
+        }
+        if manual {
+            return Err(anyhow!("'manual' cannot be changed on active mdev"));
+        }
+        let mut act_dev = get_active_device(env, uuid, parent.as_ref())?;
+        if let Some(f) = jsonfile {
+            let act_parent = act_dev
+                .parent
+                .clone()
+                .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
+            let json_dev = dev_from_jsonfile(env, uuid, act_parent, f)?;
+            if json_dev.mdev_type != act_dev.mdev_type {
+                return Err(anyhow!("'type' cannot be changed on active mdev"));
+            }
+            if json_dev.parent != act_dev.parent {
+                return Err(anyhow!("'parent' cannot be changed on active mdev"));
+            }
+            act_dev = json_dev;
+        } else {
+            return Err(anyhow!("'live' option must be used with 'jsonfile' option"));
+        }
+
+        if defined {
+            // live and stored modify - defined dev config exists and types match
+            let def_dev = get_defined_device(env, uuid, act_dev.parent.as_ref())?;
+            if def_dev.mdev_type != act_dev.mdev_type {
+                return Err(anyhow!("'type' of active and defined mdev does not match"));
+            }
+
+            let mut c = callout(&mut act_dev);
+            debug!("mdev device used for live update '{:?}'", c.dev);
+            return c
+                .invoke_modify_live()
+                .and_then(|_| c.invoke(Action::Modify, force, |c| c.dev.write_config()));
+        }
+        // live modify only
+        callout(&mut act_dev).invoke_modify_live()
+    } else {
+        let mut dev: MDev;
+        // stored configuration modify
+        if let Some(f) = jsonfile {
+            let parent = parent
+                .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
+            dev = dev_from_jsonfile(env, uuid, parent, f)?;
+        } else {
+            dev = get_defined_device(env, uuid, parent.as_ref())?;
+            if mdev_type.is_some() {
+                dev.mdev_type = mdev_type;
+            }
+            if auto && manual {
+                return Err(anyhow!("'auto' and 'manual' are mutually exclusive"));
+            }
+            if auto {
+                dev.autostart = true;
+            } else if manual {
+                dev.autostart = false;
+            }
         }
 
         let index = index.map(|n| n as usize);
@@ -261,9 +308,8 @@ fn modify_command(
                 }
             }
         }
+        callout(&mut dev).invoke(Action::Modify, force, |c| c.dev.write_config())
     }
-
-    callout(&mut dev).invoke(Action::Modify, force, |c| c.dev.write_config())
 }
 
 /// convert 'start' command arguments into a MDev struct
@@ -507,6 +553,43 @@ fn defined_devices<'a>(
         }
     }
     Ok(devices)
+}
+
+/// convenience function to lookup an active device by uuid and parent
+fn get_active_device<'a>(
+    env: &'a dyn Environment,
+    uuid: Uuid,
+    parent: Option<&String>,
+) -> Result<MDev<'a>> {
+    let devs = active_devices(env, Some(&uuid), parent)?;
+    if devs.is_empty() {
+        match parent {
+            None => Err(anyhow!(
+                "Mediated device {} is not active",
+                uuid.hyphenated().to_string()
+            )),
+            Some(p) => Err(anyhow!(
+                "Mediated device {}/{} is not active",
+                p,
+                uuid.hyphenated().to_string()
+            )),
+        }
+    } else if devs.len() > 1 {
+        Err(anyhow!(
+            "Multiple parents found for {}. System error?",
+            uuid.hyphenated().to_string()
+        ))
+    } else {
+        let (parent, children) = devs.iter().next().unwrap();
+        if children.len() > 1 {
+            return Err(anyhow!(
+                "Multiple definitions found for {}/{}",
+                parent,
+                uuid.hyphenated().to_string()
+            ));
+        }
+        Ok(children.get(0).unwrap().clone())
+    }
 }
 
 /// Get a map of all active devices, optionally filtered by uuid and parent
@@ -850,11 +933,13 @@ fn main() -> Result<()> {
                 value,
                 auto,
                 manual,
+                live,
+                defined,
                 jsonfile,
                 force,
             } => modify_command(
-                &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
-                jsonfile, force,
+                &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual, live,
+                defined, jsonfile, force,
             ),
             MdevctlCommands::Start {
                 uuid,

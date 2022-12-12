@@ -677,6 +677,8 @@ fn test_modify_helper<F>(
         value,
         auto,
         manual,
+        false,
+        false,
         jsonfile,
         force,
     );
