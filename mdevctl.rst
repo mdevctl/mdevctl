@@ -361,8 +361,8 @@ file for define, or activating a device for start).
 Essentially, the procedure in mdevctl looks like this:
 
     - command-line parsing & setup
+    - invoke live-command call-out (if live is requested)
     - invoke pre-command call-out
-    - invoke live-command call-out
     - primary command execution [1]_
     - invoke post-command call-out [1]_
     - invoke notifier
