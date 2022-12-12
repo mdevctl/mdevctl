@@ -172,6 +172,16 @@ pub enum MdevctlCommands {
         )]
         manual: bool,
         #[arg(
+            short,
+            long,
+            conflicts_with_all(&["type", "index", "value"]),
+            requires("jsonfile"),
+            help = "Modify the running device definition only unless used together with defined option"
+        )]
+        live: bool,
+        #[arg(short, long, help = "Modify the stored device definition")]
+        defined: bool,
+        #[arg(
             long,
             conflicts_with_all(&["type", "index", "value"]),
             help = "Specify device details in JSON format"
