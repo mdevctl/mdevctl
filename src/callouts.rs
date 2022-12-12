@@ -435,7 +435,6 @@ impl<'a, 'b> Callout<'a, 'b> {
         self.dev.env.find_script(self.dev)
     }
 
-    #[allow(dead_code)]
     pub fn invoke_modify_live(&mut self) -> Result<()> {
         self.script = self.find_callout_script();
         if self.script.is_none() {
