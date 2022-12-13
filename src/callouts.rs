@@ -343,6 +343,7 @@ impl Callout {
 
         match rc {
             Some(0) => Ok(()),
+            Some(2) => Err(CalloutError::NoMatchingScript),
             Some(n) => Err(CalloutError::InvocationFailure(
                 self.script.as_ref().unwrap().to_path_buf(),
                 Some(n),
