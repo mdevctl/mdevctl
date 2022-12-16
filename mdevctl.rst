@@ -41,7 +41,8 @@ The following options are understood:
 
 ``-d|--defined``
     List all defined devices, even if not active. Valid for the ``list``
-    command.
+    command. Modify the defined configuration of a device, even if the
+    device is active. Valid for the ``modify`` command.
 
 ``--delattr``
     Delete an attribute entry. Valid for the ``modify`` command.
@@ -57,6 +58,10 @@ The following options are understood:
 ``--jsonfile=FILE``
     Read the configuration for a device from a JSON file *FILE*.
     Valid for the ``define`` and ``start`` commands.
+
+``-l|--live``
+    Modify active device without modifying the defined configuration of
+    the device. Valid for the ``modify`` command.
 
 ``-m|--manual``
     Do not start a device automatically on parent availability. Valid
@@ -111,8 +116,12 @@ The following commands are understood:
     Attributes can be added or deleted. Attributes to be deleted must be
     specified by their index; if an attribute is specified without an
     index, it is appended at the end of the attribute list.
-    Running devices are unaffected by this command; changes in the configuration
-    are applied the next time the device is started.
+    Active devices are unaffected by this command; changes in the configuration
+    are applied the next time the device is started. Depending on installed
+    callout scripts active devices can be modified. With ``-l|--live``
+    modifications can be applied to active devices if a callout scripts supports
+    the event ``live``. The option ``-d|--defined`` also direct the modification
+    to the started device configuration.
 
 ``start`` *DEVICESPEC*
     Start a mediated device. This command can be used to start either a
@@ -353,6 +362,7 @@ Essentially, the procedure in mdevctl looks like this:
 
     - command-line parsing & setup
     - invoke pre-command call-out
+    - invoke live-command call-out
     - primary command execution [1]_
     - invoke post-command call-out [1]_
     - invoke notifier
@@ -378,7 +388,7 @@ progress, and the mediated device. The parameters are as follows:
 
 ``-e=``\ *event*
     Event type of call-out that is invoked. For call-out scripts, this may be
-    ``pre``, ``post``, or ``get``. For notification scripts, this will
+    ``pre``, ``live``, ``post``, or ``get``. For notification scripts, this will
     always be ``notify``.
 
 ``-a=``\ *action*
@@ -399,8 +409,8 @@ progress, and the mediated device. The parameters are as follows:
 CALL-OUT EVENT SCRIPTS
 ----------------------
 
-A call-out event script is invoked during a ``pre``, ``post``, or ``get``
-event. mdevctl will attempt each script stored in the mdevctl callouts
+A call-out event script is invoked during a ``live``, ``pre``, ``post`` or
+``get`` event. mdevctl will attempt each script stored in the mdevctl callouts
 directory until either a script that satisfies the device type is found or all
 scripts have been attempted. A device script must check the "TYPE" parameter to
 ensure the specified device type is supported, otherwise error code 2 should be
@@ -408,8 +418,25 @@ returned. If no script is found for the specified device type, then mdevctl
 will carry on as normal.
 
 These scripts are stored in */usr/lib/mdevctl/scripts.d/callouts*. The same
-script is invoked for ``pre``, ``post``, and ``get`` call-out events for
-the device type.
+script is invoked for ``live``, ``pre``, ``post``, and ``get`` call-out events
+for the device type.
+
+``Live-Command``
+
+    A live-command call-out event is invoked once before the pre-command call-out
+    event execution. This only occurs if the ``live`` option is specified on the
+    ``modify`` command and the device modified is active.
+    Event type is ``live``. State will always be ``none``.
+
+    If the ``live`` command line option is specified any non-zero return code results in
+    a live modification failure except for all call-outs return with return code 2
+    resulting in a ``live update not supported`` information.
+    The return code is disruptive if also the option ``defined`` is provided and will
+    prevent the update of the defined device configuration.  
+
+    A notification event will follow if the ``live`` command line option is specified.
+
+    This event is only supported for the ``modify`` command.
 
 ``Pre-Command``
 
