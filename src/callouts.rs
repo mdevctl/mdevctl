@@ -30,18 +30,10 @@ fn invocation_failure(path: &PathBuf, code: Option<i32>) -> anyhow::Error {
 impl Display for Event {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Event::Pre => {
-                write!(f, "pre")
-            }
-            Event::Post => {
-                write!(f, "post")
-            }
-            Event::Notify => {
-                write!(f, "notify")
-            }
-            Event::Get => {
-                write!(f, "get")
-            }
+            Event::Pre => write!(f, "pre"),
+            Event::Post => write!(f, "post"),
+            Event::Notify => write!(f, "notify"),
+            Event::Get => write!(f, "get"),
         }
     }
 }
