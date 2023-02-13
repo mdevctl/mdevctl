@@ -1,19 +1,26 @@
 use anyhow::{Context, Result};
 use log::{debug, warn};
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt::{self, Display, Formatter};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::Mutex;
 
 use crate::mdev::*;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Event {
     Pre,
     Post,
     Notify,
     Get,
+    #[serde(skip_serializing)]
+    #[serde(other)]
+    Unknown, // used for forward compatibility to newer callout scripts
 }
 
 #[derive(Debug)]
@@ -21,6 +28,9 @@ enum CalloutError {
     NoMatchingScript,
     InvocationFailure(PathBuf, Option<i32>),
     InvalidJSON(serde_json::Error),
+    NoSupportedVersion,
+    ActionNotSupported(PathBuf, Action),
+    EventNotSupported(PathBuf, Event),
 }
 
 impl Display for CalloutError {
@@ -29,7 +39,7 @@ impl Display for CalloutError {
             CalloutError::NoMatchingScript => write!(f, "No matching script for device found"),
             CalloutError::InvocationFailure(p, i) => write!(
                 f,
-                "Script '{:?}' failed with status '{}'",
+                "Script {:?} failed with status '{}'",
                 p,
                 match i {
                     Some(i) => i.to_string(),
@@ -38,6 +48,13 @@ impl Display for CalloutError {
             ),
             CalloutError::InvalidJSON(_) => {
                 write!(f, "Invalid JSON received from callout script")
+            }
+            CalloutError::NoSupportedVersion => write!(f, "No supported version found for script"),
+            CalloutError::ActionNotSupported(p, a) => {
+                write!(f, "Script {p:?} does not support action '{a}'")
+            }
+            CalloutError::EventNotSupported(p, e) => {
+                write!(f, "Script {p:?} does not support event '{e}'")
             }
         }
     }
@@ -59,12 +76,13 @@ impl Display for Event {
             Event::Post => write!(f, "post"),
             Event::Notify => write!(f, "notify"),
             Event::Get => write!(f, "get"),
+            Event::Unknown => write!(f, "unknown"),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Action {
     Start,
     Stop,
@@ -72,7 +90,12 @@ pub enum Action {
     Undefine,
     Modify,
     Attributes,
+    Capabilities,
+    #[serde(skip_serializing)]
     Test, // used for tests only
+    #[serde(skip_serializing)]
+    #[serde(other)]
+    Unknown, // used for forward compatibility to newer callout scripts
 }
 
 impl Display for Action {
@@ -84,9 +107,76 @@ impl Display for Action {
             Action::Undefine => write!(f, "undefine"),
             Action::Modify => write!(f, "modify"),
             Action::Attributes => write!(f, "attributes"),
+            Action::Capabilities => write!(f, "capabilities"),
             Action::Test => write!(f, "test"),
+            Action::Unknown => write!(f, "unknown"),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub struct CalloutVersion {
+    version: Cow<'static, str>,
+    actions: Cow<'static, [Action]>,
+    events: Cow<'static, [Event]>,
+}
+
+impl CalloutVersion {
+    pub const fn new_const(
+        version: &'static str,
+        actions: &'static [Action],
+        events: &'static [Event],
+    ) -> Self {
+        Self {
+            version: Cow::Borrowed(version),
+            actions: Cow::Borrowed(actions),
+            events: Cow::Borrowed(events),
+        }
+    }
+
+    pub const V_1_0_0: CalloutVersion = CalloutVersion::new_const(
+        "1.0.0",
+        &[
+            Action::Start,
+            Action::Stop,
+            Action::Define,
+            Action::Undefine,
+            Action::Modify,
+            Action::Attributes,
+        ],
+        &[Event::Pre, Event::Post, Event::Notify, Event::Get],
+    );
+
+    pub const V_1_1_0: CalloutVersion = CalloutVersion::new_const(
+        "1.1.0",
+        &[
+            Action::Start,
+            Action::Stop,
+            Action::Define,
+            Action::Undefine,
+            Action::Modify,
+            Action::Attributes,
+            Action::Capabilities,
+        ],
+        &[Event::Pre, Event::Post, Event::Notify, Event::Get],
+    );
+
+    pub fn has_action(&self, action: Action) -> bool {
+        self.actions.contains(&action)
+    }
+
+    pub fn has_event(&self, event: Event) -> bool {
+        self.events.contains(&event)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CalloutExchange {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provides: Option<CalloutVersion>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    supports: Option<CalloutVersion>,
 }
 
 #[derive(Clone, Copy)]
@@ -103,6 +193,235 @@ impl Display for State {
             State::Success => write!(f, "success"),
             State::Failure => write!(f, "failure"),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct CalloutScript {
+    path: PathBuf,
+    mdev_type: String,
+    supports: CalloutVersion,
+}
+
+impl CalloutScript {
+    fn new(path: PathBuf, mdev_type: String, supports: CalloutVersion) -> CalloutScript {
+        CalloutScript {
+            path,
+            mdev_type,
+            supports,
+        }
+    }
+
+    fn supports_action(&self, action: Action) -> bool {
+        self.supports.has_action(action)
+    }
+
+    fn supports_event(&self, event: Event) -> bool {
+        self.supports.has_event(event)
+    }
+
+    fn supports_event_action(&self, event: Event, action: Action) -> Result<(), CalloutError> {
+        if !self.supports_action(action) {
+            debug!(
+                "Callout script {:?} does not support action '{:?}'",
+                self.path.clone(),
+                action
+            );
+            return Err(CalloutError::ActionNotSupported(self.path.clone(), action));
+        }
+        if !self.supports_event(event) {
+            debug!(
+                "Callout script {:?} does not support event '{:?}'",
+                self.path.clone(),
+                event
+            );
+            return Err(CalloutError::EventNotSupported(self.path.clone(), event));
+        }
+        Ok(())
+    }
+}
+
+impl AsRef<Path> for CalloutScript {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+pub struct CalloutScripts {
+    callouts: Vec<CalloutScript>,
+}
+
+static CALLOUT_SCRIPTS: Mutex<CalloutScripts> = Mutex::new(CalloutScripts::new());
+
+fn find_callout_script(dev: &mut MDev) -> Result<CalloutScript, CalloutError> {
+    return CALLOUT_SCRIPTS.lock().unwrap().find_script(dev);
+}
+
+impl CalloutScripts {
+    pub const fn new() -> Self {
+        CalloutScripts {
+            callouts: Vec::new(),
+        }
+    }
+
+    fn find_script(&mut self, dev: &mut MDev) -> Result<CalloutScript, CalloutError> {
+        // check already found scripts
+        let mdev_type = dev.mdev_type().expect("mdev_type is required on device");
+        debug!("Looking up callout script for mdev type '{:?}'", mdev_type);
+        for cs in &self.callouts {
+            if cs.mdev_type.eq_ignore_ascii_case(mdev_type) {
+                debug!(
+                    " Looked up callout script for mdev type '{:?}': {:?}",
+                    mdev_type, cs.path
+                );
+                return Ok(cs.clone());
+            }
+        }
+        debug!(
+            "Lookup failed starting to search for mdev type '{:?}'",
+            mdev_type
+        );
+        // search directories for mdev_type parent tuple
+        for dir in dev.env.callout_dirs() {
+            debug!(
+                "Searching in directory {:?} for mdev type '{:?}'",
+                mdev_type, dir
+            );
+            match self.callout_dir_search(&mut dev.clone(), dir.clone()) {
+                Ok(cs) => {
+                    debug!(
+                        " Found callout script for mdev type '{:?}': {:?}",
+                        mdev_type, cs.path
+                    );
+                    self.callouts.push(cs.clone());
+                    return Ok(cs);
+                }
+                Err(CalloutError::NoMatchingScript) => {
+                    debug!(" Search returned without match... continue");
+                    continue;
+                }
+                Err(e) => {
+                    debug!(" Search returned with error {:?}", e);
+                    return Err(e);
+                }
+            }
+        }
+        // at this point no script was found
+        debug!(
+            "Searching callout script for mdev type '{:?}' ended without result",
+            mdev_type
+        );
+        Err(CalloutError::NoMatchingScript)
+    }
+
+    fn callout_dir_search(
+        &mut self,
+        dev: &mut MDev,
+        dir: PathBuf,
+    ) -> Result<CalloutScript, CalloutError> {
+        if !dir.is_dir() {
+            return Err(CalloutError::NoMatchingScript);
+        }
+        match self.invoke_script_capability(dev, dir) {
+            Some((path, cv)) => Ok(CalloutScript::new(
+                path,
+                dev.mdev_type().unwrap().to_string(),
+                cv,
+            )),
+            None => Err(CalloutError::NoMatchingScript),
+        }
+    }
+
+    fn parse_script_output(&self, output: Output) -> Result<CalloutVersion, CalloutError> {
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let ce: CalloutExchange =
+            match serde_json::from_str(&stdout).map_err(CalloutError::InvalidJSON) {
+                Ok(ce) => ce,
+                Err(e) => return Err(e),
+            };
+        ce.supports.ok_or(CalloutError::NoSupportedVersion)
+    }
+
+    fn invoke_script_capability<P: AsRef<Path> + std::fmt::Debug>(
+        &self,
+        dev: &mut MDev,
+        dir: P,
+    ) -> Option<(PathBuf, CalloutVersion)> {
+        let event: Event = Event::Get;
+        let action: Action = Action::Capabilities;
+        let mdev_type = dev.mdev_type.as_ref()?;
+        debug!(
+            "{}-{}: looking for a matching callout script for dev type '{:?}' in {:?}",
+            event, action, mdev_type, dir
+        );
+
+        let mut sorted_paths = dir
+            .as_ref()
+            .read_dir()
+            .ok()?
+            .filter_map(|k| k.ok().map(|e| e.path()))
+            .collect::<Vec<_>>();
+
+        sorted_paths.sort();
+
+        for path in sorted_paths {
+            let ce_ver: CalloutExchange = CalloutExchange {
+                provides: Some(CalloutVersion::V_1_1_0),
+                supports: None,
+            };
+            let json_ce_ver: String =
+                serde_json::to_string(&ce_ver).expect("CalloutVersion JSON could not be generated");
+            match invoke_callout_script(
+                &path,
+                mdev_type.clone(),
+                dev.uuid.to_string(),
+                dev.parent().unwrap().to_string(),
+                Event::Get,
+                Action::Capabilities,
+                State::None,
+                json_ce_ver,
+            ) {
+                Ok(res) => {
+                    match res.status.code() {
+                        None => {
+                            warn!("callout script {:?} was terminated by a signal", path);
+                        }
+                        Some(2) => {
+                            // RC 2 == unsupported
+                            debug!(
+                                "Callout script {:?} does not support mdev type {:?}",
+                                path, mdev_type
+                            );
+                        }
+                        _ => {
+                            debug!(
+                                "Found callout script {:?} supporting mdev type {:?}",
+                                path, mdev_type
+                            );
+                            match self.parse_script_output(res) {
+                                Ok(cv) => {
+                                    debug!(" Script supports versioning: {:?}", cv);
+                                    return Some((path, cv));
+                                }
+                                Err(CalloutError::InvalidJSON(e)) => {
+                                    debug!(" Callout script has no version support (unparsable stdout): {:?}", e);
+                                }
+                                Err(CalloutError::NoSupportedVersion) => {
+                                    debug!(" Callout script does not provide version supported");
+                                }
+                                Err(e) => {
+                                    debug!(" Callout script output parsing error: {:?}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    debug!("Failed to execute callout script {:?}: {:?}", path, e);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -158,7 +477,7 @@ fn invoke_callout_script(
 
 pub struct Callout {
     state: State,
-    script: Option<PathBuf>,
+    script: Option<CalloutScript>,
 }
 
 impl Callout {
@@ -174,6 +493,11 @@ impl Callout {
         F: Fn(&mut MDev) -> Result<()>,
     {
         let mut c = Callout::new();
+
+        c.script = find_callout_script(dev).ok();
+        if c.script.is_none() {
+            debug!("No callout script with version support found");
+        }
 
         let res = c
             .callout(dev, Event::Pre, action)
@@ -241,7 +565,31 @@ impl Callout {
     fn get_attributes_dir(dev: &mut MDev, dir: PathBuf) -> Result<serde_json::Value, CalloutError> {
         let event = Event::Get;
         let action = Action::Attributes;
-        let c = Callout::new();
+        let mut c = Callout::new();
+
+        c.script = find_callout_script(dev).ok();
+        if c.script.is_some() {
+            let cs = c.script.clone().unwrap();
+            cs.supports_event_action(event, action)?;
+            match c.invoke_script(dev, &cs, event, action) {
+                Ok(output) => {
+                    return c.parse_attribute_output(dev, &cs.path, output);
+                }
+                Err(e) => {
+                    debug!(
+                        "Invocation of callout script {} failed for type {} with error: {}",
+                        cs.path
+                            .file_name()
+                            .unwrap_or_else(|| OsStr::new("unknown script name"))
+                            .to_string_lossy(),
+                        dev.mdev_type.as_ref().unwrap(),
+                        e
+                    );
+                }
+            }
+        } else {
+            debug!("No callout script with version support found");
+        };
 
         match c.invoke_first_matching_script(dev, dir, event, action) {
             Some((path, output)) => c.parse_attribute_output(dev, &path, output),
@@ -384,7 +732,11 @@ impl Callout {
                 self.invoke_first_matching_script(dev, dir, event, action)
                     .and_then(|(path, output)| {
                         self.print_err(&output, &path);
-                        self.script = Some(path);
+                        self.script = Some(CalloutScript::new(
+                            path,
+                            dev.mdev_type().unwrap().to_string(),
+                            CalloutVersion::V_1_0_0,
+                        ));
                         output.status.code()
                     })
             }
@@ -392,15 +744,23 @@ impl Callout {
 
         match rc {
             Some(0) => Ok(()),
-            Some(n) => Err(CalloutError::InvocationFailure(
-                self.script.as_ref().unwrap().to_path_buf(),
-                Some(n),
+            Some(rc) => Err(CalloutError::InvocationFailure(
+                self.script.as_ref().unwrap().as_ref().to_path_buf(),
+                Some(rc),
             )),
             None => Err(CalloutError::NoMatchingScript),
         }
     }
 
     fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<()> {
+        if self.script.is_some() {
+            self.script
+                .as_ref()
+                .unwrap()
+                .supports_event_action(event, action)
+                .map_err(anyhow::Error::from)?;
+        }
+
         for dir in dev.env.callout_dirs() {
             let res = self.callout_dir(dev, event, action, dir);
 
