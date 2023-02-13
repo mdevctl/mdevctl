@@ -206,36 +206,45 @@ impl Callout {
         res
     }
 
+    fn parse_attribute_output(
+        &self,
+        dev: &mut MDev,
+        path: &PathBuf,
+        output: Output,
+    ) -> Result<serde_json::Value, CalloutError> {
+        if output.status.success() {
+            debug!("Get attributes successfully from callout script");
+            let mut st = String::from_utf8_lossy(&output.stdout).to_string();
+
+            if st.is_empty() {
+                return Ok(serde_json::Value::Null);
+            }
+
+            if &st == "[{}]" {
+                debug!(
+                    "Attribute field for {} is empty",
+                    dev.uuid.hyphenated().to_string()
+                );
+                st = "[]".to_string();
+            }
+
+            serde_json::from_str(&st).map_err(CalloutError::InvalidJSON)
+        } else {
+            self.print_err(&output, path);
+            Err(CalloutError::InvocationFailure(
+                path.clone(),
+                output.status.code(),
+            ))
+        }
+    }
+
     fn get_attributes_dir(dev: &mut MDev, dir: PathBuf) -> Result<serde_json::Value, CalloutError> {
         let event = Event::Get;
         let action = Action::Attributes;
         let c = Callout::new();
 
         match c.invoke_first_matching_script(dev, dir, event, action) {
-            Some((path, output)) => {
-                if output.status.success() {
-                    debug!("Get attributes successfully from callout script");
-                    let mut st = String::from_utf8_lossy(&output.stdout).to_string();
-
-                    if st.is_empty() {
-                        return Ok(serde_json::Value::Null);
-                    }
-
-                    if &st == "[{}]" {
-                        debug!(
-                            "Attribute field for {} is empty",
-                            dev.uuid.hyphenated().to_string()
-                        );
-                        st = "[]".to_string();
-                    }
-
-                    serde_json::from_str(&st).map_err(CalloutError::InvalidJSON)
-                } else {
-                    c.print_err(&output, &path);
-
-                    Err(CalloutError::InvocationFailure(path, output.status.code()))
-                }
-            }
+            Some((path, output)) => c.parse_attribute_output(dev, &path, output),
             None => {
                 debug!(
                     "Device type {} unmatched by callout script",
