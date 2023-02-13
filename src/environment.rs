@@ -1,9 +1,12 @@
 //! A filesystem environment for mdevctl
 
+use crate::callouts::{CalloutScript, CalloutScripts};
+use crate::mdev::MDev;
 use anyhow::{anyhow, Result};
 use log::debug;
 use std::env;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 /// A trait which provides filesystem paths for certain system resources.
 ///
@@ -12,6 +15,8 @@ use std::path::{Path, PathBuf};
 /// within a mock filesystem environment that will not affect the system.
 pub trait Environment {
     fn root(&self) -> &Path;
+
+    fn find_script(&self, dev: &MDev) -> Option<CalloutScript>;
 
     fn mdev_base(&self) -> PathBuf {
         self.root().join("sys/bus/mdev/devices")
@@ -74,6 +79,8 @@ pub trait Environment {
     }
 }
 
+static CALLOUT_SCRIPTS: Mutex<CalloutScripts> = Mutex::new(CalloutScripts::new());
+
 /// A default implementation of the Environment trait which uses '/' as the filesystem root.
 #[derive(Debug)]
 pub struct DefaultEnvironment {
@@ -93,6 +100,10 @@ impl std::fmt::Debug for &dyn Environment {
 impl Environment for DefaultEnvironment {
     fn root(&self) -> &Path {
         self.rootpath.as_path()
+    }
+
+    fn find_script(&self, dev: &MDev) -> Option<CalloutScript> {
+        return CALLOUT_SCRIPTS.lock().unwrap().find_script(dev);
     }
 }
 

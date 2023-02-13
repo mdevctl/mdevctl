@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tempfile::Builder;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -27,6 +28,8 @@ enum Expect<'a> {
     Fail(Option<&'a str>),
 }
 
+static CALLOUT_SCRIPTS: Mutex<CalloutScripts> = Mutex::new(CalloutScripts::new());
+
 #[derive(Debug)]
 struct TestEnvironment {
     datapath: PathBuf,
@@ -38,6 +41,10 @@ struct TestEnvironment {
 impl Environment for TestEnvironment {
     fn root(&self) -> &Path {
         self.scratch.path()
+    }
+
+    fn find_script(&self, dev: &MDev) -> Option<CalloutScript> {
+        return CALLOUT_SCRIPTS.lock().unwrap().find_script(dev);
     }
 }
 
