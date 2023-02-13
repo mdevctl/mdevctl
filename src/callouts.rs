@@ -55,18 +55,10 @@ impl std::error::Error for CalloutError {
 impl Display for Event {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Event::Pre => {
-                write!(f, "pre")
-            }
-            Event::Post => {
-                write!(f, "post")
-            }
-            Event::Notify => {
-                write!(f, "notify")
-            }
-            Event::Get => {
-                write!(f, "get")
-            }
+            Event::Pre => write!(f, "pre"),
+            Event::Post => write!(f, "post"),
+            Event::Notify => write!(f, "notify"),
+            Event::Get => write!(f, "get"),
         }
     }
 }
