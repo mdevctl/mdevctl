@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt::{self, Display, Formatter};
 use std::io::{ErrorKind, Write};
@@ -8,12 +10,16 @@ use std::process::{Command, Output, Stdio};
 
 use crate::mdev::*;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Event {
     Pre,
     Post,
     Notify,
     Get,
+    #[serde(skip_serializing)]
+    #[serde(other)]
+    Unknown, // used for forward compatibility to newer callout scripts
 }
 
 fn invocation_failure(path: &PathBuf, code: Option<i32>) -> anyhow::Error {
@@ -34,12 +40,13 @@ impl Display for Event {
             Event::Post => write!(f, "post"),
             Event::Notify => write!(f, "notify"),
             Event::Get => write!(f, "get"),
+            Event::Unknown => write!(f, "unknown"),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Action {
     Start,
     Stop,
@@ -47,7 +54,12 @@ pub enum Action {
     Undefine,
     Modify,
     Attributes,
+    Capabilities,
+    #[serde(skip_serializing)]
     Test, // used for tests only
+    #[serde(skip_serializing)]
+    #[serde(other)]
+    Unknown, // used for forward compatibility to newer callout scripts
 }
 
 impl Display for Action {
@@ -59,9 +71,78 @@ impl Display for Action {
             Action::Undefine => write!(f, "undefine"),
             Action::Modify => write!(f, "modify"),
             Action::Attributes => write!(f, "attributes"),
+            Action::Capabilities => write!(f, "capabilities"),
             Action::Test => write!(f, "test"),
+            Action::Unknown => write!(f, "unknown"),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub struct CalloutVersion {
+    version: Cow<'static, u32>,
+    actions: Cow<'static, [Action]>,
+    events: Cow<'static, [Event]>,
+}
+
+impl CalloutVersion {
+    pub const fn new_const(
+        version: &'static u32,
+        actions: &'static [Action],
+        events: &'static [Event],
+    ) -> Self {
+        Self {
+            version: Cow::Borrowed(version),
+            actions: Cow::Borrowed(actions),
+            events: Cow::Borrowed(events),
+        }
+    }
+
+    pub const V_1: CalloutVersion = CalloutVersion::new_const(
+        &1,
+        &[
+            Action::Start,
+            Action::Stop,
+            Action::Define,
+            Action::Undefine,
+            Action::Modify,
+            Action::Attributes,
+        ],
+        &[Event::Pre, Event::Post, Event::Notify, Event::Get],
+    );
+
+    pub const V_2: CalloutVersion = CalloutVersion::new_const(
+        &2,
+        &[
+            Action::Start,
+            Action::Stop,
+            Action::Define,
+            Action::Undefine,
+            Action::Modify,
+            Action::Attributes,
+            Action::Capabilities,
+        ],
+        &[Event::Pre, Event::Post, Event::Notify, Event::Get],
+    );
+
+    pub fn has_action(&self, action: Action) -> bool {
+        self.actions.contains(&action)
+    }
+
+    pub fn has_event(&self, event: Event) -> bool {
+        self.events.contains(&event)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CalloutExport {
+    provides: Option<CalloutVersion>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CalloutImport {
+    supports: Option<CalloutVersion>,
 }
 
 #[derive(Clone, Copy)]
@@ -77,6 +158,171 @@ impl Display for State {
             State::None => write!(f, "none"),
             State::Success => write!(f, "success"),
             State::Failure => write!(f, "failure"),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CalloutScriptInfo {
+    path: PathBuf,
+    parent: String,
+    mdev_type: String,
+    supports: CalloutVersion,
+}
+
+impl CalloutScriptInfo {
+    fn new(
+        path: PathBuf,
+        parent: String,
+        mdev_type: String,
+        supports: CalloutVersion,
+    ) -> CalloutScriptInfo {
+        CalloutScriptInfo {
+            path,
+            parent,
+            mdev_type,
+            supports,
+        }
+    }
+
+    fn supports_action(&self, action: Action) -> bool {
+        self.supports.has_action(action)
+    }
+
+    fn supports_event(&self, event: Event) -> bool {
+        self.supports.has_event(event)
+    }
+
+    fn supports_event_action(&self, event: Event, action: Action) -> Result<()> {
+        if !self.supports_action(action) {
+            debug!(
+                "Callout script {:?} does not support action '{:?}'",
+                self.path.clone(),
+                action
+            );
+            return Err(anyhow!(
+                "Script {:?} does not support action '{:?}'",
+                self.path.clone(),
+                action
+            ));
+        }
+        if !self.supports_event(event) {
+            debug!(
+                "Callout script {:?} does not support event '{:?}'",
+                self.path.clone(),
+                event
+            );
+            return Err(anyhow!(
+                "Script {:?} does not support event '{:?}'",
+                self.path.clone(),
+                event
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl AsRef<Path> for CalloutScriptInfo {
+    fn as_ref(&self) -> &Path {
+        &self.path
+    }
+}
+
+#[derive(Debug)]
+pub struct CalloutScriptCache {
+    callouts: Vec<CalloutScriptInfo>,
+}
+
+impl CalloutScriptCache {
+    pub const fn new() -> Self {
+        CalloutScriptCache {
+            callouts: Vec::new(),
+        }
+    }
+
+    fn parse_script_capabilities(output: &Output) -> Option<CalloutVersion> {
+        let stdout = String::from_utf8(output.clone().stdout).unwrap();
+        match serde_json::from_str::<CalloutImport>(stdout.trim_end_matches('\0')) {
+            Ok(ce) => ce.supports.or_else(|| {
+                debug!(" Callout script does not provide version support");
+                None
+            }),
+            Err(e) => {
+                debug!(
+                    " Callout script has no version support (unparsable stdout): {:?}",
+                    e
+                );
+                None
+            }
+        }
+    }
+
+    fn lookup_callout_script(&self, parent: &str, mdev_type: &str) -> Option<CalloutScriptInfo> {
+        for cs in self.callouts.iter() {
+            if cs.mdev_type.eq_ignore_ascii_case(mdev_type)
+                && cs.parent.eq_ignore_ascii_case(parent)
+            {
+                return Some(cs.clone());
+            }
+        }
+        None
+    }
+
+    pub fn find_versioned_script(&mut self, dev: &MDev) -> Option<CalloutScriptInfo> {
+        // check already found scripts
+        let mut dev = dev.clone();
+        let mut callout = callout(&mut dev);
+        let mdev_type = match callout.dev.mdev_type() {
+            Ok(t) => t.clone(),
+            Err(_) => {
+                debug!("mdev_type is required on device => cannot find a callout script");
+                return None;
+            }
+        };
+        let parent = match callout.dev.parent() {
+            Ok(p) => p.clone(),
+            Err(_) => {
+                debug!("parent is required on device => cannot find a callout script");
+                return None;
+            }
+        };
+        debug!("Looking up callout script for mdev type '{:?}'", mdev_type);
+        match self.lookup_callout_script(&parent, &mdev_type) {
+            Some(cs) => {
+                debug!(
+                    "Looked up callout script for mdev type '{:?}' and parent {:?}: {:?}",
+                    mdev_type, parent, cs.path
+                );
+                return Some(cs);
+            }
+            None => {
+                debug!(
+                    "Callout script lookup failed. Start searching for mdev type '{:?}' and parent {:?}",
+                    mdev_type, parent
+                );
+            }
+        }
+
+        let ce_ver = CalloutExport {
+            provides: Some(CalloutVersion::V_2),
+        };
+        let json_ce_ver =
+            serde_json::to_string(&ce_ver).expect("CalloutVersion JSON could not be generated");
+
+        match callout.callout(
+            Event::Get,
+            Action::Capabilities,
+            Some(&json_ce_ver),
+            &CapabilitiesCheckProcessOutput,
+        ) {
+            Ok(op) => match op {
+                Some(_) => {
+                    self.callouts.push(callout.script.clone().unwrap());
+                    callout.script
+                }
+                None => None,
+            },
+            Err(_) => None,
         }
     }
 }
@@ -97,7 +343,12 @@ impl CheckProcessOutput for DefaultCheckProcessOutput {
         c.print_err(&o, &p);
         match o.status.code() {
             Some(0) => {
-                c.script = Some(p);
+                c.script = Some(CalloutScriptInfo::new(
+                    p,
+                    c.dev.parent().unwrap().to_string(),
+                    c.dev.mdev_type().unwrap().to_string(),
+                    CalloutVersion::V_1,
+                ));
                 Ok(Some(o))
             }
             Some(n) => Err(invocation_failure(&p, Some(n))),
@@ -106,9 +357,40 @@ impl CheckProcessOutput for DefaultCheckProcessOutput {
     }
 }
 
+struct CapabilitiesCheckProcessOutput;
+
+impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
+    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output)> {
+        match CalloutScriptCache::parse_script_capabilities(&o) {
+            Some(_) => Ok((p, o)),
+            None => Err(anyhow!(
+                "Output of callout script {:?} is not a valid capabilities XML response",
+                p
+            )),
+        }
+    }
+
+    fn process(&self, c: &mut Callout<'_, '_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
+        c.print_err(&o, &p);
+        match CalloutScriptCache::parse_script_capabilities(&o) {
+            Some(cv) => {
+                debug!(" Script supports versioning: {:?}", cv);
+                c.script = Some(CalloutScriptInfo::new(
+                    p,
+                    c.dev.parent().unwrap().to_string(),
+                    c.dev.mdev_type().unwrap().to_string(),
+                    cv,
+                ));
+                Ok(Some(o))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
 pub struct Callout<'a, 'b> {
     state: State,
-    script: Option<PathBuf>,
+    script: Option<CalloutScriptInfo>,
     pub dev: &'b mut MDev<'a>,
 }
 
@@ -128,10 +410,19 @@ impl<'a, 'b> Callout<'a, 'b> {
         }
     }
 
+    fn find_callout_script(&self) -> Option<CalloutScriptInfo> {
+        self.dev.env.find_script(self.dev)
+    }
+
     pub fn invoke<F>(&mut self, action: Action, force: bool, func: F) -> Result<()>
     where
         F: Fn(&mut Self) -> Result<()>,
     {
+        self.script = self.find_callout_script();
+        if self.script.is_none() {
+            debug!("No callout script with version support found");
+        }
+
         let conf = self.dev.to_json(false)?.to_string();
         let res = self
             .callout(Event::Pre, action, Some(&conf), &DefaultCheckProcessOutput)
@@ -167,6 +458,11 @@ impl<'a, 'b> Callout<'a, 'b> {
     }
 
     pub fn get_attributes(&mut self) -> Result<serde_json::Value> {
+        self.script = self.find_callout_script();
+        if self.script.is_none() {
+            debug!("No callout script with version support found");
+        }
+
         match self.callout(
             Event::Get,
             Action::Attributes,
@@ -201,7 +497,7 @@ impl<'a, 'b> Callout<'a, 'b> {
                     serde_json::from_str(st.trim_end_matches('\0'))
                         .with_context(|| "Invalid JSON received from callout script")
                 } else {
-                    let path = self.script.as_ref().unwrap();
+                    let path = &self.script.as_ref().unwrap().path;
                     self.print_err(&output, path);
 
                     Err(invocation_failure(path, output.status.code()))
@@ -352,11 +648,12 @@ impl<'a, 'b> Callout<'a, 'b> {
     ) -> Result<Option<Output>> {
         match self.script {
             Some(ref s) => {
+                s.supports_event_action(event, action)?;
                 let output = self.invoke_script(s, event, action, stdin)?;
                 self.print_err(&output, s);
                 match output.status.code() {
                     None | Some(0) => Ok(Some(output)),
-                    Some(n) => Err(invocation_failure(self.script.as_ref().unwrap(), Some(n))),
+                    Some(n) => Err(invocation_failure(&s.path, Some(n))),
                 }
             }
             None => {
