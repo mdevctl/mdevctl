@@ -106,6 +106,56 @@ impl Display for State {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn invoke_callout_script(
+    script: &Path,
+    mdev_type: String,
+    uuid: String,
+    parent: String,
+    event: Event,
+    action: Action,
+    state: State,
+    stdin: String,
+) -> Result<Output> {
+    debug!(
+        "{}-{}: executing {:?} (mdev_type={}, uuid={}, parent={}, state={})",
+        event,
+        action,
+        script.as_os_str(),
+        mdev_type,
+        uuid,
+        parent,
+        state.to_string()
+    );
+
+    let mut cmd = Command::new(script.as_os_str());
+
+    cmd.arg("-t")
+        .arg(mdev_type)
+        .arg("-e")
+        .arg(event.to_string())
+        .arg("-a")
+        .arg(action.to_string())
+        .arg("-s")
+        .arg(state.to_string())
+        .arg("-u")
+        .arg(uuid)
+        .arg("-p")
+        .arg(parent)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd.spawn()?;
+    if let Some(mut child_stdin) = child.stdin.take() {
+        child_stdin
+            .write_all(stdin.as_bytes())
+            .context("Failed to write to stdin of command")?;
+    }
+
+    child.wait_with_output().map_err(anyhow::Error::from)
+}
+
 pub struct Callout {
     state: State,
     script: Option<PathBuf>,
@@ -224,35 +274,21 @@ impl Callout {
             script.as_ref().as_os_str()
         );
 
-        let mut cmd = Command::new(script.as_ref().as_os_str());
+        let stdin = match event {
+            Event::Get => String::new(),
+            _ => dev.to_json(false)?.to_string(),
+        };
 
-        cmd.arg("-t")
-            .arg(dev.mdev_type()?)
-            .arg("-e")
-            .arg(event.to_string())
-            .arg("-a")
-            .arg(action.to_string())
-            .arg("-s")
-            .arg(self.state.to_string())
-            .arg("-u")
-            .arg(dev.uuid.to_string())
-            .arg("-p")
-            .arg(dev.parent()?)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        let mut child = cmd.spawn()?;
-        if event != Event::Get {
-            let conf = dev.to_json(false)?.to_string();
-            if let Some(mut child_stdin) = child.stdin.take() {
-                child_stdin
-                    .write_all(conf.as_bytes())
-                    .with_context(|| "Failed to write to stdin of command")?;
-            }
-        }
-
-        child.wait_with_output().map_err(anyhow::Error::from)
+        invoke_callout_script(
+            script.as_ref(),
+            dev.mdev_type().unwrap().to_string(),
+            dev.uuid.to_string(),
+            dev.parent().unwrap().to_string(),
+            event,
+            action,
+            self.state,
+            stdin,
+        )
     }
 
     fn print_err<P: AsRef<Path>>(&self, output: &Output, script: P) {
