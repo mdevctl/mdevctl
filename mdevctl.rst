@@ -468,6 +468,72 @@ the device type.
             }
         ]
 
+``Get-capabilities``
+
+    A get event is invoked on every new mdevctl execution to find a matching script
+    supporting versioning for the device type.
+    Event type is ``get``. Action is ``capabilities``. State is ``none``.
+    Note that, unlike other call-outs events, **get-capabilities provides a
+    versioning JSON on stdin, and a versioning JSON is returned via stdout**.
+    If a script is found the script is used for every event and action for the
+    device type. Should no script be found the none versioning pattern is used.
+
+    If a valid versioning JSON is returned on stdout and the return code is NOT 2
+    the script is a positive match for the provided device type. A script providing
+    versioning is the primary choice for a device type when mdevctl is executing
+    callouts.
+
+    A script is provided on standard in with a versioning JSON describing the mdevctl
+    supported version, actions and events. Example::
+
+        {
+          "provides": {
+            "version": 1,
+            "actions": [
+              "start",
+              "stop",
+              "define",
+              "undefine",
+              "modify",
+              "attributes",
+              "capabilities"
+            ],
+            "events": [
+              "pre",
+              "post",
+              "notify",
+              "get"
+            ]
+          }
+        }
+
+    A script that wants to support versioning must return a versioning JSON on standard
+    output. The script should list all supported actions in the actions array and all
+    supported events in the events array. It is possible to add additional actions or
+    events in the array but if mdevctl did not have these in the arrays in provides
+    they are ignored. Example::
+
+        {
+          "supports": {
+            "version": 1,
+            "actions": [
+              "start",
+              "stop",
+              "define",
+              "undefine",
+              "modify",
+              "attributes",
+              "capabilities"
+            ],
+            "events": [
+              "pre",
+              "post",
+              "notify",
+              "get"
+            ]
+          }
+        }
+
 AUTO-START CALL-OUTS
 --------------------
 

@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tempfile::Builder;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -33,11 +34,16 @@ struct TestEnvironment {
     scratch: TempDir,
     name: String,
     case: String,
+    callout_scripts: Mutex<CalloutScripts>,
 }
 
 impl Environment for TestEnvironment {
     fn root(&self) -> &Path {
         self.scratch.path()
+    }
+
+    fn find_script(&self, dev: &MDev) -> Option<CalloutScript> {
+        return self.callout_scripts.lock().unwrap().find_script(dev);
     }
 }
 
@@ -50,6 +56,7 @@ impl TestEnvironment {
             scratch: scratchdir,
             name: testname.to_owned(),
             case: testcase.to_owned(),
+            callout_scripts: Mutex::new(CalloutScripts::new()),
         };
         // populate the basic directories in the environment
         fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
