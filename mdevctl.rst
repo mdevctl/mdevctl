@@ -468,6 +468,80 @@ the device type.
             }
         ]
 
+``Get-capabilities``
+
+    A get event is invoked on every new mdevctl execution to find a matching script
+    supporting versioning for the device type.
+    Event type is ``get``. Action is ``capabilities``. State is ``none``.
+    Note that, unlike other call-outs events, **get-capabilities provides a
+    versioning JSON on stdin, and expects a versioning JSON is returned via
+    stdout**.
+    The provided JSON on stdin explains in ``provides`` which ``actions`` and
+    ``events`` mdevctl supports. The information is offered to the script to
+    derive its supported ``actions`` and ``events`` from but it there is no
+    obligation for scripts to follow this pattern.
+    A valid versioning JSON response provides in ``supports`` the supported
+    actions in ``actions`` and the supported events in ``events``.
+
+    If a valid versioning JSON is returned on stdout by the script and the
+    return code is NOT 2 the script is considered a positive match for the
+    provided device type. A script providing versioning is the primary choice
+    for a device type when mdevctl is executing callouts or in other words if
+    a script which supports versioning is found the script is used for every
+    event and action for the device type. Should no versioning supporting
+    script be found the none versioning search pattern is used.
+
+    A script is provided on standard in with a versioning JSON describing the mdevctl
+    supported version, actions and events. Example::
+
+        {
+          "provides": {
+            "version": 1,
+            "actions": [
+              "start",
+              "stop",
+              "define",
+              "undefine",
+              "modify",
+              "attributes",
+              "capabilities"
+            ],
+            "events": [
+              "pre",
+              "post",
+              "notify",
+              "get"
+            ]
+          }
+        }
+
+    A script that wants to support versioning must return a versioning JSON on standard
+    output. The script should list all supported actions in the actions array and all
+    supported events in the events array. It is possible to add additional actions or
+    events in the array but if mdevctl did not have these in the arrays in provides
+    they are ignored. Example::
+
+        {
+          "supports": {
+            "version": 1,
+            "actions": [
+              "start",
+              "stop",
+              "define",
+              "undefine",
+              "modify",
+              "attributes",
+              "capabilities"
+            ],
+            "events": [
+              "pre",
+              "post",
+              "notify",
+              "get"
+            ]
+          }
+        }
+
 AUTO-START CALL-OUTS
 --------------------
 
