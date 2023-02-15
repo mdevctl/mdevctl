@@ -401,6 +401,18 @@ impl CalloutScripts {
                             match self.parse_script_output(res) {
                                 Ok(cv) => {
                                     debug!(" Script supports versioning: {:?}", cv);
+                                    if cv.has_action(Action::Unknown) {
+                                        warn!(
+                                            "Callout script {:?} provides unknown Action type",
+                                            path
+                                        );
+                                    }
+                                    if cv.has_event(Event::Unknown) {
+                                        warn!(
+                                            "Callout script {:?} provides unknown Event type",
+                                            path
+                                        );
+                                    }
                                     return Some((path, cv));
                                 }
                                 Err(CalloutError::InvalidJSON(e)) => {
