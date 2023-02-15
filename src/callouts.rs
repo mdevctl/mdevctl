@@ -346,6 +346,18 @@ impl CalloutScripts {
                                 match self.parse_script_output(output) {
                                     Some(cv) => {
                                         debug!(" Script supports versioning: {:?}", cv);
+                                        if cv.has_action(Action::Unknown) {
+                                            warn!(
+                                                "Callout script {:?} provides unknown Action type",
+                                                dir
+                                            );
+                                        }
+                                        if cv.has_event(Event::Unknown) {
+                                            warn!(
+                                                "Callout script {:?} provides unknown Event type",
+                                                dir
+                                            );
+                                        }
                                         let cs = CalloutScript::new(path, mdev_type.clone(), cv);
                                         self.callouts.push(cs);
                                         return self.lockup_callout_script(mdev_type);
