@@ -380,6 +380,12 @@ impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(cv) => {
                 debug!(" Script supports versioning: {:?}", cv);
+                if cv.has_action(Action::Unknown) {
+                    warn!("Callout script {:?} provides unknown Action type", p);
+                }
+                if cv.has_event(Event::Unknown) {
+                    warn!("Callout script {:?} provides unknown Event type", p);
+                }
                 c.script = Some(CalloutScriptInfo::new(
                     p,
                     c.dev.parent().unwrap().to_string(),
