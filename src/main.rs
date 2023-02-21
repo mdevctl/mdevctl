@@ -158,14 +158,28 @@ fn define_command(
 /// Implementation of the `mdevctl undefine` command
 fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
+    let mut failed = false;
     let devs = defined_devices(env, Some(&uuid), parent.as_ref())?;
     if devs.is_empty() {
         return Err(anyhow!("No devices match the specified uuid"));
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            let _ = Callout::invoke(child, Action::Undefine, |dev| dev.undefine());
+            if let Err(e) = Callout::invoke(child, Action::Undefine, |dev| dev.undefine()) {
+                failed = true;
+                for x in e.chain() {
+                    warn!(
+                        "Undefine of {} on parent {} failed with error: {}",
+                        child.uuid,
+                        child.parent().unwrap().to_string(),
+                        x
+                    );
+                }
+            }
         }
+    }
+    if failed {
+        return Err(anyhow!("Undefine failed"));
     }
     Ok(())
 }

@@ -877,6 +877,29 @@ fn test_undefine() {
         Some(PARENT.to_string()),
         |_| {},
     );
+
+    // callout script always returns with RC=0
+    test_undefine_helper(
+        "single-callout-all-pass",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    // callout script rejects in pre event undefine with RC=1
+    test_undefine_helper(
+        "single-callout-pre-fail",
+        Expect::Fail(None),
+        UUID,
+        Some(PARENT.to_string()),
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
 }
 
 fn test_start_command_callout<F>(
