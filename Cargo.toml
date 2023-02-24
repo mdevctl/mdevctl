@@ -18,6 +18,7 @@ env_logger = "0.8.3"
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = {version = "1.0", features = ["preserve_order"]}
+serial_test = { version = "1.0.0" }
 uuid = {version = "1.0", features = ["v4"]}
 tempfile = "3"
 
