@@ -259,6 +259,12 @@ impl CalloutScripts {
         }
     }
 
+    // For testing purposes a reset is required
+    #[cfg(test)]
+    pub fn reset(&mut self) {
+        self.callouts.clear();
+    }
+
     fn lockup_callout_script(&self, mdev_type: &str) -> Option<CalloutScript> {
         for cs in self.callouts.iter() {
             if cs.mdev_type.eq_ignore_ascii_case(mdev_type) {

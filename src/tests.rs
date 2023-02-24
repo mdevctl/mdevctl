@@ -31,6 +31,10 @@ enum Expect<'a> {
 
 static CALLOUT_SCRIPTS: Mutex<CalloutScripts> = Mutex::new(CalloutScripts::new());
 
+fn reset_callout_scripts() {
+    return CALLOUT_SCRIPTS.lock().unwrap().reset();
+}
+
 #[derive(Debug)]
 struct TestEnvironment {
     datapath: PathBuf,
@@ -71,6 +75,7 @@ impl TestEnvironment {
             fs::create_dir_all(&dir)
                 .expect(format!("Unable to create notification_dir '{:?}'", &dir).as_str());
         }
+        reset_callout_scripts();
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }
