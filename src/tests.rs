@@ -569,6 +569,67 @@ fn test_define() {
             test.populate_callout_script("rc1.sh");
         },
     );
+
+    // test define with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    test_define_command_callout(
+        "define-with-version-callout-all-pass",
+        Expect::Pass,
+        Uuid::parse_str("11111111-1111-0000-0000-000000000000").ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        false,
+        |test| {
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_define_command_callout(
+        "define-with-version-callout-all-fail",
+        Expect::Fail(None),
+        Uuid::parse_str("11111111-1111-0000-0000-000000000000").ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        false,
+        |test| {
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+    test_define_command_callout(
+        "define-with-version-callout-multiple-with-version-pass",
+        Expect::Pass,
+        Uuid::parse_str("11111111-1111-0000-0000-000000000000").ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        false,
+        |test| {
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_define_command_callout(
+        "define-with-version-callout-multiple-with-version-pass2",
+        Expect::Pass,
+        Uuid::parse_str("11111111-1111-0000-0000-000000000000").ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        false,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning error
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_define_command_callout(
+        "define-with-version-callout-multiple-with-version-fail",
+        Expect::Fail(None),
+        Uuid::parse_str("11111111-1111-0000-0000-000000000000").ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        false,
+        |test| {
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
 }
 
 fn test_modify_helper<F>(
@@ -913,6 +974,108 @@ fn test_modify() {
             test.populate_callout_script("rc1.sh");
         },
     );
+
+    // test modify with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
+    test_modify_helper(
+        "modify-jsonfile-with-version-callout-all-pass",
+        Expect::Pass,
+        UUID_VER,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_modify_helper(
+        "modify-jsonfile-with-version-callout-all-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+    test_modify_helper(
+        "modify-jsonfile-with-version-callout-multiple-with-version-pass",
+        Expect::Pass,
+        UUID_VER,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_modify_helper(
+        "modify-jsonfile-with-version-callout-multiple-with-version-pass2",
+        Expect::Pass,
+        UUID_VER,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh"); // no versioning error
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_modify_helper(
+        "modify-jsonfile-with-version-callout-multiple-with-version-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
 }
 
 fn test_undefine_helper<F>(
@@ -1028,6 +1191,68 @@ fn test_undefine() {
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_callout_script("rc1.sh");
+        },
+    );
+
+    // test define with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
+    test_undefine_helper(
+        "undefine-single-with-version-callout-all-pass",
+        Expect::Pass,
+        UUID_VER,
+        Some(PARENT.to_string()),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_undefine_helper(
+        "undefine-single-with-version-callout-all-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        Some(PARENT.to_string()),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+    test_undefine_helper(
+        "define-with-version-callout-multiple-with-version-pass",
+        Expect::Pass,
+        UUID_VER,
+        Some(PARENT.to_string()),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_undefine_helper(
+        "define-with-version-callout-multiple-with-version-pass2",
+        Expect::Pass,
+        UUID_VER,
+        Some(PARENT.to_string()),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh"); // no versioning error
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_undefine_helper(
+        "define-with-version-callout-multiple-with-version-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        Some(PARENT.to_string()),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
         },
     );
 }
@@ -1380,6 +1605,78 @@ fn test_start() {
     // TODO: test attributes -- difficult because executing the 'start' command by writing to
     // the 'create' file in sysfs does not automatically create the device file structure in
     // the temporary test environment, so writing the sysfs attribute files fails.
+
+    // test start with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
+    test_start_command_callout(
+        "start-single-with-version-callout-pass",
+        Expect::Pass,
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_start_command_callout(
+        "start-single-with-version-callout-fail",
+        Expect::Fail(None),
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+    test_start_command_callout(
+        "start-with-version-callout-multiple-with-version-pass",
+        Expect::Pass,
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_start_command_callout(
+        "start-with-version-callout-multiple-with-version-pass2",
+        Expect::Pass,
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh"); // no versioning error
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_start_command_callout(
+        "start-with-version-callout-multiple-with-version-fail",
+        Expect::Fail(None),
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
 }
 
 fn test_stop_helper<F>(testname: &str, expect: Expect, uuid: &str, force: bool, setupfn: F)
@@ -1423,6 +1720,52 @@ fn test_stop() {
         t.populate_active_device(UUID, PARENT, MDEV_TYPE);
         t.populate_callout_script("rc1.sh")
     });
+
+    // test start with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
+    test_stop_helper(
+        "stop-single-callout-with-version-all-pass",
+        Expect::Pass,
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_stop_helper(
+        "stop-single-callout-with-version-all-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("ver-rc1.sh"); // versioning
+        },
+    );
+    test_stop_helper(
+        "stop-single-callouts-mix-all-pass",
+        Expect::Pass,
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_stop_helper(
+        "stop-single-callouts-mix-all-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning
+        },
+    );
 }
 
 #[test]
@@ -2050,6 +2393,191 @@ fn test_callouts() {
         |test| {
             test.populate_callout_script_full("rc2.sh", None, true);
             test.populate_callout_script_full("rc0.sh", None, false);
+        },
+    );
+
+    // test start with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
+    const UUID_VER_RC1: &str = "11111111-1111-0000-0000-111111111111";
+    const UUID_VER_RC2: &str = "11111111-1111-0000-0000-222222222222";
+    const UUID_VER_BAD_JSON: &str = "11111111-1111-0000-0000-aaaaaaaaaaaa";
+    const UUID_VER_ACTION_DUMMY: &str = "11111111-1111-0000-0000-bbbbbbbbbbbb";
+    const UUID_VER_EVENT_DUMMY: &str = "11111111-1111-0000-0000-cccccccccccc";
+    const UUID_VER_MODIFY_MISSING: &str = "11111111-1111-0000-0000-dddddddddddd";
+    const UUID_VER_PROVIDES: &str = "11111111-1111-0000-0000-eeeeeeeeeeee";
+    const UUID_VER_INVALID_JSON: &str = "11111111-1111-0000-0000-ffffffffffff";
+
+    test_invoke_callout(
+        "test_callout_with_version_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(UUID_VER).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_version_fail",
+        Expect::Fail(None),
+        Action::Start,
+        Uuid::parse_str(UUID_VER).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_version_mix_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(UUID_VER).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_version_mix_fail",
+        Expect::Fail(None),
+        Action::Start,
+        Uuid::parse_str(UUID_VER).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+    test_get_callout(
+        "test_callout_with_version_good_json",
+        Expect::Pass,
+        Uuid::parse_str(UUID_VER).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_get_callout(
+        "test_callout_with_version_bad_json",
+        Expect::Fail(None),
+        Uuid::parse_str(UUID_VER).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("ver-rc0-get-attr-bad-json.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_get_capabilities_rc1_run_with_version_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(UUID_VER_RC1).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_get_capabilities_rc2_run_without_version_fail",
+        Expect::Fail(None),
+        Action::Start,
+        Uuid::parse_str(UUID_VER_RC2).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_get_capabilities_bad_run_without_version_fail",
+        Expect::Fail(None),
+        Action::Start,
+        Uuid::parse_str(UUID_VER_BAD_JSON).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_unknown_action_with_version_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(UUID_VER_ACTION_DUMMY).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_unknown_event_with_verion_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(UUID_VER_EVENT_DUMMY).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_version_missing_modify_run_start_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(UUID_VER_MODIFY_MISSING).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_version_missing_modify_run_modify_fail",
+        Expect::Fail(None),
+        Action::Modify,
+        Uuid::parse_str(UUID_VER_MODIFY_MISSING).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_version_json_provides_with_version_pass",
+        Expect::Pass,
+        Action::Start,
+        Uuid::parse_str(UUID_VER_PROVIDES).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_invoke_callout(
+        "test_callout_with_version_json_invalid_with_version_without_version_fail",
+        Expect::Fail(None),
+        Action::Start,
+        Uuid::parse_str(UUID_VER_INVALID_JSON).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
         },
     );
 }

@@ -1,0 +1,15 @@
+{
+  "mdev_type": "vfio_ap-passthrough",
+  "start": "auto",
+  "attrs": [
+    {
+      "assign_adapter": "0x04"
+    },
+    {
+      "assign_domain": "0x0005"
+    },
+    {
+      "assign_control_domain": "0x0005"
+    }
+  ]
+}
