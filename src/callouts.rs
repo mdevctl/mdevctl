@@ -257,11 +257,23 @@ fn find_callout_script(dev: &mut MDev) -> Result<CalloutScript, CalloutError> {
     return CALLOUT_SCRIPTS.lock().unwrap().find_script(dev);
 }
 
+// For testing purposes a reset is required
+#[cfg(test)]
+pub fn reset_callout_scripts() {
+    return CALLOUT_SCRIPTS.lock().unwrap().reset();
+}
+
 impl CalloutScripts {
     pub const fn new() -> Self {
         CalloutScripts {
             callouts: Vec::new(),
         }
+    }
+
+    // For testing purposes a reset is required
+    #[cfg(test)]
+    fn reset(&mut self) {
+        self.callouts.clear();
     }
 
     fn find_script(&mut self, dev: &mut MDev) -> Result<CalloutScript, CalloutError> {

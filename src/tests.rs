@@ -64,6 +64,7 @@ impl TestEnvironment {
             fs::create_dir_all(&dir)
                 .expect(format!("Unable to create notification_dir '{:?}'", &dir).as_str());
         }
+        reset_callout_scripts();
         info!("---- Running test '{}/{}' ----", testname, testcase);
         test
     }
