@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use log::info;
 use nix::sys::wait::waitpid;
 use nix::unistd::{fork, ForkResult};
+use serial_test::serial;
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -376,6 +377,7 @@ fn test_define_helper<F>(
 }
 
 #[test]
+#[serial]
 fn test_define() {
     init();
 
@@ -634,6 +636,7 @@ fn test_modify_helper<F>(
 }
 
 #[test]
+#[serial]
 fn test_modify() {
     init();
 
@@ -944,6 +947,7 @@ fn test_undefine_helper<F>(
 }
 
 #[test]
+#[serial]
 fn test_undefine() {
     init();
 
@@ -1096,6 +1100,7 @@ fn test_start_helper<F>(
 }
 
 #[test]
+#[serial]
 fn test_start() {
     init();
 
@@ -1401,6 +1406,7 @@ where
 }
 
 #[test]
+#[serial]
 fn test_stop() {
     init();
 
@@ -1426,6 +1432,7 @@ fn test_stop() {
 }
 
 #[test]
+#[serial]
 fn test_invalid_files() {
     init();
 
@@ -1473,6 +1480,7 @@ fn test_list_helper<F>(
 }
 
 #[test]
+#[serial]
 fn test_list() {
     init();
 
@@ -1714,6 +1722,7 @@ fn test_types_helper(
 }
 
 #[test]
+#[serial]
 fn test_types() {
     init();
 
@@ -1835,6 +1844,7 @@ fn test_get_callout<F>(
 }
 
 #[test]
+#[serial]
 #[should_panic]
 fn test_invoke_callout_panic() {
     init();
@@ -1855,6 +1865,7 @@ fn test_invoke_callout_panic() {
 }
 
 #[test]
+#[serial]
 #[should_panic]
 fn test_get_callout_panic() {
     init();
@@ -1874,6 +1885,7 @@ fn test_get_callout_panic() {
 }
 
 #[test]
+#[serial]
 fn test_callouts() {
     init();
 
