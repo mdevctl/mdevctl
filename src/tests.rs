@@ -21,19 +21,6 @@ fn init() {
     let _ = logger().is_test(true).try_init();
 }
 
-fn assert_result<T: std::fmt::Debug>(res: Result<T>, expect: Expect, testname: &str) -> Result<T> {
-    match expect {
-        Expect::Fail(msg) => {
-            let e = res.expect_err(format!("Expected {} to fail", testname).as_str());
-            if let Some(msg) = msg {
-                assert_eq!(msg, e.to_string());
-            }
-            Err(anyhow!(e))
-        }
-        Expect::Pass => Ok(res.expect(format!("Expected {} to pass", testname).as_str())),
-    }
-}
-
 #[derive(PartialEq, Clone, Copy)]
 enum Expect<'a> {
     Pass,
@@ -44,6 +31,8 @@ enum Expect<'a> {
 struct TestEnvironment {
     datapath: PathBuf,
     scratch: TempDir,
+    name: String,
+    case: String,
 }
 
 impl Environment for TestEnvironment {
@@ -59,6 +48,8 @@ impl TestEnvironment {
         let test = TestEnvironment {
             datapath: path,
             scratch: scratchdir,
+            name: testname.to_owned(),
+            case: testcase.to_owned(),
         };
         // populate the basic directories in the environment
         fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
@@ -216,6 +207,28 @@ impl TestEnvironment {
 
         Ok(dev)
     }
+
+    fn assert_result<T: std::fmt::Debug>(
+        &self,
+        res: Result<T>,
+        expect: Expect,
+        msg: Option<&str>,
+    ) -> Result<T> {
+        let mut testname = format!("{}/{}", self.name, self.case);
+        if let Some(msg) = msg {
+            testname = format!("{}/{}", testname, msg);
+        }
+        match expect {
+            Expect::Fail(msg) => {
+                let e = res.expect_err(format!("Expected {} to fail", testname).as_str());
+                if let Some(msg) = msg {
+                    assert_eq!(msg, e.to_string());
+                }
+                Err(anyhow!(e))
+            }
+            Expect::Pass => Ok(res.expect(format!("Expected {} to pass", testname).as_str())),
+        }
+    }
 }
 
 fn get_flag(varname: &str) -> bool {
@@ -248,7 +261,7 @@ fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
     let test = TestEnvironment::new("load-json", uuid);
 
     let res = test.load_from_json(uuid, parent, &format!("{}.in", uuid));
-    if let Ok(dev) = assert_result(res, expect, "load-json") {
+    if let Ok(dev) = test.assert_result(res, expect, None) {
         let jsonval = dev.to_json(false).unwrap();
         let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
@@ -312,13 +325,13 @@ fn test_define_command_callout<F>(
 ) where
     F: Fn(&TestEnvironment),
 {
-    let test = TestEnvironment::new("define/callouts", testname);
+    let test = TestEnvironment::new("define-callouts", testname);
     setupfn(&test);
 
     use crate::define_command;
     let res = define_command(&test, uuid, false, parent, mdev_type, None);
 
-    let _ = assert_result(res, expect, "define callout");
+    let _ = test.assert_result(res, expect, None);
 }
 
 fn test_define_helper<F>(
@@ -345,7 +358,7 @@ fn test_define_helper<F>(
     setupfn(&test);
 
     let res = define_command_helper(&test, uuid, auto, parent, mdev_type, jsonfile);
-    if let Ok(def) = assert_result(res, expect, "define command") {
+    if let Ok(def) = test.assert_result(res, expect, None) {
         let path = def.persist_path().unwrap();
         assert!(!path.exists());
         def.define().expect("Failed to define device");
@@ -584,8 +597,7 @@ fn test_modify_helper<F>(
         jsonfile,
     );
 
-    let testmsg = &format!("modify command testcase {}", testname);
-    if assert_result(result, expect, testmsg).is_err() {
+    if test.assert_result(result, expect, None).is_err() {
         return;
     }
 
@@ -826,7 +838,7 @@ fn test_undefine_helper<F>(
 
     let result = crate::undefine_command(&test, uuid, parent.clone());
 
-    if assert_result(result, expect, "undefine command").is_err() {
+    if test.assert_result(result, expect, None).is_err() {
         return;
     }
 
@@ -917,7 +929,7 @@ fn test_start_command_callout<F>(
 
     use crate::start_command;
     let res = start_command(&test, uuid, parent, mdev_type, None);
-    let _ = assert_result(res, expect, "start callout");
+    let _ = test.assert_result(res, expect, None);
 }
 
 fn test_start_helper<F>(
@@ -938,9 +950,12 @@ fn test_start_helper<F>(
 
     let result = crate::start_command_helper(&test, uuid, parent, mdev_type, jsonfile);
 
-    if let Ok(mut dev) = assert_result(result, expect_setup, "start command setup") {
+    if let Ok(mut dev) = test.assert_result(result, expect_setup, Some("setup command")) {
         let result = dev.start();
-        if assert_result(result, expect_execute, "start command").is_err() {
+        if test
+            .assert_result(result, expect_execute, Some("execute command"))
+            .is_err()
+        {
             return;
         }
 
@@ -1287,12 +1302,12 @@ fn test_list_helper<F>(
     setupfn(&test);
 
     let res = list_command_helper(&test, defined, false, verbose, uuid, parent.clone());
-    if let Ok(output) = assert_result(res, expect, "list json command") {
+    if let Ok(output) = test.assert_result(res, expect, Some("json")) {
         test.compare_to_file(&format!("{}.text", subtest), &output);
     }
 
     let res = list_command_helper(&test, defined, true, verbose, uuid, parent.clone());
-    if let Ok(output) = assert_result(res, expect, "list command") {
+    if let Ok(output) = test.assert_result(res, expect, Some("text")) {
         test.compare_to_file(&format!("{}.json", subtest), &output);
     }
 }
@@ -1527,13 +1542,13 @@ fn test_types_helper(
 
     // test text output
     let res = types_command_helper(test, parent.clone(), false);
-    if let Ok(output) = assert_result(res, expect, "types command") {
+    if let Ok(output) = test.assert_result(res, expect, Some("text")) {
         test.compare_to_file(&format!("{}.text", subtest), &output);
     }
 
     // test JSON output
     let res = types_command_helper(test, parent.clone(), true);
-    if let Ok(output) = assert_result(res, expect, "types json command") {
+    if let Ok(output) = test.assert_result(res, expect, Some("json")) {
         test.compare_to_file(&format!("{}.json", subtest), &output);
     }
 }
@@ -1613,7 +1628,7 @@ fn test_invoke_callout<F>(
 ) where
     F: Fn(&TestEnvironment),
 {
-    let test = TestEnvironment::new("callouts", testname);
+    let test = TestEnvironment::new("invoke-callout", testname);
     setupfn(&test);
 
     let mut empty_mdev = MDev::new(&test, uuid);
@@ -1621,7 +1636,7 @@ fn test_invoke_callout<F>(
     empty_mdev.parent = Some(parent.to_string());
 
     let res = Callout::invoke(&mut empty_mdev, action, |_empty_mdev| Ok(()));
-    let _ = assert_result(res, expect, "invoke callout");
+    let _ = test.assert_result(res, expect, None);
 }
 
 fn test_get_callout<F>(
@@ -1634,7 +1649,7 @@ fn test_get_callout<F>(
 ) where
     F: Fn(&TestEnvironment),
 {
-    let test = TestEnvironment::new("callouts", testname);
+    let test = TestEnvironment::new("get-callout", testname);
     setupfn(&test);
 
     let mut empty_mdev = MDev::new(&test, uuid);
@@ -1642,7 +1657,7 @@ fn test_get_callout<F>(
     empty_mdev.parent = Some(parent.to_string());
 
     let res = Callout::get_attributes(&mut empty_mdev);
-    let _ = assert_result(res, expect, "get callout");
+    let _ = test.assert_result(res, expect, None);
 }
 
 #[test]
