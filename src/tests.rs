@@ -128,11 +128,9 @@ impl TestEnvironment {
          * in other threads. Copying executable files in a child process avoid this. */
         match unsafe { fork() }.expect("failed to fork") {
             ForkResult::Parent { child } => {
-                println!("parent");
                 waitpid(child, None).expect("Failed to wait for child");
             }
             ForkResult::Child => {
-                println!("child");
                 fs::copy(calloutscript, &dest).expect("Unable to copy callout script");
                 unsafe {
                     libc::_exit(0);
