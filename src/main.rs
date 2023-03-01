@@ -133,6 +133,7 @@ fn define_command(
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
+    force: bool,
 ) -> Result<()> {
     debug!("Defining mdev {:?}", uuid);
 
@@ -148,7 +149,7 @@ fn define_command(
         let attrs = Callout::get_attributes(&mut dev)?;
         dev.add_attributes(&attrs)?;
     }
-    Callout::invoke(&mut dev, Action::Define, |dev| dev.define()).map(|_| {
+    Callout::invoke(&mut dev, Action::Define, force, |dev| dev.define()).map(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.hyphenated());
         }
@@ -156,7 +157,12 @@ fn define_command(
 }
 
 /// Implementation of the `mdevctl undefine` command
-fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
+fn undefine_command(
+    env: &dyn Environment,
+    uuid: Uuid,
+    parent: Option<String>,
+    force: bool,
+) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
     let mut failed = false;
     let devs = defined_devices(env, Some(&uuid), parent.as_ref())?;
@@ -165,7 +171,7 @@ fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            if let Err(e) = Callout::invoke(child, Action::Undefine, |dev| dev.undefine()) {
+            if let Err(e) = Callout::invoke(child, Action::Undefine, force, |dev| dev.undefine()) {
                 failed = true;
                 for x in e.chain() {
                     warn!(
@@ -198,6 +204,7 @@ fn modify_command(
     auto: bool,
     manual: bool,
     jsonfile: Option<PathBuf>,
+    force: bool,
 ) -> Result<()> {
     let mut dev = get_defined_device(env, uuid, parent.as_ref())?;
 
@@ -239,7 +246,7 @@ fn modify_command(
         }
     }
 
-    Callout::invoke(&mut dev, Action::Modify, |dev| dev.write_config())
+    Callout::invoke(&mut dev, Action::Modify, force, |dev| dev.write_config())
 }
 
 /// convert 'start' command arguments into a MDev struct
@@ -333,10 +340,11 @@ fn start_command(
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
+    force: bool,
 ) -> Result<()> {
     let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
 
-    Callout::invoke(&mut dev, Action::Start, |dev| dev.start()).map(|_| {
+    Callout::invoke(&mut dev, Action::Start, force, |dev| dev.start()).map(|_| {
         if uuid.is_none() {
             println!("{}", dev.uuid.hyphenated());
         }
@@ -344,12 +352,12 @@ fn start_command(
 }
 
 /// Implementation of the `mdevctl stop` command
-fn stop_command(env: &dyn Environment, uuid: Uuid) -> Result<()> {
+fn stop_command(env: &dyn Environment, uuid: Uuid, force: bool) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
 
-    Callout::invoke(&mut dev, Action::Stop, |dev| dev.stop())
+    Callout::invoke(&mut dev, Action::Stop, force, |dev| dev.stop())
 }
 
 /// convenience function to lookup a defined device by uuid and parent
@@ -747,7 +755,8 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = Callout::invoke(child, Action::Start, |child| child.start()) {
+                if let Err(e) = Callout::invoke(child, Action::Start, false, |child| child.start())
+                {
                     for x in e.chain() {
                         warn!("{}", x);
                     }
@@ -792,8 +801,13 @@ fn main() -> Result<()> {
                 parent,
                 mdev_type,
                 jsonfile,
-            } => define_command(&env, uuid, auto, parent, mdev_type, jsonfile),
-            MdevctlCommands::Undefine { uuid, parent } => undefine_command(&env, uuid, parent),
+                force,
+            } => define_command(&env, uuid, auto, parent, mdev_type, jsonfile, force),
+            MdevctlCommands::Undefine {
+                uuid,
+                parent,
+                force,
+            } => undefine_command(&env, uuid, parent, force),
             MdevctlCommands::Modify {
                 uuid,
                 parent,
@@ -805,17 +819,19 @@ fn main() -> Result<()> {
                 auto,
                 manual,
                 jsonfile,
+                force,
             } => modify_command(
                 &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual,
-                jsonfile,
+                jsonfile, force,
             ),
             MdevctlCommands::Start {
                 uuid,
                 parent,
                 mdev_type,
                 jsonfile,
-            } => start_command(&env, uuid, parent, mdev_type, jsonfile),
-            MdevctlCommands::Stop { uuid } => stop_command(&env, uuid),
+                force,
+            } => start_command(&env, uuid, parent, mdev_type, jsonfile, force),
+            MdevctlCommands::Stop { uuid, force } => stop_command(&env, uuid, force),
             MdevctlCommands::List(list) => list_command(
                 &env,
                 list.defined,

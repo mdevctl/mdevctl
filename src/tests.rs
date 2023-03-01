@@ -319,6 +319,7 @@ fn test_define_command_callout<F>(
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
+    force: bool,
     setupfn: F,
 ) where
     F: Fn(&TestEnvironment),
@@ -327,7 +328,7 @@ fn test_define_command_callout<F>(
     setupfn(&test);
 
     use crate::define_command;
-    let res = define_command(&test, uuid, false, parent, mdev_type, None);
+    let res = define_command(&test, uuid, false, parent, mdev_type, None, force);
 
     let _ = test.assert_result(res, expect, None);
 }
@@ -513,6 +514,7 @@ fn test_define() {
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
+        false,
         |test| {
             test.populate_callout_script("rc0.sh");
         },
@@ -523,6 +525,7 @@ fn test_define() {
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
+        false,
         |test| {
             test.populate_callout_script("rc1.sh");
         },
@@ -534,6 +537,7 @@ fn test_define() {
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
+        false,
         |test| {
             test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
             test.populate_callout_script("good-json.sh");
@@ -545,9 +549,21 @@ fn test_define() {
         Uuid::parse_str(DEFAULT_UUID).ok(),
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
+        false,
         |test| {
             test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
             test.populate_callout_script("bad-json.sh");
+        },
+    );
+    test_define_command_callout(
+        "define-with-callout-all-fail-force",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        true,
+        |test| {
+            test.populate_callout_script("rc1.sh");
         },
     );
 }
@@ -565,6 +581,7 @@ fn test_modify_helper<F>(
     auto: bool,
     manual: bool,
     jsonfile: Option<PathBuf>,
+    force: bool,
     setupfn: F,
 ) where
     F: Fn(&TestEnvironment),
@@ -593,6 +610,7 @@ fn test_modify_helper<F>(
         auto,
         manual,
         jsonfile,
+        force,
     );
 
     if test.assert_result(result, expect, None).is_err() {
@@ -627,6 +645,7 @@ fn test_modify() {
         false,
         false,
         None,
+        false,
         |_| {},
     );
     test_modify_helper(
@@ -642,6 +661,7 @@ fn test_modify() {
         true,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -659,6 +679,7 @@ fn test_modify() {
         false,
         true,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -676,6 +697,7 @@ fn test_modify() {
         false,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -693,6 +715,7 @@ fn test_modify() {
         false,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -710,6 +733,7 @@ fn test_modify() {
         false,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -727,6 +751,7 @@ fn test_modify() {
         false,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -744,6 +769,7 @@ fn test_modify() {
         false,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -761,6 +787,7 @@ fn test_modify() {
         true,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_defined_device(UUID, "0000:00:02.0", "defined.json");
@@ -779,6 +806,7 @@ fn test_modify() {
         true,
         false,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_defined_device(UUID, "0000:00:02.0", "defined.json");
@@ -797,6 +825,7 @@ fn test_modify() {
         true,
         true,
         None,
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -815,8 +844,69 @@ fn test_modify() {
         false,
         false,
         Some(PathBuf::from("modified.json")),
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+    // callouts for device succeed
+    test_modify_helper(
+        "callout-pass",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        true,
+        false,
+        None,
+        false,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    // callouts for device fail
+    test_modify_helper(
+        "callout-fail",
+        Expect::Fail(None),
+        UUID,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        true,
+        false,
+        None,
+        false,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    // override a callout failure
+    test_modify_helper(
+        "callout-fail-force",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        true,
+        false,
+        None,
+        true,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh");
         },
     );
 }
@@ -826,6 +916,7 @@ fn test_undefine_helper<F>(
     expect: Expect,
     uuid: &str,
     parent: Option<String>,
+    force: bool,
     setupfn: F,
 ) where
     F: Fn(&TestEnvironment),
@@ -834,7 +925,7 @@ fn test_undefine_helper<F>(
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
 
-    let result = crate::undefine_command(&test, uuid, parent.clone());
+    let result = crate::undefine_command(&test, uuid, parent.clone(), force);
 
     if test.assert_result(result, expect, None).is_err() {
         return;
@@ -858,6 +949,7 @@ fn test_undefine() {
         Expect::Pass,
         UUID,
         Some(PARENT.to_string()),
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
@@ -869,6 +961,7 @@ fn test_undefine() {
         Expect::Pass,
         UUID,
         Some(PARENT.to_string()),
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_defined_device(UUID, PARENT2, "defined.json");
@@ -876,15 +969,23 @@ fn test_undefine() {
     );
     // if multiple devices with the same uuid exists and no parent is specified, they should
     // all be undefined
-    test_undefine_helper("multiple-noparent", Expect::Pass, UUID, None, |test| {
-        test.populate_defined_device(UUID, PARENT, "defined.json");
-        test.populate_defined_device(UUID, PARENT2, "defined.json");
-    });
+    test_undefine_helper(
+        "multiple-noparent",
+        Expect::Pass,
+        UUID,
+        None,
+        false,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
     test_undefine_helper(
         "nonexistent",
         Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
+        false,
         |_| {},
     );
 
@@ -894,6 +995,7 @@ fn test_undefine() {
         Expect::Pass,
         UUID,
         Some(PARENT.to_string()),
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_callout_script("rc0.sh");
@@ -905,6 +1007,19 @@ fn test_undefine() {
         Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
+        false,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    // force command even with callout script failure
+    test_undefine_helper(
+        "single-callout-pre-fail-force",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        true,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_callout_script("rc1.sh");
@@ -918,6 +1033,7 @@ fn test_start_command_callout<F>(
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
+    force: bool,
     setupfn: F,
 ) where
     F: Fn(&TestEnvironment),
@@ -926,7 +1042,7 @@ fn test_start_command_callout<F>(
     setupfn(&test);
 
     use crate::start_command;
-    let res = start_command(&test, uuid, parent, mdev_type, None);
+    let res = start_command(&test, uuid, parent, mdev_type, None, force);
     let _ = test.assert_result(res, expect, None);
 }
 
@@ -1179,11 +1295,12 @@ fn test_start() {
     );
 
     test_start_command_callout(
-        "defined-multiple",
+        "defined-multiple-callout-success",
         Expect::Pass,
         Uuid::parse_str(UUID).ok(),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -1193,11 +1310,27 @@ fn test_start() {
         },
     );
     test_start_command_callout(
-        "defined-multiple",
+        "defined-multiple-callout-fail",
         Expect::Fail(None),
         Uuid::parse_str(UUID).ok(),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    test_start_command_callout(
+        "defined-multiple-callout-fail-force",
+        Expect::Pass,
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        true,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -1243,14 +1376,14 @@ fn test_start() {
     // the temporary test environment, so writing the sysfs attribute files fails.
 }
 
-fn test_stop_helper<F>(testname: &str, expect: Expect, uuid: &str, setupfn: F)
+fn test_stop_helper<F>(testname: &str, expect: Expect, uuid: &str, force: bool, setupfn: F)
 where
     F: Fn(&TestEnvironment),
 {
     let test = TestEnvironment::new("stop", testname);
     setupfn(&test);
 
-    let res = crate::stop_command(&test, Uuid::parse_str(uuid).unwrap());
+    let res = crate::stop_command(&test, Uuid::parse_str(uuid).unwrap(), force);
 
     if let Ok(_) = test.assert_result(res, expect, None) {
         let remove_path = test.mdev_base().join(uuid).join("remove");
@@ -1268,14 +1401,18 @@ fn test_stop() {
     const PARENT: &str = "0000:00:03.0";
     const MDEV_TYPE: &str = "arbitrary_type";
 
-    test_stop_helper("default", Expect::Pass, UUID, |t| {
+    test_stop_helper("default", Expect::Pass, UUID, false, |t| {
         t.populate_active_device(UUID, PARENT, MDEV_TYPE)
     });
-    test_stop_helper("callout-success", Expect::Pass, UUID, |t| {
+    test_stop_helper("callout-success", Expect::Pass, UUID, false, |t| {
         t.populate_active_device(UUID, PARENT, MDEV_TYPE);
         t.populate_callout_script("rc0.sh")
     });
-    test_stop_helper("callout-fail", Expect::Fail(None), UUID, |t| {
+    test_stop_helper("callout-fail", Expect::Fail(None), UUID, false, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        t.populate_callout_script("rc1.sh")
+    });
+    test_stop_helper("callout-fail-force", Expect::Pass, UUID, true, |t| {
         t.populate_active_device(UUID, PARENT, MDEV_TYPE);
         t.populate_callout_script("rc1.sh")
     });
@@ -1651,8 +1788,15 @@ fn test_invoke_callout<F>(
     empty_mdev.mdev_type = Some(mdev_type.to_string());
     empty_mdev.parent = Some(parent.to_string());
 
-    let res = Callout::invoke(&mut empty_mdev, action, |_empty_mdev| Ok(()));
-    let _ = test.assert_result(res, expect, None);
+    let res = Callout::invoke(&mut empty_mdev, action, false, |_empty_mdev| Ok(()));
+    let try_force = res.is_err();
+    let _ = test.assert_result(res, expect, Some("non-forced"));
+
+    // now force and ensure it succeeds
+    if try_force {
+        let res = Callout::invoke(&mut empty_mdev, action, true, |_empty_mdev| Ok(()));
+        let _ = test.assert_result(res, Expect::Pass, Some("forced"));
+    }
 }
 
 fn test_get_callout<F>(

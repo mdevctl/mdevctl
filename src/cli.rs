@@ -4,6 +4,9 @@ pub use clap::Parser;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+const FORCE_HELP: &str = "Force command execution even if device-specific callout script fails
+NOTE: only use this option if you are sure you know what you are doing";
+
 #[derive(Parser, Debug)]
 #[clap(version, about = "List mediated devices", name = "lsmdev")]
 pub struct LsmdevOptions {
@@ -70,6 +73,12 @@ pub enum MdevctlCommands {
             help = "Specify device details in JSON format"
         )]
         jsonfile: Option<PathBuf>,
+        #[clap(
+            short,
+            long,
+            help = FORCE_HELP
+        )]
+        force: bool,
     },
 
     #[clap(
@@ -84,6 +93,12 @@ pub enum MdevctlCommands {
         uuid: Uuid,
         #[clap(short, long, help = "Parent of the device to be undefined")]
         parent: Option<String>,
+        #[clap(
+            short,
+            long,
+            help = FORCE_HELP
+        )]
+        force: bool,
     },
 
     #[clap(
@@ -146,6 +161,12 @@ pub enum MdevctlCommands {
             help = "Specify device details in JSON format"
         )]
         jsonfile: Option<PathBuf>,
+        #[clap(
+            short,
+            long,
+            help = FORCE_HELP
+        )]
+        force: bool,
     },
     #[clap(
         about = "Start a mediated device",
@@ -183,11 +204,23 @@ pub enum MdevctlCommands {
             help = "Details of the device to be started, in JSON format"
         )]
         jsonfile: Option<PathBuf>,
+        #[clap(
+            short,
+            long,
+            help = FORCE_HELP
+        )]
+        force: bool,
     },
     #[clap(about = "Stop a mediated device")]
     Stop {
         #[clap(short, long, help = "UUID of the device to stop")]
         uuid: Uuid,
+        #[clap(
+            short,
+            long,
+            help = FORCE_HELP
+        )]
+        force: bool,
     },
     #[clap(
         about = "List mediated devices",
