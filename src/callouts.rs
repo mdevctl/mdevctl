@@ -127,26 +127,38 @@ impl Callout {
         }
     }
 
-    pub fn invoke<F>(dev: &mut MDev, action: Action, func: F) -> Result<()>
+    pub fn invoke<F>(dev: &mut MDev, action: Action, force: bool, func: F) -> Result<()>
     where
         F: Fn(&mut MDev) -> Result<()>,
     {
         let mut c = Callout::new();
 
-        let res = c.callout(dev, Event::Pre, action).and_then(|_| {
-            let tmp_res = func(dev);
-            c.state = match tmp_res {
-                Ok(_) => State::Success,
-                Err(_) => State::Failure,
-            };
+        let res = c
+            .callout(dev, Event::Pre, action)
+            .or_else(|e| {
+                force
+                    .then(|| {
+                        warn!(
+                            "Forcing operation '{}' despite callout failure. Error was: {}",
+                            action, e
+                        );
+                    })
+                    .ok_or(e)
+            })
+            .and_then(|_| {
+                let tmp_res = func(dev);
+                c.state = match tmp_res {
+                    Ok(_) => State::Success,
+                    Err(_) => State::Failure,
+                };
 
-            let post_res = c.callout(dev, Event::Post, action);
-            if post_res.is_err() {
-                debug!("Error occurred when executing post callout script");
-            }
+                let post_res = c.callout(dev, Event::Post, action);
+                if post_res.is_err() {
+                    debug!("Error occurred when executing post callout script");
+                }
 
-            tmp_res
-        });
+                tmp_res
+            });
 
         c.notify(dev, action);
         res
