@@ -1243,6 +1243,23 @@ fn test_start() {
     // the temporary test environment, so writing the sysfs attribute files fails.
 }
 
+fn test_stop_helper<F>(testname: &str, expect: Expect, uuid: &str, setupfn: F)
+where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("stop", testname);
+    setupfn(&test);
+
+    let res = crate::stop_command(&test, Uuid::parse_str(uuid).unwrap());
+
+    if let Ok(_) = test.assert_result(res, expect, None) {
+        let remove_path = test.mdev_base().join(uuid).join("remove");
+        assert!(remove_path.exists());
+        let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
+        assert_eq!("1", contents);
+    }
+}
+
 #[test]
 fn test_stop() {
     init();
@@ -1251,16 +1268,17 @@ fn test_stop() {
     const PARENT: &str = "0000:00:03.0";
     const MDEV_TYPE: &str = "arbitrary_type";
 
-    let test = TestEnvironment::new("stop", "default");
-    test.populate_active_device(UUID, PARENT, MDEV_TYPE);
-
-    crate::stop_command(&test, Uuid::parse_str(UUID).unwrap())
-        .expect("stop command failed unexpectedly");
-
-    let remove_path = test.mdev_base().join(UUID).join("remove");
-    assert!(remove_path.exists());
-    let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
-    assert_eq!("1", contents);
+    test_stop_helper("default", Expect::Pass, UUID, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE)
+    });
+    test_stop_helper("callout-success", Expect::Pass, UUID, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        t.populate_callout_script("rc0.sh")
+    });
+    test_stop_helper("callout-fail", Expect::Fail(None), UUID, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        t.populate_callout_script("rc1.sh")
+    });
 }
 
 #[test]
