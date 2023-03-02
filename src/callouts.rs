@@ -16,6 +16,7 @@ use crate::mdev::*;
 pub enum Event {
     Pre,
     Post,
+    Live,
     Notify,
     Get,
     #[serde(skip_serializing)]
@@ -74,6 +75,7 @@ impl Display for Event {
         match self {
             Event::Pre => write!(f, "pre"),
             Event::Post => write!(f, "post"),
+            Event::Live => write!(f, "live"),
             Event::Notify => write!(f, "notify"),
             Event::Get => write!(f, "get"),
             Event::Unknown => write!(f, "unknown"),
@@ -148,6 +150,7 @@ impl CalloutVersion {
         &[Event::Pre, Event::Post, Event::Notify, Event::Get],
     );
 
+    #[allow(dead_code)]
     pub const V_1_1_0: CalloutVersion = CalloutVersion::new_const(
         "1.1.0",
         &[
@@ -160,6 +163,26 @@ impl CalloutVersion {
             Action::Capabilities,
         ],
         &[Event::Pre, Event::Post, Event::Notify, Event::Get],
+    );
+
+    pub const V_1_2_0: CalloutVersion = CalloutVersion::new_const(
+        "1.2.0",
+        &[
+            Action::Start,
+            Action::Stop,
+            Action::Define,
+            Action::Undefine,
+            Action::Modify,
+            Action::Attributes,
+            Action::Capabilities,
+        ],
+        &[
+            Event::Pre,
+            Event::Post,
+            Event::Notify,
+            Event::Get,
+            Event::Live,
+        ],
     );
 
     pub fn has_action(&self, action: Action) -> bool {
@@ -378,7 +401,7 @@ impl CalloutScripts {
 
         for path in sorted_paths {
             let ce_ver: CalloutExchange = CalloutExchange {
-                provides: Some(CalloutVersion::V_1_1_0),
+                provides: Some(CalloutVersion::V_1_2_0),
                 supports: None,
             };
             let json_ce_ver: String =
@@ -510,6 +533,34 @@ impl Callout {
             state: State::None,
             script: None,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn invoke_modify_live(dev: &mut MDev) -> Result<()> {
+        let mut c = Callout::new();
+
+        c.script = find_callout_script(dev).ok();
+        if c.script.is_none() {
+            // live is only supported when script with versioning exists
+            debug!("No callout script with version support found");
+            return Err(CalloutError::NoMatchingScript).map_err(anyhow::Error::from);
+        }
+
+        let mut res = Ok(());
+        let mut existing = MDev::new(dev.env, dev.uuid);
+        if existing.load_from_sysfs().is_ok() && existing.active {
+            if existing.parent != dev.parent {
+                debug!("Device exists under different parent - cannot run live update");
+            } else if existing.mdev_type != dev.mdev_type {
+                debug!("Device exists with different type - cannot run live update");
+            } else {
+                let cs = c.script.clone().unwrap();
+                cs.supports_event_action(Event::Live, Action::Modify)?;
+                res = c.callout(dev, Event::Live, Action::Modify);
+                c.notify(dev, Action::Modify);
+            }
+        } // else mdev is not active
+        res
     }
 
     pub fn invoke<F>(dev: &mut MDev, action: Action, force: bool, func: F) -> Result<()>
