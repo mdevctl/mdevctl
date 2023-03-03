@@ -84,6 +84,12 @@ pub enum MdevctlCommands {
         uuid: Uuid,
         #[clap(short, long, help = "Parent of the device to be undefined")]
         parent: Option<String>,
+        #[clap(
+            short,
+            long,
+            help = "Override a decline by a callout script to undefine"
+        )]
+        force: bool,
     },
 
     #[clap(

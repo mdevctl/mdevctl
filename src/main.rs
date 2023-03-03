@@ -156,7 +156,12 @@ fn define_command(
 }
 
 /// Implementation of the `mdevctl undefine` command
-fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -> Result<()> {
+fn undefine_command(
+    env: &dyn Environment,
+    uuid: Uuid,
+    parent: Option<String>,
+    force: bool,
+) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
     let mut failed = false;
     let devs = defined_devices(env, Some(&uuid), parent.as_ref())?;
@@ -165,7 +170,9 @@ fn undefine_command(env: &dyn Environment, uuid: Uuid, parent: Option<String>) -
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            if let Err(e) = Callout::invoke(child, Action::Undefine, |dev| dev.undefine()) {
+            if let Err(e) =
+                Callout::invoke_force(child, Action::Undefine, force, |dev| dev.undefine())
+            {
                 failed = true;
                 for x in e.chain() {
                     warn!(
@@ -793,7 +800,11 @@ fn main() -> Result<()> {
                 mdev_type,
                 jsonfile,
             } => define_command(&env, uuid, auto, parent, mdev_type, jsonfile),
-            MdevctlCommands::Undefine { uuid, parent } => undefine_command(&env, uuid, parent),
+            MdevctlCommands::Undefine {
+                uuid,
+                parent,
+                force,
+            } => undefine_command(&env, uuid, parent, force),
             MdevctlCommands::Modify {
                 uuid,
                 parent,

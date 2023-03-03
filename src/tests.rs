@@ -816,6 +816,7 @@ fn test_undefine_helper<F>(
     expect: Expect,
     uuid: &str,
     parent: Option<String>,
+    force: bool,
     setupfn: F,
 ) where
     F: Fn(&TestEnvironment),
@@ -824,7 +825,7 @@ fn test_undefine_helper<F>(
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
 
-    let result = crate::undefine_command(&test, uuid, parent.clone());
+    let result = crate::undefine_command(&test, uuid, parent.clone(), force);
 
     if assert_result(result, expect, "undefine command").is_err() {
         return;
@@ -848,10 +849,23 @@ fn test_undefine() {
         Expect::Pass,
         UUID,
         Some(PARENT.to_string()),
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
         },
     );
+
+    test_undefine_helper(
+        "single-force",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        true,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+
     // if multiple devices with the same uuid exists, the one with the matching parent should
     // be undefined
     test_undefine_helper(
@@ -859,22 +873,63 @@ fn test_undefine() {
         Expect::Pass,
         UUID,
         Some(PARENT.to_string()),
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_defined_device(UUID, PARENT2, "defined.json");
         },
     );
+    test_undefine_helper(
+        "multiple-parent-force",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        true,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+
     // if multiple devices with the same uuid exists and no parent is specified, they should
     // all be undefined
-    test_undefine_helper("multiple-noparent", Expect::Pass, UUID, None, |test| {
-        test.populate_defined_device(UUID, PARENT, "defined.json");
-        test.populate_defined_device(UUID, PARENT2, "defined.json");
-    });
+    test_undefine_helper(
+        "multiple-noparent",
+        Expect::Pass,
+        UUID,
+        None,
+        false,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+    test_undefine_helper(
+        "multiple-noparent-force",
+        Expect::Pass,
+        UUID,
+        None,
+        true,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+
     test_undefine_helper(
         "nonexistent",
         Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
+        false,
+        |_| {},
+    );
+    test_undefine_helper(
+        "nonexistent-force",
+        Expect::Fail(None),
+        UUID,
+        Some(PARENT.to_string()),
+        true,
         |_| {},
     );
 
@@ -884,17 +939,42 @@ fn test_undefine() {
         Expect::Pass,
         UUID,
         Some(PARENT.to_string()),
+        false,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_callout_script("rc0.sh");
         },
     );
+    test_undefine_helper(
+        "single-callout-all-pass-force",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        true,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+
     // callout script rejects in pre event undefine with RC=1
     test_undefine_helper(
         "single-callout-pre-fail",
         Expect::Fail(None),
         UUID,
         Some(PARENT.to_string()),
+        false,
+        |test| {
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    test_undefine_helper(
+        "single-callout-pre-fail-force",
+        Expect::Pass,
+        UUID,
+        Some(PARENT.to_string()),
+        true,
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_callout_script("rc1.sh");
