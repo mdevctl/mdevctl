@@ -195,6 +195,23 @@ fn undefine_command(
     Ok(())
 }
 
+fn dev_from_jsonfile(
+    env: &dyn Environment,
+    uuid: Uuid,
+    parent: String,
+    jsonfile: PathBuf,
+) -> Result<MDev, anyhow::Error> {
+    let _ = std::fs::File::open(&jsonfile)
+        .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
+    let filecontents = fs::read_to_string(&jsonfile)
+        .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
+    let jsonval = serde_json::from_str(&filecontents)?;
+
+    let mut d = MDev::new(env, uuid);
+    d.load_from_json(parent, &jsonval)?;
+    Ok(d)
+}
+
 /// Implementation of the `mdevctl modify` command
 #[allow(clippy::too_many_arguments)]
 fn modify_command(
@@ -213,16 +230,10 @@ fn modify_command(
 ) -> Result<()> {
     let mut dev = get_defined_device(env, uuid, parent.as_ref())?;
 
-    if let Some(jsonfile) = jsonfile {
-        let _ = std::fs::File::open(&jsonfile)
-            .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
-
-        let mut d = MDev::new(env, uuid);
-        let filecontents = fs::read_to_string(&jsonfile)
-            .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
-        let jsonval = serde_json::from_str(&filecontents)?;
-        d.load_from_json(dev.parent().unwrap().to_string(), &jsonval)?;
-        dev = d;
+    if let Some(f) = jsonfile {
+        let parent = parent
+            .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
+        dev = dev_from_jsonfile(env, uuid, parent, f)?;
     } else {
         if mdev_type.is_some() {
             dev.mdev_type = mdev_type;
