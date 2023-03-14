@@ -26,7 +26,7 @@ enum CalloutError {
 impl Display for CalloutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CalloutError::NoMatchingScript => write!(f, "No matching script for device"),
+            CalloutError::NoMatchingScript => write!(f, "No matching script for device found"),
             CalloutError::InvocationFailure(p, i) => write!(
                 f,
                 "Script '{:?}' failed with status '{}'",
