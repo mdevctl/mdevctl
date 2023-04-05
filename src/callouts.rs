@@ -187,7 +187,8 @@ impl Callout {
                         st = "[]".to_string();
                     }
 
-                    serde_json::from_str(&st).map_err(CalloutError::InvalidJSON)
+                    serde_json::from_str(st.trim_end_matches('\0'))
+                        .map_err(CalloutError::InvalidJSON)
                 } else {
                     c.print_err(&output, &path);
 
