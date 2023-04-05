@@ -2041,4 +2041,14 @@ fn test_callouts() {
             test.populate_callout_script_full("rc0.sh", None, false);
         },
     );
+    test_get_callout(
+        "test_callout_good_json_null",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        DEFAULT_TYPE,
+        |test| {
+            test.populate_callout_script("good-json-null-terminated.sh");
+        },
+    );
 }
