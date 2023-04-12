@@ -338,26 +338,16 @@ impl Callout {
         action: Action,
         dir: PathBuf,
     ) -> Result<(), CalloutError> {
-        let rc = match self.script {
-            Some(ref s) => self
-                .invoke_script(dev, s, event, action)
-                .ok()
-                .and_then(|output| {
-                    self.print_err(&output, s);
-                    output.status.code()
-                }),
-            _ => {
-                if !dir.is_dir() {
-                    return Err(CalloutError::NoMatchingScript);
-                }
-                self.invoke_first_matching_script(dev, dir, event, action)
-                    .and_then(|(path, output)| {
-                        self.print_err(&output, &path);
-                        self.script = Some(path);
-                        output.status.code()
-                    })
-            }
-        };
+        if !dir.is_dir() {
+            return Err(CalloutError::NoMatchingScript);
+        }
+        let rc = self
+            .invoke_first_matching_script(dev, dir, event, action)
+            .and_then(|(path, output)| {
+                self.print_err(&output, &path);
+                self.script = Some(path);
+                output.status.code()
+            });
 
         match rc {
             Some(0) => Ok(()),
@@ -370,16 +360,32 @@ impl Callout {
     }
 
     fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<()> {
-        for dir in dev.env.callout_dirs() {
-            let res = self.callout_dir(dev, event, action, dir);
-
-            if let Err(CalloutError::NoMatchingScript) = res {
-                continue;
+        let res = match self.script {
+            Some(ref s) => {
+                let output = self.invoke_script(dev, s, event, action)?;
+                self.print_err(&output, s);
+                match output.status.code() {
+                    None | Some(0) => Ok(()),
+                    Some(n) => Err(CalloutError::InvocationFailure(
+                        self.script.as_ref().unwrap().to_path_buf(),
+                        Some(n),
+                    )),
+                }
             }
+            None => {
+                let mut res = Ok(());
+                for dir in dev.env.callout_dirs() {
+                    let r = self.callout_dir(dev, event, action, dir);
 
-            return res.map_err(anyhow::Error::from);
-        }
-        Ok(())
+                    if !matches!(r, Err(CalloutError::NoMatchingScript)) {
+                        res = r;
+                        break;
+                    }
+                }
+                res
+            }
+        };
+        res.map_err(anyhow::Error::from)
     }
 
     fn notify(&mut self, dev: &mut MDev, action: Action) {
