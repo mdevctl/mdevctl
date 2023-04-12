@@ -27,42 +27,6 @@ fn invocation_failure(path: &PathBuf, code: Option<i32>) -> anyhow::Error {
     )
 }
 
-#[derive(Debug)]
-enum CalloutError {
-    NoMatchingScript,
-    InvocationFailure(PathBuf, Option<i32>),
-    InvalidJSON(serde_json::Error),
-}
-
-impl Display for CalloutError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CalloutError::NoMatchingScript => write!(f, "No matching script for device"),
-            CalloutError::InvocationFailure(p, i) => write!(
-                f,
-                "Script '{:?}' failed with status '{}'",
-                p,
-                match i {
-                    Some(i) => i.to_string(),
-                    None => "unknown".to_string(),
-                }
-            ),
-            CalloutError::InvalidJSON(_) => {
-                write!(f, "Invalid JSON received from callout script")
-            }
-        }
-    }
-}
-
-impl std::error::Error for CalloutError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            CalloutError::InvalidJSON(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
 impl Display for Event {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
@@ -178,16 +142,9 @@ impl Callout {
         res
     }
 
-    fn get_attributes_dir(
-        &self,
-        dev: &mut MDev,
-        dir: PathBuf,
-    ) -> Result<serde_json::Value, CalloutError> {
-        let event = Event::Get;
-        let action = Action::Attributes;
-
-        match self.invoke_first_matching_script(dev, dir, event, action) {
-            Some((path, output)) => {
+    pub fn get_attributes(&mut self, dev: &mut MDev) -> Result<serde_json::Value> {
+        match self.callout(dev, Event::Get, Action::Attributes)? {
+            Some(output) => {
                 if output.status.success() {
                     debug!("Get attributes successfully from callout script");
                     let mut st = String::from_utf8_lossy(&output.stdout).to_string();
@@ -205,35 +162,16 @@ impl Callout {
                     }
 
                     serde_json::from_str(st.trim_end_matches('\0'))
-                        .map_err(CalloutError::InvalidJSON)
+                        .with_context(|| "Invalid JSON received from callout script")
                 } else {
-                    self.print_err(&output, &path);
+                    let path = self.script.as_ref().unwrap();
+                    self.print_err(&output, path);
 
-                    Err(CalloutError::InvocationFailure(path, output.status.code()))
+                    Err(invocation_failure(path, output.status.code()))
                 }
             }
-            None => {
-                debug!(
-                    "Device type {} unmatched by callout script",
-                    dev.mdev_type.as_ref().unwrap()
-                );
-                Err(CalloutError::NoMatchingScript)
-            }
+            None => Ok(serde_json::Value::Null),
         }
-    }
-
-    pub fn get_attributes(&self, dev: &mut MDev) -> Result<serde_json::Value> {
-        for dir in dev.env.callout_dirs() {
-            if dir.is_dir() {
-                let res = self.get_attributes_dir(dev, dir);
-                if let Err(CalloutError::NoMatchingScript) = res {
-                    continue;
-                }
-
-                return res.map_err(anyhow::Error::from);
-            }
-        }
-        Ok(serde_json::Value::Null)
     }
 
     fn invoke_script<P: AsRef<Path>>(
