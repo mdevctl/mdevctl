@@ -119,21 +119,23 @@ pub struct Callout {
     script: Option<PathBuf>,
 }
 
+pub fn callout() -> Callout {
+    Callout::new()
+}
+
 impl Callout {
-    fn new() -> Callout {
+    pub fn new() -> Callout {
         Callout {
             state: State::None,
             script: None,
         }
     }
 
-    pub fn invoke<F>(dev: &mut MDev, action: Action, force: bool, func: F) -> Result<()>
+    pub fn invoke<F>(&mut self, dev: &mut MDev, action: Action, force: bool, func: F) -> Result<()>
     where
         F: Fn(&mut MDev) -> Result<()>,
     {
-        let mut c = Callout::new();
-
-        let res = c
+        let res = self
             .callout(dev, Event::Pre, action)
             .or_else(|e| {
                 force
@@ -147,12 +149,12 @@ impl Callout {
             })
             .and_then(|_| {
                 let tmp_res = func(dev);
-                c.state = match tmp_res {
+                self.state = match tmp_res {
                     Ok(_) => State::Success,
                     Err(_) => State::Failure,
                 };
 
-                let post_res = c.callout(dev, Event::Post, action);
+                let post_res = self.callout(dev, Event::Post, action);
                 if post_res.is_err() {
                     debug!("Error occurred when executing post callout script");
                 }
@@ -160,16 +162,19 @@ impl Callout {
                 tmp_res
             });
 
-        c.notify(dev, action);
+        self.notify(dev, action);
         res
     }
 
-    fn get_attributes_dir(dev: &mut MDev, dir: PathBuf) -> Result<serde_json::Value, CalloutError> {
+    fn get_attributes_dir(
+        &self,
+        dev: &mut MDev,
+        dir: PathBuf,
+    ) -> Result<serde_json::Value, CalloutError> {
         let event = Event::Get;
         let action = Action::Attributes;
-        let c = Callout::new();
 
-        match c.invoke_first_matching_script(dev, dir, event, action) {
+        match self.invoke_first_matching_script(dev, dir, event, action) {
             Some((path, output)) => {
                 if output.status.success() {
                     debug!("Get attributes successfully from callout script");
@@ -190,7 +195,7 @@ impl Callout {
                     serde_json::from_str(st.trim_end_matches('\0'))
                         .map_err(CalloutError::InvalidJSON)
                 } else {
-                    c.print_err(&output, &path);
+                    self.print_err(&output, &path);
 
                     Err(CalloutError::InvocationFailure(path, output.status.code()))
                 }
@@ -205,10 +210,10 @@ impl Callout {
         }
     }
 
-    pub fn get_attributes(dev: &mut MDev) -> Result<serde_json::Value> {
+    pub fn get_attributes(&self, dev: &mut MDev) -> Result<serde_json::Value> {
         for dir in dev.env.callout_dirs() {
             if dir.is_dir() {
-                let res = Self::get_attributes_dir(dev, dir);
+                let res = self.get_attributes_dir(dev, dir);
                 if let Err(CalloutError::NoMatchingScript) = res {
                     continue;
                 }

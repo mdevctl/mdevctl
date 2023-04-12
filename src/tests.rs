@@ -1788,13 +1788,14 @@ fn test_invoke_callout<F>(
     empty_mdev.mdev_type = Some(mdev_type.to_string());
     empty_mdev.parent = Some(parent.to_string());
 
-    let res = Callout::invoke(&mut empty_mdev, action, false, |_empty_mdev| Ok(()));
+    let mut callout = callout();
+    let res = callout.invoke(&mut empty_mdev, action, false, |_empty_mdev| Ok(()));
     let try_force = res.is_err();
     let _ = test.assert_result(res, expect, Some("non-forced"));
 
     // now force and ensure it succeeds
     if try_force {
-        let res = Callout::invoke(&mut empty_mdev, action, true, |_empty_mdev| Ok(()));
+        let res = callout.invoke(&mut empty_mdev, action, true, |_empty_mdev| Ok(()));
         let _ = test.assert_result(res, Expect::Pass, Some("forced"));
     }
 }
@@ -1816,7 +1817,7 @@ fn test_get_callout<F>(
     empty_mdev.mdev_type = Some(mdev_type.to_string());
     empty_mdev.parent = Some(parent.to_string());
 
-    let res = Callout::get_attributes(&mut empty_mdev);
+    let res = callout().get_attributes(&mut empty_mdev);
     let _ = test.assert_result(res, expect, None);
 }
 
