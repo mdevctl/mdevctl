@@ -108,7 +108,7 @@ impl Callout {
 
     pub fn invoke<F>(&mut self, dev: &mut MDev, action: Action, force: bool, func: F) -> Result<()>
     where
-        F: Fn(&mut MDev) -> Result<()>,
+        F: Fn(&mut Self, &mut MDev) -> Result<()>,
     {
         let res = self
             .callout(dev, Event::Pre, action)
@@ -124,7 +124,7 @@ impl Callout {
                     .ok_or(e)
             })
             .and_then(|_| {
-                let tmp_res = func(dev);
+                let tmp_res = func(self, dev);
                 self.state = match tmp_res {
                     Ok(_) => State::Success,
                     Err(_) => State::Failure,

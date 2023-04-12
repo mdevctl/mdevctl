@@ -1789,13 +1789,13 @@ fn test_invoke_callout<F>(
     empty_mdev.parent = Some(parent.to_string());
 
     let mut callout = callout();
-    let res = callout.invoke(&mut empty_mdev, action, false, |_empty_mdev| Ok(()));
+    let res = callout.invoke(&mut empty_mdev, action, false, |_, _| Ok(()));
     let try_force = res.is_err();
     let _ = test.assert_result(res, expect, Some("non-forced"));
 
     // now force and ensure it succeeds
     if try_force {
-        let res = callout.invoke(&mut empty_mdev, action, true, |_empty_mdev| Ok(()));
+        let res = callout.invoke(&mut empty_mdev, action, true, |_, _| Ok(()));
         let _ = test.assert_result(res, Expect::Pass, Some("forced"));
     }
 }
