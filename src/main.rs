@@ -146,14 +146,16 @@ fn define_command(
         The device config file will contain the same attributes that were used to start this device。
     */
     if dev.active {
-        let attrs = Callout::get_attributes(&mut dev)?;
+        let attrs = callout().get_attributes(&mut dev)?;
         dev.add_attributes(&attrs)?;
     }
-    Callout::invoke(&mut dev, Action::Define, force, |dev| dev.define()).map(|_| {
-        if uuid.is_none() {
-            println!("{}", dev.uuid.hyphenated());
-        }
-    })
+    callout()
+        .invoke(&mut dev, Action::Define, force, |dev| dev.define())
+        .map(|_| {
+            if uuid.is_none() {
+                println!("{}", dev.uuid.hyphenated());
+            }
+        })
 }
 
 /// Implementation of the `mdevctl undefine` command
@@ -171,7 +173,7 @@ fn undefine_command(
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            if let Err(e) = Callout::invoke(child, Action::Undefine, force, |dev| dev.undefine()) {
+            if let Err(e) = callout().invoke(child, Action::Undefine, force, |dev| dev.undefine()) {
                 failed = true;
                 for x in e.chain() {
                     warn!(
@@ -246,7 +248,7 @@ fn modify_command(
         }
     }
 
-    Callout::invoke(&mut dev, Action::Modify, force, |dev| dev.write_config())
+    callout().invoke(&mut dev, Action::Modify, force, |dev| dev.write_config())
 }
 
 /// convert 'start' command arguments into a MDev struct
@@ -344,11 +346,13 @@ fn start_command(
 ) -> Result<()> {
     let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
 
-    Callout::invoke(&mut dev, Action::Start, force, |dev| dev.start()).map(|_| {
-        if uuid.is_none() {
-            println!("{}", dev.uuid.hyphenated());
-        }
-    })
+    callout()
+        .invoke(&mut dev, Action::Start, force, |dev| dev.start())
+        .map(|_| {
+            if uuid.is_none() {
+                println!("{}", dev.uuid.hyphenated());
+            }
+        })
 }
 
 /// Implementation of the `mdevctl stop` command
@@ -357,7 +361,7 @@ fn stop_command(env: &dyn Environment, uuid: Uuid, force: bool) -> Result<()> {
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
 
-    Callout::invoke(&mut dev, Action::Stop, force, |dev| dev.stop())
+    callout().invoke(&mut dev, Action::Stop, force, |dev| dev.stop())
 }
 
 /// convenience function to lookup a defined device by uuid and parent
@@ -561,7 +565,7 @@ fn list_command_helper(
 
                     // if the device is supported by a callout script that gets attributes, show
                     // those in the output
-                    if let Ok(attrs) = Callout::get_attributes(&mut dev) {
+                    if let Ok(attrs) = callout().get_attributes(&mut dev) {
                         let _ = dev.add_attributes(&attrs);
                     }
 
@@ -755,7 +759,7 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = Callout::invoke(child, Action::Start, false, |child| child.start())
+                if let Err(e) = callout().invoke(child, Action::Start, false, |child| child.start())
                 {
                     for x in e.chain() {
                         warn!("{}", x);
