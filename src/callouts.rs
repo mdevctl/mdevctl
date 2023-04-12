@@ -148,6 +148,7 @@ impl Callout {
     {
         let res = self
             .callout(dev, Event::Pre, action)
+            .map(|_output| ()) // can ignore output for general callouts
             .or_else(|e| {
                 force
                     .then(|| {
@@ -342,18 +343,18 @@ impl Callout {
         None
     }
 
-    fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<()> {
+    fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<Option<Output>> {
         match self.script {
             Some(ref s) => {
                 let output = self.invoke_script(dev, s, event, action)?;
                 self.print_err(&output, s);
                 match output.status.code() {
-                    None | Some(0) => Ok(()),
+                    None | Some(0) => Ok(Some(output)),
                     Some(n) => Err(invocation_failure(self.script.as_ref().unwrap(), Some(n))),
                 }
             }
             None => {
-                let mut res = Ok(());
+                let mut res = Ok(None);
                 for dir in dev.env.callout_dirs() {
                     if !dir.is_dir() {
                         continue;
@@ -363,7 +364,7 @@ impl Callout {
                             self.print_err(&o, &p);
                             self.script = Some(p.clone());
                             match o.status.code() {
-                                Some(0) => Ok(()),
+                                Some(0) => Ok(Some(o)),
                                 Some(n) => Err(invocation_failure(&p, Some(n))),
                                 None => continue,
                             }
