@@ -331,34 +331,6 @@ impl Callout {
         None
     }
 
-    fn callout_dir(
-        &mut self,
-        dev: &mut MDev,
-        event: Event,
-        action: Action,
-        dir: PathBuf,
-    ) -> Result<(), CalloutError> {
-        if !dir.is_dir() {
-            return Err(CalloutError::NoMatchingScript);
-        }
-        let rc = self
-            .invoke_first_matching_script(dev, dir, event, action)
-            .and_then(|(path, output)| {
-                self.print_err(&output, &path);
-                self.script = Some(path);
-                output.status.code()
-            });
-
-        match rc {
-            Some(0) => Ok(()),
-            Some(n) => Err(CalloutError::InvocationFailure(
-                self.script.as_ref().unwrap().to_path_buf(),
-                Some(n),
-            )),
-            None => Err(CalloutError::NoMatchingScript),
-        }
-    }
-
     fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<()> {
         let res = match self.script {
             Some(ref s) => {
@@ -375,7 +347,23 @@ impl Callout {
             None => {
                 let mut res = Ok(());
                 for dir in dev.env.callout_dirs() {
-                    let r = self.callout_dir(dev, event, action, dir);
+                    if !dir.is_dir() {
+                        continue;
+                    }
+                    let r = match self
+                        .invoke_first_matching_script(dev, dir, event, action)
+                        .and_then(|(path, output)| {
+                            self.print_err(&output, &path);
+                            self.script = Some(path);
+                            output.status.code()
+                        }) {
+                        Some(0) => Ok(()),
+                        Some(n) => Err(CalloutError::InvocationFailure(
+                            self.script.as_ref().unwrap().to_path_buf(),
+                            Some(n),
+                        )),
+                        None => Err(CalloutError::NoMatchingScript),
+                    };
 
                     if !matches!(r, Err(CalloutError::NoMatchingScript)) {
                         res = r;
