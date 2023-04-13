@@ -110,8 +110,9 @@ impl Callout {
     where
         F: Fn(&mut Self, &mut MDev) -> Result<()>,
     {
+        let conf = dev.to_json(false)?.to_string();
         let res = self
-            .callout(dev, Event::Pre, action)
+            .callout(dev, Event::Pre, action, Some(&conf))
             .map(|_output| ()) // can ignore output for general callouts
             .or_else(|e| {
                 force
@@ -130,7 +131,7 @@ impl Callout {
                     Err(_) => State::Failure,
                 };
 
-                let post_res = self.callout(dev, Event::Post, action);
+                let post_res = self.callout(dev, Event::Post, action, Some(&conf));
                 if post_res.is_err() {
                     debug!("Error occurred when executing post callout script");
                 }
@@ -143,7 +144,7 @@ impl Callout {
     }
 
     pub fn get_attributes(&mut self, dev: &mut MDev) -> Result<serde_json::Value> {
-        match self.callout(dev, Event::Get, Action::Attributes)? {
+        match self.callout(dev, Event::Get, Action::Attributes, None)? {
             Some(output) => {
                 if output.status.success() {
                     debug!("Get attributes successfully from callout script");
@@ -180,6 +181,7 @@ impl Callout {
         script: P,
         event: Event,
         action: Action,
+        stdin: Option<&str>,
     ) -> Result<Output> {
         debug!(
             "{}-{}: executing {:?}",
@@ -207,11 +209,11 @@ impl Callout {
             .stderr(Stdio::piped());
 
         let mut child = cmd.spawn()?;
-        if event != Event::Get {
-            let conf = dev.to_json(false)?.to_string();
+
+        if let Some(input) = stdin {
             if let Some(mut child_stdin) = child.stdin.take() {
                 child_stdin
-                    .write_all(conf.as_bytes())
+                    .write_all(input.as_bytes())
                     .with_context(|| "Failed to write to stdin of command")?;
             }
         }
@@ -238,6 +240,7 @@ impl Callout {
         dir: P,
         event: Event,
         action: Action,
+        stdin: Option<&str>,
     ) -> Option<(PathBuf, Output)> {
         debug!(
             "{}-{}: looking for a matching callout script for dev type '{}' in {:?}",
@@ -257,7 +260,7 @@ impl Callout {
         sorted_paths.sort();
 
         for path in sorted_paths {
-            match self.invoke_script(dev, &path, event, action) {
+            match self.invoke_script(dev, &path, event, action, stdin) {
                 Ok(res) => {
                     if res.status.code().is_none() {
                         warn!("callout script {:?} was terminated by a signal", path);
@@ -281,10 +284,16 @@ impl Callout {
         None
     }
 
-    fn callout(&mut self, dev: &mut MDev, event: Event, action: Action) -> Result<Option<Output>> {
+    fn callout(
+        &mut self,
+        dev: &mut MDev,
+        event: Event,
+        action: Action,
+        stdin: Option<&str>,
+    ) -> Result<Option<Output>> {
         match self.script {
             Some(ref s) => {
-                let output = self.invoke_script(dev, s, event, action)?;
+                let output = self.invoke_script(dev, s, event, action, stdin)?;
                 self.print_err(&output, s);
                 match output.status.code() {
                     None | Some(0) => Ok(Some(output)),
@@ -297,7 +306,8 @@ impl Callout {
                     if !dir.is_dir() {
                         continue;
                     }
-                    let r = match self.invoke_first_matching_script(dev, dir, event, action) {
+                    let r = match self.invoke_first_matching_script(dev, dir, event, action, stdin)
+                    {
                         Some((p, o)) => {
                             self.print_err(&o, &p);
                             self.script = Some(p.clone());
@@ -333,7 +343,7 @@ impl Callout {
 
             if let Ok(readdir) = dir.read_dir() {
                 for path in readdir.filter_map(|x| x.ok().map(|y| y.path())) {
-                    match self.invoke_script(dev, &path, event, action) {
+                    match self.invoke_script(dev, &path, event, action, None) {
                         Ok(output) => {
                             if !output.status.success() {
                                 debug!("Error occurred when executing notify script {:?}", path);
