@@ -145,19 +145,19 @@ fn define_command(
         and populate the attrs field correspondingly before the device is defined in the system.
         The device config file will contain the same attributes that were used to start this device。
     */
-    callout()
-        .invoke(&mut dev, Action::Define, force, |c, dev| {
-            if dev.active {
-                let attrs = c.get_attributes(dev)?;
-                dev.add_attributes(&attrs)?;
-            }
-            dev.define()
-        })
-        .map(|_| {
-            if uuid.is_none() {
-                println!("{}", dev.uuid.hyphenated());
-            }
-        })
+    let mut c = callout(&mut dev);
+    c.invoke(Action::Define, force, |c| {
+        if c.dev.active {
+            let attrs = c.get_attributes()?;
+            c.dev.add_attributes(&attrs)?;
+        }
+        c.dev.define()
+    })
+    .map(|_| {
+        if uuid.is_none() {
+            println!("{}", dev.uuid.hyphenated());
+        }
+    })
 }
 
 /// Implementation of the `mdevctl undefine` command
@@ -175,15 +175,14 @@ fn undefine_command(
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            if let Err(e) =
-                callout().invoke(child, Action::Undefine, force, |_, dev| dev.undefine())
-            {
+            let mut c = callout(child);
+            if let Err(e) = c.invoke(Action::Undefine, force, |c| c.dev.undefine()) {
                 failed = true;
                 for x in e.chain() {
                     warn!(
                         "Undefine of {} on parent {} failed with error: {}",
-                        child.uuid,
-                        child.parent().unwrap().to_string(),
+                        c.dev.uuid,
+                        c.dev.parent().unwrap().to_string(),
                         x
                     );
                 }
@@ -253,7 +252,7 @@ fn modify_command(
         }
     }
 
-    callout().invoke(&mut dev, Action::Modify, force, |_, dev| dev.write_config())
+    callout(&mut dev).invoke(Action::Modify, force, |c| c.dev.write_config())
 }
 
 /// convert 'start' command arguments into a MDev struct
@@ -351,13 +350,12 @@ fn start_command(
 ) -> Result<()> {
     let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
 
-    callout()
-        .invoke(&mut dev, Action::Start, force, |_, dev| dev.start())
-        .map(|_| {
-            if uuid.is_none() {
-                println!("{}", dev.uuid.hyphenated());
-            }
-        })
+    let mut c = callout(&mut dev);
+    c.invoke(Action::Start, force, |c| c.dev.start()).map(|_| {
+        if uuid.is_none() {
+            println!("{}", c.dev.uuid.hyphenated());
+        }
+    })
 }
 
 /// Implementation of the `mdevctl stop` command
@@ -366,7 +364,7 @@ fn stop_command(env: &dyn Environment, uuid: Uuid, force: bool) -> Result<()> {
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
 
-    callout().invoke(&mut dev, Action::Stop, force, |_, dev| dev.stop())
+    callout(&mut dev).invoke(Action::Stop, force, |c| c.dev.stop())
 }
 
 /// convenience function to lookup a defined device by uuid and parent
@@ -570,8 +568,9 @@ fn list_command_helper(
 
                     // if the device is supported by a callout script that gets attributes, show
                     // those in the output
-                    if let Ok(attrs) = callout().get_attributes(&mut dev) {
-                        let _ = dev.add_attributes(&attrs);
+                    let mut c = callout(&mut dev);
+                    if let Ok(attrs) = c.get_attributes() {
+                        let _ = c.dev.add_attributes(&attrs);
                     }
 
                     let devparent = dev.parent()?;
@@ -764,9 +763,7 @@ fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<(
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) =
-                    callout().invoke(child, Action::Start, false, |_, child| child.start())
-                {
+                if let Err(e) = callout(child).invoke(Action::Start, false, |c| c.dev.start()) {
                     for x in e.chain() {
                         warn!("{}", x);
                     }

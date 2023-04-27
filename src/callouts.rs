@@ -89,30 +89,35 @@ impl Display for State {
     }
 }
 
-pub struct Callout {
+pub struct Callout<'a, 'b> {
     state: State,
     script: Option<PathBuf>,
+    pub dev: &'b mut MDev<'a>,
 }
 
-pub fn callout() -> Callout {
-    Callout::new()
+pub fn callout<'a, 'b>(dev: &'b mut MDev<'a>) -> Callout<'a, 'b> {
+    Callout::new(dev)
 }
 
-impl Callout {
-    pub fn new() -> Callout {
+impl<'a, 'b> Callout<'a, 'b> {
+    pub fn new(dev: &'b mut MDev<'a>) -> Callout<'a, 'b> {
+        if dev.mdev_type.is_none() {
+            panic!("Device dev must have a defined mdev_type!")
+        }
         Callout {
             state: State::None,
             script: None,
+            dev,
         }
     }
 
-    pub fn invoke<F>(&mut self, dev: &mut MDev, action: Action, force: bool, func: F) -> Result<()>
+    pub fn invoke<F>(&mut self, action: Action, force: bool, func: F) -> Result<()>
     where
-        F: Fn(&mut Self, &mut MDev) -> Result<()>,
+        F: Fn(&mut Self) -> Result<()>,
     {
-        let conf = dev.to_json(false)?.to_string();
+        let conf = self.dev.to_json(false)?.to_string();
         let res = self
-            .callout(dev, Event::Pre, action, Some(&conf))
+            .callout(Event::Pre, action, Some(&conf))
             .map(|_output| ()) // can ignore output for general callouts
             .or_else(|e| {
                 force
@@ -125,13 +130,13 @@ impl Callout {
                     .ok_or(e)
             })
             .and_then(|_| {
-                let tmp_res = func(self, dev);
+                let tmp_res = func(self);
                 self.state = match tmp_res {
                     Ok(_) => State::Success,
                     Err(_) => State::Failure,
                 };
 
-                let post_res = self.callout(dev, Event::Post, action, Some(&conf));
+                let post_res = self.callout(Event::Post, action, Some(&conf));
                 if post_res.is_err() {
                     debug!("Error occurred when executing post callout script");
                 }
@@ -139,12 +144,12 @@ impl Callout {
                 tmp_res
             });
 
-        self.notify(dev, action);
+        self.notify(action);
         res
     }
 
-    pub fn get_attributes(&mut self, dev: &mut MDev) -> Result<serde_json::Value> {
-        match self.callout(dev, Event::Get, Action::Attributes, None)? {
+    pub fn get_attributes(&mut self) -> Result<serde_json::Value> {
+        match self.callout(Event::Get, Action::Attributes, None)? {
             Some(output) => {
                 if output.status.success() {
                     debug!("Get attributes successfully from callout script");
@@ -157,7 +162,7 @@ impl Callout {
                     if &st == "[{}]" {
                         debug!(
                             "Attribute field for {} is empty",
-                            dev.uuid.hyphenated().to_string()
+                            self.dev.uuid.hyphenated().to_string()
                         );
                         st = "[]".to_string();
                     }
@@ -177,7 +182,6 @@ impl Callout {
 
     fn invoke_script<P: AsRef<Path>>(
         &self,
-        dev: &mut MDev,
         script: P,
         event: Event,
         action: Action,
@@ -193,7 +197,7 @@ impl Callout {
         let mut cmd = Command::new(script.as_ref().as_os_str());
 
         cmd.arg("-t")
-            .arg(dev.mdev_type()?)
+            .arg(self.dev.mdev_type()?)
             .arg("-e")
             .arg(event.to_string())
             .arg("-a")
@@ -201,9 +205,9 @@ impl Callout {
             .arg("-s")
             .arg(self.state.to_string())
             .arg("-u")
-            .arg(dev.uuid.to_string())
+            .arg(self.dev.uuid.to_string())
             .arg("-p")
-            .arg(dev.parent()?)
+            .arg(self.dev.parent()?)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -236,7 +240,6 @@ impl Callout {
 
     fn invoke_first_matching_script<P: AsRef<Path> + std::fmt::Debug>(
         &self,
-        dev: &mut MDev,
         dir: P,
         event: Event,
         action: Action,
@@ -246,7 +249,7 @@ impl Callout {
             "{}-{}: looking for a matching callout script for dev type '{}' in {:?}",
             event,
             action,
-            dev.mdev_type.as_ref()?,
+            self.dev.mdev_type.as_ref()?,
             dir
         );
 
@@ -260,7 +263,7 @@ impl Callout {
         sorted_paths.sort();
 
         for path in sorted_paths {
-            match self.invoke_script(dev, &path, event, action, stdin) {
+            match self.invoke_script(&path, event, action, stdin) {
                 Ok(res) => {
                     if res.status.code().is_none() {
                         warn!("callout script {:?} was terminated by a signal", path);
@@ -271,7 +274,7 @@ impl Callout {
                     } else {
                         debug!(
                             "device type {} unmatched by callout script",
-                            dev.mdev_type().ok()?
+                            self.dev.mdev_type().ok()?
                         );
                     }
                 }
@@ -286,14 +289,13 @@ impl Callout {
 
     fn callout(
         &mut self,
-        dev: &mut MDev,
         event: Event,
         action: Action,
         stdin: Option<&str>,
     ) -> Result<Option<Output>> {
         match self.script {
             Some(ref s) => {
-                let output = self.invoke_script(dev, s, event, action, stdin)?;
+                let output = self.invoke_script(s, event, action, stdin)?;
                 self.print_err(&output, s);
                 match output.status.code() {
                     None | Some(0) => Ok(Some(output)),
@@ -302,12 +304,11 @@ impl Callout {
             }
             None => {
                 let mut res = Ok(None);
-                for dir in dev.env.callout_dirs() {
+                for dir in self.dev.env.callout_dirs() {
                     if !dir.is_dir() {
                         continue;
                     }
-                    let r = match self.invoke_first_matching_script(dev, dir, event, action, stdin)
-                    {
+                    let r = match self.invoke_first_matching_script(dir, event, action, stdin) {
                         Some((p, o)) => {
                             self.print_err(&o, &p);
                             self.script = Some(p.clone());
@@ -328,12 +329,12 @@ impl Callout {
         }
     }
 
-    fn notify(&mut self, dev: &mut MDev, action: Action) {
+    fn notify(&mut self, action: Action) {
         let event = Event::Notify;
-        let dirs = dev.env.notification_dirs();
+        let dirs = self.dev.env.notification_dirs();
         debug!(
             "{}-{}: executing notification scripts for device {}",
-            event, action, dev.uuid
+            event, action, self.dev.uuid
         );
 
         for dir in dirs {
@@ -343,7 +344,7 @@ impl Callout {
 
             if let Ok(readdir) = dir.read_dir() {
                 for path in readdir.filter_map(|x| x.ok().map(|y| y.path())) {
-                    match self.invoke_script(dev, &path, event, action, None) {
+                    match self.invoke_script(&path, event, action, None) {
                         Ok(output) => {
                             if !output.status.success() {
                                 debug!("Error occurred when executing notify script {:?}", path);
