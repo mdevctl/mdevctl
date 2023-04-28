@@ -1785,7 +1785,10 @@ fn test_invoke_callout<F>(
     setupfn(&test);
 
     let mut empty_mdev = MDev::new(&test, uuid);
-    empty_mdev.mdev_type = Some(mdev_type.to_string());
+    empty_mdev.mdev_type = match mdev_type {
+        "" => None,
+        _ => Some(mdev_type.to_string()),
+    };
     empty_mdev.parent = Some(parent.to_string());
 
     let mut callout = callout(&mut empty_mdev);
@@ -1814,11 +1817,53 @@ fn test_get_callout<F>(
     setupfn(&test);
 
     let mut empty_mdev = MDev::new(&test, uuid);
-    empty_mdev.mdev_type = Some(mdev_type.to_string());
+    empty_mdev.mdev_type = match mdev_type {
+        "" => None,
+        _ => Some(mdev_type.to_string()),
+    };
     empty_mdev.parent = Some(parent.to_string());
 
     let res = callout(&mut empty_mdev).get_attributes();
     let _ = test.assert_result(res, expect, None);
+}
+
+#[test]
+#[should_panic]
+fn test_invoke_callout_panic() {
+    init();
+    const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+    const DEFAULT_PARENT: &str = "test_parent";
+
+    test_invoke_callout(
+        "test_invoke_callout_create_panic",
+        Expect::Pass,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        "",
+        |test| {
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+}
+
+#[test]
+#[should_panic]
+fn test_get_callout_panic() {
+    init();
+    const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+    const DEFAULT_PARENT: &str = "test_parent";
+
+    test_get_callout(
+        "test_get_callout_create_panic",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        "",
+        |test| {
+            test.populate_callout_script("rc0.sh");
+        },
+    );
 }
 
 #[test]
