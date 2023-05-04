@@ -114,7 +114,12 @@ pub enum MdevctlCommands {
                 attribute for the device. The startup mode of the device can also be selected, auto \
                 or manual. Alternatively, the 'jsonfile' option may be used to replace the startup \
                 mode and any attributes with the contents of the specified file.\n\n\
-                Running devices are unaffected by this command."
+                Running devices are unaffected by this command.",
+        group(
+            clap::ArgGroup::new("modify")
+                .required(true)
+                .args(&["addattr", "delattr", "jsonfile"]),
+        ),
     )]
     Modify {
         #[clap(short, long, help = "UUID of the mdev to modify")]
