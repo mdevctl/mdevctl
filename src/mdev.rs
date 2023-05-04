@@ -239,14 +239,23 @@ impl<'a> MDev<'a> {
         }
 
         output.push('\n');
-        if verbose && !self.attrs.is_empty() {
+        if verbose {
+            let attr_string = self.fmt_attrs();
+            output.push_str(&attr_string);
+        }
+        Ok(output)
+    }
+
+    fn fmt_attrs(&self) -> String {
+        let mut output = String::new();
+        if !self.attrs.is_empty() {
             output.push_str("  Attrs:\n");
             for (i, (key, value)) in self.attrs.iter().enumerate() {
                 let txtattr = format!("    @{{{}}}: {{\"{}\":\"{}\"}}\n", i, key, value);
                 output.push_str(&txtattr);
             }
         }
-        Ok(output)
+        output
     }
 
     pub fn to_json(&self, include_uuid: bool) -> Result<serde_json::Value> {
@@ -413,6 +422,13 @@ impl<'a> MDev<'a> {
         Ok(())
     }
 
+    fn attribute_hint(&self) -> String {
+        match self.attrs.is_empty() {
+            true => format!("Device {} has no attributes", self.uuid.hyphenated()),
+            false => self.fmt_attrs(),
+        }
+    }
+
     pub fn add_attribute(
         &mut self,
         name: String,
@@ -422,7 +438,11 @@ impl<'a> MDev<'a> {
         match index {
             Some(i) => {
                 if i > self.attrs.len() {
-                    return Err(anyhow!("Attribute index {} is invalid", i));
+                    return Err(anyhow!(
+                        "Attribute index {} is invalid\n{}",
+                        i,
+                        self.attribute_hint()
+                    ));
                 }
                 self.attrs.insert(i, (name, value));
             }
@@ -436,7 +456,11 @@ impl<'a> MDev<'a> {
         match index {
             Some(i) => {
                 if i >= self.attrs.len() {
-                    return Err(anyhow!("Attribute index {} is invalid", i));
+                    return Err(anyhow!(
+                        "Attribute index {} is invalid\n{}",
+                        i,
+                        self.attribute_hint()
+                    ));
                 }
                 self.attrs.remove(i);
             }
