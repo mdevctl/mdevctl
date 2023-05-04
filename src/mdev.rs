@@ -3,7 +3,6 @@
 use crate::environment::Environment;
 use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
-use std::convert::TryInto;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -414,10 +413,14 @@ impl<'a> MDev<'a> {
         Ok(())
     }
 
-    pub fn add_attribute(&mut self, name: String, value: String, index: Option<u32>) -> Result<()> {
+    pub fn add_attribute(
+        &mut self,
+        name: String,
+        value: String,
+        index: Option<usize>,
+    ) -> Result<()> {
         match index {
             Some(i) => {
-                let i: usize = i.try_into().unwrap();
                 if i > self.attrs.len() {
                     return Err(anyhow!("Attribute index {} is invalid", i));
                 }
@@ -429,10 +432,9 @@ impl<'a> MDev<'a> {
         Ok(())
     }
 
-    pub fn delete_attribute(&mut self, index: Option<u32>) -> Result<()> {
+    pub fn delete_attribute(&mut self, index: Option<usize>) -> Result<()> {
         match index {
             Some(i) => {
-                let i: usize = i.try_into().unwrap();
                 if i >= self.attrs.len() {
                     return Err(anyhow!("Attribute index {} is invalid", i));
                 }

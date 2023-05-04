@@ -233,6 +233,7 @@ fn modify_command(
             dev.autostart = false;
         }
 
+        let index = index.map(|n| n as usize);
         match addattr {
             Some(attr) => match value {
                 None => return Err(anyhow!("No attribute value provided")),
