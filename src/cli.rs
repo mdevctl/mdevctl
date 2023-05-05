@@ -137,7 +137,7 @@ pub enum MdevctlCommands {
             long,
             conflicts_with("delattr"),
             requires("value"),
-            help = "add a new attribute",
+            help = "Add a new attribute",
             value_name = "attr_name"
         )]
         addattr: Option<String>,
