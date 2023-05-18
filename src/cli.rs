@@ -8,17 +8,17 @@ const FORCE_HELP: &str = "Force command execution even if device-specific callou
 NOTE: only use this option if you are sure you know what you are doing";
 
 #[derive(Parser, Debug)]
-#[clap(version, about = "List mediated devices", name = "lsmdev")]
+#[command(version, about = "List mediated devices", name = "lsmdev")]
 pub struct LsmdevOptions {
-    #[clap(short, long, help = "Show defined devices")]
+    #[arg(short, long, help = "Show defined devices")]
     pub defined: bool,
-    #[clap(long, help = "Output device list in json format")]
+    #[arg(long, help = "Output device list in json format")]
     pub dumpjson: bool,
-    #[clap(short, long, help = "Print additional information about the devices")]
+    #[arg(short, long, help = "Print additional information about the devices")]
     pub verbose: bool,
-    #[clap(short, long, help = "List devices matching the specified UUID")]
+    #[arg(short, long, help = "List devices matching the specified UUID")]
     pub uuid: Option<Uuid>,
-    #[clap(
+    #[arg(
         short,
         long,
         help = "List devices associated with the specified Parent device"
@@ -28,9 +28,9 @@ pub struct LsmdevOptions {
 
 // command-line argument definitions.
 #[derive(Parser)]
-#[clap(version, about = "A mediated device management utility for Linux")]
+#[command(version, about = "A mediated device management utility for Linux")]
 pub enum MdevctlCommands {
-    #[clap(
+    #[command(
         about = "Define a persistent mediated device",
         long_about = "Define a persistent mediated device\n\n\
                 If the device specified by the UUID currently exists, 'parent' and 'type' may be \
@@ -40,40 +40,35 @@ pub enum MdevctlCommands {
                 Running devices are unaffected by this command."
     )]
     Define {
-        #[clap(
+        #[arg(
             short,
             long,
             required_unless_present("parent"),
             help = "Assign UUID to the device"
         )]
         uuid: Option<Uuid>,
-        #[clap(
+        #[arg(
             short,
             long,
             help = "Automatically start device on parent availability"
         )]
         auto: bool,
-        #[clap(
+        #[arg(
             short,
             long,
             required_unless_present("uuid"),
             help = "Specify the parent of the device"
         )]
         parent: Option<String>,
-        #[clap(
-            name = "type",
-            short,
-            long,
-            help = "Specify the mdev type of the device"
-        )]
+        #[arg(id = "type", short, long, help = "Specify the mdev type of the device")]
         mdev_type: Option<String>,
-        #[clap(
-            long, value_parser,
+        #[arg(
+            long,
             conflicts_with_all(&["type", "auto"]),
             help = "Specify device details in JSON format"
         )]
         jsonfile: Option<PathBuf>,
-        #[clap(
+        #[arg(
             short,
             long,
             help = FORCE_HELP
@@ -81,7 +76,7 @@ pub enum MdevctlCommands {
         force: bool,
     },
 
-    #[clap(
+    #[command(
         about = "Undefine a persistent mediated device",
         long_about = "Undefine, or remove a config for an mdev device\n\n\
                 If a UUID exists for multiple parents, all will be removed unless a parent is
@@ -89,11 +84,11 @@ pub enum MdevctlCommands {
                 Running devices are unaffected by this command."
     )]
     Undefine {
-        #[clap(short, long, help = "UUID of the device to be undefined")]
+        #[arg(short, long, help = "UUID of the device to be undefined")]
         uuid: Uuid,
-        #[clap(short, long, help = "Parent of the device to be undefined")]
+        #[arg(short, long, help = "Parent of the device to be undefined")]
         parent: Option<String>,
-        #[clap(
+        #[arg(
             short,
             long,
             help = FORCE_HELP
@@ -101,7 +96,7 @@ pub enum MdevctlCommands {
         force: bool,
     },
 
-    #[clap(
+    #[command(
         about = "Modify the definition of a mediated device",
         long_about = "Modify the definition of a mediated device\n\n\
                 The 'parent' option further identifies a UUID if it is not unique. The parent for a \
@@ -122,29 +117,29 @@ pub enum MdevctlCommands {
         ),
     )]
     Modify {
-        #[clap(short, long, help = "UUID of the mdev to modify")]
+        #[arg(short, long, help = "UUID of the mdev to modify")]
         uuid: Uuid,
-        #[clap(short, long, help = "Parent of the mdev to modify")]
+        #[arg(short, long, help = "Parent of the mdev to modify")]
         parent: Option<String>,
-        #[clap(
-            name = "type",
+        #[arg(
+            id = "type",
             short,
             long,
             help = "Modify the mdev type for this device"
         )]
         mdev_type: Option<String>,
-        #[clap(
+        #[arg(
             long,
             requires("value"),
             help = "Add a new attribute",
             value_name = "attr_name"
         )]
         addattr: Option<String>,
-        #[clap(long, help = "Delete an attribute")]
+        #[arg(long, help = "Delete an attribute")]
         delattr: bool,
-        #[clap(long, short, help = "Index of the attribute to modify")]
+        #[arg(long, short, help = "Index of the attribute to modify")]
         index: Option<u32>,
-        #[clap(
+        #[arg(
             long,
             conflicts_with("delattr"),
             requires("addattr"),
@@ -152,33 +147,33 @@ pub enum MdevctlCommands {
             value_name = "attr_value"
         )]
         value: Option<String>,
-        #[clap(
+        #[arg(
             short,
             long,
             conflicts_with_all(&["index", "value"]),
             help = "Device will be started automatically")]
         auto: bool,
-        #[clap(
+        #[arg(
             short,
             long,
             conflicts_with_all(&["index", "value"]),
             help = "Device must be started manually"
         )]
         manual: bool,
-        #[clap(
-            long, value_parser,
+        #[arg(
+            long,
             conflicts_with_all(&["type", "index", "value"]),
             help = "Specify device details in JSON format"
         )]
         jsonfile: Option<PathBuf>,
-        #[clap(
+        #[arg(
             short,
             long,
             help = FORCE_HELP
         )]
         force: bool,
     },
-    #[clap(
+    #[command(
         about = "Start a mediated device",
         long_about = "Start a mediated device\n\n\
                 If the UUID is previously defined and unique, the UUID is sufficient to start the \
@@ -191,48 +186,47 @@ pub enum MdevctlCommands {
                 attributes to be applied to the started device."
     )]
     Start {
-        #[clap(
+        #[arg(
             short,
             long,
             required_unless_present("parent"),
             help = "UUID of the device to start"
         )]
         uuid: Option<Uuid>,
-        #[clap(
+        #[arg(
             short,
             long,
             required_unless_present("uuid"),
             help = "Parent of the device to start"
         )]
         parent: Option<String>,
-        #[clap(name = "type", short, long, help = "Mdev type of the device to start")]
+        #[arg(id = "type", short, long, help = "Mdev type of the device to start")]
         mdev_type: Option<String>,
-        #[clap(
+        #[arg(
             long,
-            value_parser,
             conflicts_with("type"),
             help = "Details of the device to be started, in JSON format"
         )]
         jsonfile: Option<PathBuf>,
-        #[clap(
+        #[arg(
             short,
             long,
             help = FORCE_HELP
         )]
         force: bool,
     },
-    #[clap(about = "Stop a mediated device")]
+    #[command(about = "Stop a mediated device")]
     Stop {
-        #[clap(short, long, help = "UUID of the device to stop")]
+        #[arg(short, long, help = "UUID of the device to stop")]
         uuid: Uuid,
-        #[clap(
+        #[arg(
             short,
             long,
             help = FORCE_HELP
         )]
         force: bool,
     },
-    #[clap(
+    #[command(
         about = "List mediated devices",
         long_about = "List mediated devices\n\n\
                 With no options, information about the currently running mediated devices is \
@@ -246,19 +240,19 @@ pub enum MdevctlCommands {
                 include attributes for the device(s)."
     )]
     List(LsmdevOptions),
-    #[clap(
+    #[command(
         about = "List available mediated device types",
         long_about = "List available mediated device types\n\n\
                 Specifying a 'parent' lists only the types provided by the given parent device. \
                 The 'dumpjson' option provides output in machine readable JSON format."
     )]
     Types {
-        #[clap(short, long, help = "Show supported types for the specified parent")]
+        #[arg(short, long, help = "Show supported types for the specified parent")]
         parent: Option<String>,
-        #[clap(long, help = "Output mdev types list in JSON format")]
+        #[arg(long, help = "Output mdev types list in JSON format")]
         dumpjson: bool,
     },
-    #[clap(hide = true)]
+    #[command(hide = true)]
     StartParentMdevs { parent: String },
 }
 

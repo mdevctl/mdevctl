@@ -13,7 +13,7 @@ homepage = "https://github.com/mdevctl/mdevctl"
 
 [dependencies]
 anyhow = "1.0"
-clap = { version = "3.1.18", features = ["derive"]}
+clap = { version = "4.0", features = ["derive", "wrap_help"] }
 env_logger = "0.9.0"
 log = "0.4"
 serde_json = {version = "1.0", features = ["preserve_order"]}
@@ -21,8 +21,8 @@ uuid = {version = "1.0", features = ["v4"]}
 tempfile = "3"
 
 [build-dependencies]
-clap = { version = "3.1.18", features = ["derive"]}
-clap_complete = "3.0.6"
+clap = { version = "4.0", features = ["derive"]}
+clap_complete = "4.0"
 uuid = "1.0"
 
 [dev-dependencies]
