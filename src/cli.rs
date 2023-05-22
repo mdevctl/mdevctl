@@ -118,7 +118,7 @@ pub enum MdevctlCommands {
         group(
             clap::ArgGroup::new("modify")
                 .required(true)
-                .args(&["addattr", "delattr", "jsonfile"]),
+                .args(&["auto", "manual", "addattr", "delattr", "jsonfile"]),
         ),
     )]
     Modify {
@@ -135,7 +135,6 @@ pub enum MdevctlCommands {
         mdev_type: Option<String>,
         #[clap(
             long,
-            conflicts_with("delattr"),
             requires("value"),
             help = "Add a new attribute",
             value_name = "attr_name"
@@ -147,22 +146,28 @@ pub enum MdevctlCommands {
         index: Option<u32>,
         #[clap(
             long,
+            conflicts_with("delattr"),
+            requires("addattr"),
             help = "Value for the attribute specified by --addattr",
             value_name = "attr_value"
         )]
         value: Option<String>,
-        #[clap(short, long, help = "Device will be started automatically")]
+        #[clap(
+            short,
+            long,
+            conflicts_with_all(&["index", "value"]),
+            help = "Device will be started automatically")]
         auto: bool,
         #[clap(
             short,
             long,
-            conflicts_with("auto"),
+            conflicts_with_all(&["index", "value"]),
             help = "Device must be started manually"
         )]
         manual: bool,
         #[clap(
             long, value_parser,
-            conflicts_with_all(&["type", "addattr", "delattr", "index", "value", "auto", "manual"]),
+            conflicts_with_all(&["type", "index", "value"]),
             help = "Specify device details in JSON format"
         )]
         jsonfile: Option<PathBuf>,
