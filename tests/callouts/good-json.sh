@@ -1,2 +1,2 @@
 #!/bin/sh
-echo "[{\"attribute0\": \"VALUE\"}]"
+printf "[{\"attribute0\": \"VALUE\"}]"

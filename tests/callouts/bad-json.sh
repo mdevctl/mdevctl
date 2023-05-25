@@ -1,2 +1,2 @@
 #!/bin/sh
-echo "not json"
+printf "not json"
