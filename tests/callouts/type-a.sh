@@ -15,7 +15,7 @@ shift 2
 uuid=$1
 shift 2
 parent=$1
-json=$(</dev/stdin)
+json=$(cat)
 
 if [ "$type" = "type_a" ]; then
 	exit 0

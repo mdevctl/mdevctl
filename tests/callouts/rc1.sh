@@ -1,3 +1,3 @@
 #!/bin/sh
-json=$(</dev/stdin)
+json=$(cat)
 exit 1
