@@ -148,6 +148,10 @@ impl<'a, 'b> Callout<'a, 'b> {
                     let mut st = String::from_utf8_lossy(&output.stdout).to_string();
 
                     if st.is_empty() {
+                        debug!(
+                            "Script output for {} is empty",
+                            self.dev.uuid.hyphenated().to_string()
+                        );
                         return Ok(serde_json::Value::Null);
                     }
 
@@ -158,7 +162,11 @@ impl<'a, 'b> Callout<'a, 'b> {
                         );
                         st = "[]".to_string();
                     }
-
+                    debug!(
+                        "Script output for {} is: '{}'",
+                        self.dev.uuid.hyphenated().to_string(),
+                        st
+                    );
                     serde_json::from_str(st.trim_end_matches('\0'))
                         .with_context(|| "Invalid JSON received from callout script")
                 } else {
@@ -168,7 +176,13 @@ impl<'a, 'b> Callout<'a, 'b> {
                     Err(invocation_failure(path, output.status.code()))
                 }
             }
-            None => Ok(serde_json::Value::Null),
+            None => {
+                debug!(
+                    "Script execution for {} returned without error but also without output",
+                    self.dev.uuid.hyphenated().to_string()
+                );
+                Ok(serde_json::Value::Null)
+            }
         }
     }
 
