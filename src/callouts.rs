@@ -78,7 +78,7 @@ impl Display for Action {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub struct CalloutVersion {
     version: Cow<'static, u32>,
@@ -98,6 +98,8 @@ impl CalloutVersion {
             events: Cow::Borrowed(events),
         }
     }
+
+    pub const NOT_FOUND: CalloutVersion = CalloutVersion::new_const(&0, &[], &[]);
 
     pub const V_1: CalloutVersion = CalloutVersion::new_const(
         &1,
@@ -288,10 +290,16 @@ impl CalloutScripts {
         match self.lookup_callout_script(&parent, &mdev_type) {
             Some(cs) => {
                 debug!(
-                    "Looked up callout script for mdev type '{:?}' and parent {:?}: {:?}",
-                    mdev_type, parent, cs.path
+                    "Callout script lookup for mdev type '{:?}' and parent {:?} successful",
+                    mdev_type, parent
                 );
-                return Some(cs);
+                if cs.supports == CalloutVersion::NOT_FOUND && cs.path.as_os_str().is_empty() {
+                    debug!("Callout script search returned empty before: no script with versioning available");
+                    return None;
+                } else {
+                    debug!("Callout script looked up: {:?}", cs.path);
+                    return Some(cs);
+                }
             }
             None => {
                 debug!(
@@ -319,7 +327,16 @@ impl CalloutScripts {
                     self.callouts.push(callout.script.clone().unwrap());
                     callout.script
                 }
-                None => None,
+                None => {
+                    // When lookup and search turned out empty create a did-not-find entry.
+                    self.callouts.push(CalloutScript::new(
+                        PathBuf::new(),
+                        parent,
+                        mdev_type,
+                        CalloutVersion::NOT_FOUND,
+                    ));
+                    None
+                }
             },
             Err(_) => None,
         }
