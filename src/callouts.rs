@@ -274,14 +274,19 @@ impl<'a, 'b> Callout<'a, 'b> {
                     if res.status.code().is_none() {
                         warn!("callout script {:?} was terminated by a signal", path);
                         continue;
-                    } else if res.status.code() != Some(2) {
-                        debug!("found callout script {:?}", path);
-                        return Some((path, res));
-                    } else {
+                    } else if res.status.code() == Some(2) {
                         debug!(
-                            "device type {} unmatched by callout script",
+                            "callout script {:?} does not match device type {:?}",
+                            path,
                             self.dev.mdev_type().ok()?
                         );
+                    } else {
+                        debug!(
+                            "found callout script {:?} matching device type {:?}",
+                            path,
+                            self.dev.mdev_type().ok()?
+                        );
+                        return Some((path, res));
                     }
                 }
                 Err(e) => {
