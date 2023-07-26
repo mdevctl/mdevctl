@@ -257,6 +257,7 @@ impl<'a, 'b> Callout<'a, 'b> {
         event: Event,
         action: Action,
         stdin: Option<&str>,
+        check_result_fn: impl Fn(PathBuf, Output) -> Result<(PathBuf, Output)>,
     ) -> Option<(PathBuf, Output)> {
         debug!(
             "{}-{}: looking for a matching callout script for dev type '{}' in {:?}",
@@ -293,7 +294,13 @@ impl<'a, 'b> Callout<'a, 'b> {
                             path,
                             self.dev.mdev_type().ok()?
                         );
-                        return Some((path, res));
+                        match check_result_fn(path, res) {
+                            Ok((p, r)) => return Some((p, r)),
+                            Err(_) => {
+                                debug!("found callout script rejected by check_result method");
+                                continue;
+                            }
+                        }
                     }
                 }
                 Err(e) => {
@@ -326,7 +333,13 @@ impl<'a, 'b> Callout<'a, 'b> {
                     if !dir.is_dir() {
                         continue;
                     }
-                    let r = match self.invoke_first_matching_script(dir, event, action, stdin) {
+                    let r = match self.invoke_first_matching_script(
+                        dir,
+                        event,
+                        action,
+                        stdin,
+                        |p, o| Ok((p, o)),
+                    ) {
                         Some((p, o)) => {
                             self.print_err(&o, &p);
                             match o.status.code() {
