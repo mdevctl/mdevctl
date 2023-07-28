@@ -311,9 +311,11 @@ impl<'a, 'b> Callout<'a, 'b> {
                     let r = match self.invoke_first_matching_script(dir, event, action, stdin) {
                         Some((p, o)) => {
                             self.print_err(&o, &p);
-                            self.script = Some(p.clone());
                             match o.status.code() {
-                                Some(0) => Ok(Some(o)),
+                                Some(0) => {
+                                    self.script = Some(p);
+                                    Ok(Some(o))
+                                }
                                 Some(n) => Err(invocation_failure(&p, Some(n))),
                                 None => continue,
                             }
