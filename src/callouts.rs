@@ -81,6 +81,31 @@ impl Display for State {
     }
 }
 
+pub trait CheckProcessOutput {
+    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output)>;
+    fn process(&self, c: &mut Callout<'_, '_>, p: PathBuf, o: Output) -> Result<Option<Output>>;
+}
+
+struct DefaultCheckProcessOutput;
+
+impl CheckProcessOutput for DefaultCheckProcessOutput {
+    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output)> {
+        Ok((p, o))
+    }
+
+    fn process(&self, c: &mut Callout<'_, '_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
+        c.print_err(&o, &p);
+        match o.status.code() {
+            Some(0) => {
+                c.script = Some(p);
+                Ok(Some(o))
+            }
+            Some(n) => Err(invocation_failure(&p, Some(n))),
+            None => Ok(None),
+        }
+    }
+}
+
 pub struct Callout<'a, 'b> {
     state: State,
     script: Option<PathBuf>,
@@ -109,7 +134,7 @@ impl<'a, 'b> Callout<'a, 'b> {
     {
         let conf = self.dev.to_json(false)?.to_string();
         let res = self
-            .callout(Event::Pre, action, Some(&conf))
+            .callout(Event::Pre, action, Some(&conf), &DefaultCheckProcessOutput)
             .map(|_output| ()) // can ignore output for general callouts
             .or_else(|e| {
                 force
@@ -128,7 +153,8 @@ impl<'a, 'b> Callout<'a, 'b> {
                     Err(_) => State::Failure,
                 };
 
-                let post_res = self.callout(Event::Post, action, Some(&conf));
+                let post_res =
+                    self.callout(Event::Post, action, Some(&conf), &DefaultCheckProcessOutput);
                 if post_res.is_err() {
                     debug!("Error occurred when executing post callout script");
                 }
@@ -141,7 +167,12 @@ impl<'a, 'b> Callout<'a, 'b> {
     }
 
     pub fn get_attributes(&mut self) -> Result<serde_json::Value> {
-        match self.callout(Event::Get, Action::Attributes, None)? {
+        match self.callout(
+            Event::Get,
+            Action::Attributes,
+            None,
+            &DefaultCheckProcessOutput,
+        )? {
             Some(output) => {
                 if output.status.success() {
                     debug!("Get attributes successfully from callout script");
@@ -317,6 +348,7 @@ impl<'a, 'b> Callout<'a, 'b> {
         event: Event,
         action: Action,
         stdin: Option<&str>,
+        check_process: &dyn CheckProcessOutput,
     ) -> Result<Option<Output>> {
         match self.script {
             Some(ref s) => {
@@ -338,19 +370,12 @@ impl<'a, 'b> Callout<'a, 'b> {
                         event,
                         action,
                         stdin,
-                        |p, o| Ok((p, o)),
+                        |p, o| check_process.check(p, o),
                     ) {
-                        Some((p, o)) => {
-                            self.print_err(&o, &p);
-                            match o.status.code() {
-                                Some(0) => {
-                                    self.script = Some(p);
-                                    Ok(Some(o))
-                                }
-                                Some(n) => Err(invocation_failure(&p, Some(n))),
-                                None => continue,
-                            }
-                        }
+                        Some((p, o)) => match check_process.process(self, p, o)? {
+                            Some(o) => Ok(Some(o)),
+                            None => continue,
+                        },
                         None => continue,
                     };
 
