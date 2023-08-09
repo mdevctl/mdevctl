@@ -65,7 +65,7 @@ fn define_command_helper(
 
     if let Some(jsonfile) = jsonfile {
         let _ = std::fs::File::open(&jsonfile)
-            .with_context(|| format!("Unable to read file {:?}", jsonfile));
+            .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
 
         if mdev_type.is_some() {
             return Err(anyhow!(
@@ -215,7 +215,7 @@ fn modify_command(
 
     if let Some(jsonfile) = jsonfile {
         let _ = std::fs::File::open(&jsonfile)
-            .with_context(|| format!("Unable to read file {:?}", jsonfile));
+            .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
 
         let mut d = MDev::new(env, uuid);
         let filecontents = fs::read_to_string(&jsonfile)
