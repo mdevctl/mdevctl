@@ -61,7 +61,7 @@ pub trait Environment {
         debug!("checking that the environment is sane");
         // ensure required system dirs exist. Generally distro packages or 'make install' should
         // create these dirs.
-        for dir in vec![
+        for dir in [
             self.config_base(),
             self.callout_dir(),
             self.notification_dir(),
