@@ -7,8 +7,19 @@ use uuid::Uuid;
 const FORCE_HELP: &str = "Force command execution even if device-specific callout script fails
 NOTE: only use this option if you are sure you know what you are doing";
 
+const LIST_LONG_ABOUT: &str = "List mediated devices\n\n\
+With no options, information about the currently running mediated devices is \
+provided. Specifying 'defined' lists the configuration of defined devices, \
+regardless of their running state. This may be further reduced by specifying \
+specific 'uuid' or 'parent' devices to list. The 'dumpjson' option provides output \
+listing in machine readable JSON format. When a 'uuid' option is provided and the \
+result is a single device, the output contains only the JSON fields necessary to \
+recreate a config file for the device (minus attributes for listings of running \
+devices). When the verbose option is provided, the human readable listing will \
+include attributes for the device(s).";
+
 #[derive(Parser, Debug)]
-#[command(version, about = "List mediated devices", name = "lsmdev")]
+#[command(version, about = "List mediated devices", long_about = LIST_LONG_ABOUT, name = "lsmdev")]
 pub struct LsmdevOptions {
     #[arg(short, long, help = "Show defined devices")]
     pub defined: bool,
@@ -228,16 +239,7 @@ pub enum MdevctlCommands {
     },
     #[command(
         about = "List mediated devices",
-        long_about = "List mediated devices\n\n\
-                With no options, information about the currently running mediated devices is \
-                provided. Specifying 'defined' lists the configuration of defined devices, \
-                regardless of their running state. This may be further reduced by specifying \
-                specific 'uuid' or 'parent' devices to list. The 'dumpjson' option provides output \
-                listing in machine readable JSON format. When a 'uuid' option is provided and the \
-                result is a single device, the output contains only the JSON fields necessary to \
-                recreate a config file for the device (minus attributes for listings of running \
-                devices). When the verbose option is provided, the human readable listing will \
-                include attributes for the device(s)."
+        long_about = LIST_LONG_ABOUT
     )]
     List(LsmdevOptions),
     #[command(
