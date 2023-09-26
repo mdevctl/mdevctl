@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
 use std::ffi::OsStr;
 use std::fmt::{self, Display, Formatter};
-use std::io::Write;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
@@ -222,9 +222,16 @@ impl<'a, 'b> Callout<'a, 'b> {
 
         if let Some(input) = stdin {
             if let Some(mut child_stdin) = child.stdin.take() {
-                child_stdin
-                    .write_all(input.as_bytes())
-                    .with_context(|| "Failed to write to stdin of command")?;
+                match child_stdin.write_all(input.as_bytes()) {
+                    Ok(_) => (),
+                    Err(e) if e.kind() == ErrorKind::BrokenPipe => {
+                        debug!(
+                            "Callout script {:?} closed stdin before all data was written",
+                            script.as_ref().as_os_str()
+                        )
+                    }
+                    Err(e) => Err(e).with_context(|| "Failed to write to stdin of command")?,
+                }
             }
         }
 
