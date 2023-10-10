@@ -35,7 +35,7 @@ BuildRequires:  rust-packaging
 %if 0%{?rhel}
 BuildRequires: rust-toolset
 %endif
-BuildRequires: python3-docutils
+BuildRequires: systemd python3-docutils
 
 %global _description %{expand:
 %{summary}.}
