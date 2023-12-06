@@ -560,11 +560,12 @@ fn list_command_helper(
                         continue;
                     }
 
-                    let _ = dev.load_definition();
-
-                    // don't show attributes from the persistent definition if we're listing
-                    // active mdevs. The definition may have changed since the mdev was started
-                    dev.attrs.clear();
+                    // retrieve autostart from persisted mdev if possible
+                    let mut per_dev = MDev::new(env, u);
+                    per_dev.parent = dev.parent.clone();
+                    if per_dev.load_definition().is_ok() {
+                        dev.autostart = per_dev.autostart;
+                    }
 
                     // if the device is supported by a callout script that gets attributes, show
                     // those in the output
