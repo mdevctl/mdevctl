@@ -258,14 +258,13 @@ impl CalloutScriptCache {
     }
 
     fn lookup_callout_script(&self, parent: &str, mdev_type: &str) -> Option<CalloutScriptInfo> {
-        for cs in self.callouts.iter() {
-            if cs.mdev_type.eq_ignore_ascii_case(mdev_type)
-                && cs.parent.eq_ignore_ascii_case(parent)
-            {
-                return Some(cs.clone());
-            }
-        }
-        None
+        self.callouts
+            .iter()
+            .find(|cs| {
+                cs.mdev_type.eq_ignore_ascii_case(mdev_type)
+                    && cs.parent.eq_ignore_ascii_case(parent)
+            })
+            .cloned()
     }
 
     pub fn find_versioned_script(&mut self, dev: &MDev) -> Option<CalloutScriptInfo> {
