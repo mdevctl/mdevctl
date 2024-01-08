@@ -6,6 +6,7 @@ use anyhow::{anyhow, Result};
 use log::debug;
 use std::env;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Mutex;
 
 /// A trait which provides filesystem paths for certain system resources.
@@ -13,7 +14,7 @@ use std::sync::Mutex;
 /// The main purpose of this trait is to enable testability of the mdevctl commands by abstracting
 /// out the filesystem locations. Tests can implement [`Environment`] and provide filesystem paths
 /// within a mock filesystem environment that will not affect the system.
-pub trait Environment {
+pub trait Environment: std::fmt::Debug {
     fn root(&self) -> &Path;
 
     fn find_script(&self, dev: &MDev) -> Option<CalloutScriptInfo>;
@@ -86,16 +87,6 @@ pub struct DefaultEnvironment {
     callout_scripts: Mutex<CalloutScriptCache>,
 }
 
-impl std::fmt::Debug for &dyn Environment {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("Environment")
-            .field("mdev_base", &self.mdev_base())
-            .field("config_base", &self.config_base())
-            .field("parent_base", &self.parent_base())
-            .finish()
-    }
-}
-
 impl Environment for DefaultEnvironment {
     fn root(&self) -> &Path {
         self.rootpath.as_path()
@@ -111,14 +102,15 @@ impl Environment for DefaultEnvironment {
 }
 
 impl DefaultEnvironment {
-    pub fn new() -> DefaultEnvironment {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new() -> Rc<dyn Environment> {
         let root = match env::var("MDEVCTL_ENV_ROOT") {
             Ok(d) => d,
             _ => "/".to_string(),
         };
-        DefaultEnvironment {
+        Rc::new(DefaultEnvironment {
             rootpath: PathBuf::from(root),
             callout_scripts: Mutex::new(CalloutScriptCache::new()),
-        }
+        })
     }
 }

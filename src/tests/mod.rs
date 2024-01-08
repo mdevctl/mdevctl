@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::Mutex;
 use tempfile::Builder;
 use tempfile::TempDir;
@@ -60,7 +61,7 @@ impl Environment for TestEnvironment {
 }
 
 impl TestEnvironment {
-    pub fn new(testname: &str, testcase: &str) -> TestEnvironment {
+    pub fn new(testname: &str, testcase: &str) -> Rc<TestEnvironment> {
         let path: PathBuf = [TEST_DATA_DIR, testname].iter().collect();
         let scratchdir = Builder::new().prefix("mdevctl-test").tempdir().unwrap();
         let test = TestEnvironment {
@@ -83,7 +84,7 @@ impl TestEnvironment {
                 .expect(format!("Unable to create notification_dir '{:?}'", &dir).as_str());
         }
         info!("---- Running test '{}/{}' ----", testname, testcase);
-        test
+        Rc::new(test)
     }
 
     // set up a few files in the test environment to simulate an defined mediated device
@@ -210,12 +211,12 @@ impl TestEnvironment {
         assert_eq!(expected, actual);
     }
 
-    fn load_from_json<'a>(&'a self, uuid: &str, parent: &str, filename: &str) -> Result<MDev<'a>> {
+    fn load_from_json(self: &Rc<Self>, uuid: &str, parent: &str, filename: &str) -> Result<MDev> {
         let path = self.datapath.join(filename);
         let uuid = Uuid::parse_str(uuid);
         assert!(uuid.is_ok());
         let uuid = uuid.unwrap();
-        let mut dev = MDev::new(self, uuid);
+        let mut dev = MDev::new(self.clone(), uuid);
 
         let jsonstr = fs::read_to_string(path)?;
         let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
@@ -269,7 +270,7 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
 const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
 
 fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
-    let test = TestEnvironment::new("load-json", uuid);
+    let test: Rc<TestEnvironment> = TestEnvironment::new("load-json", uuid);
 
     let res = test.load_from_json(uuid, parent, &format!("{}.in", uuid));
     if let Ok(dev) = test.assert_result(res, expect, None) {

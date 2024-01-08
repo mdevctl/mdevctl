@@ -343,7 +343,7 @@ impl CalloutScriptCache {
 
 pub trait CheckProcessOutput {
     fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output)>;
-    fn process(&self, c: &mut Callout<'_, '_>, p: PathBuf, o: Output) -> Result<Option<Output>>;
+    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>>;
 }
 
 struct DefaultCheckProcessOutput;
@@ -353,7 +353,7 @@ impl CheckProcessOutput for DefaultCheckProcessOutput {
         Ok((p, o))
     }
 
-    fn process(&self, c: &mut Callout<'_, '_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
+    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
         c.print_err(&o, &p);
         match o.status.code() {
             Some(0) => {
@@ -384,7 +384,7 @@ impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
         }
     }
 
-    fn process(&self, c: &mut Callout<'_, '_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
+    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
         c.print_err(&o, &p);
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(cv) => {
@@ -408,18 +408,18 @@ impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
     }
 }
 
-pub struct Callout<'a, 'b> {
+pub struct Callout<'a> {
     state: State,
     script: Option<CalloutScriptInfo>,
-    pub dev: &'b mut MDev<'a>,
+    pub dev: &'a mut MDev,
 }
 
-pub fn callout<'a, 'b>(dev: &'b mut MDev<'a>) -> Callout<'a, 'b> {
+pub fn callout(dev: &mut MDev) -> Callout {
     Callout::new(dev)
 }
 
-impl<'a, 'b> Callout<'a, 'b> {
-    pub fn new(dev: &'b mut MDev<'a>) -> Callout<'a, 'b> {
+impl<'a> Callout<'a> {
+    pub fn new(dev: &'a mut MDev) -> Callout<'a> {
         if dev.mdev_type.is_none() {
             panic!("Device dev must have a defined mdev_type!")
         }
@@ -445,7 +445,7 @@ impl<'a, 'b> Callout<'a, 'b> {
         }
 
         let mut res = Ok(());
-        let mut existing = MDev::new(self.dev.env, self.dev.uuid);
+        let mut existing = MDev::new(self.dev.env.clone(), self.dev.uuid);
         if existing.load_from_sysfs().is_ok() && existing.active {
             if existing.parent != self.dev.parent {
                 debug!("Device exists under different parent - cannot run live update");

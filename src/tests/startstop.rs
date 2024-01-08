@@ -11,13 +11,14 @@ fn test_start_command_callout<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(Rc<TestEnvironment>),
 {
     let test = TestEnvironment::new("start", testname);
-    setupfn(&test);
+    let env: Rc<dyn Environment> = test.clone();
+    setupfn(test.clone());
 
     use crate::start_command;
-    let res = start_command(&test, uuid, parent, mdev_type, None, force);
+    let res = start_command(env, uuid, parent, mdev_type, None, force);
     let _ = test.assert_result(res, expect, None);
 }
 
@@ -31,13 +32,14 @@ fn test_start_helper<F>(
     jsonfile: Option<PathBuf>,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(Rc<TestEnvironment>),
 {
     let test = TestEnvironment::new("start", testname);
-    setupfn(&test);
+    let env: Rc<dyn Environment> = test.clone();
+    setupfn(test.clone());
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
 
-    let result = crate::start_command_helper(&test, uuid, parent, mdev_type, jsonfile);
+    let result = crate::start_command_helper(env, uuid, parent, mdev_type, jsonfile);
 
     if let Ok(mut dev) = test.assert_result(result, expect_setup, Some("setup command")) {
         let result = dev.start();
@@ -425,12 +427,13 @@ fn test_start() {
 
 fn test_stop_helper<F>(testname: &str, expect: Expect, uuid: &str, force: bool, setupfn: F)
 where
-    F: Fn(&TestEnvironment),
+    F: Fn(Rc<TestEnvironment>),
 {
     let test = TestEnvironment::new("stop", testname);
-    setupfn(&test);
+    let env: Rc<dyn Environment> = test.clone();
+    setupfn(test.clone());
 
-    let res = crate::stop_command(&test, Uuid::parse_str(uuid).unwrap(), force);
+    let res = crate::stop_command(env, Uuid::parse_str(uuid).unwrap(), force);
 
     if let Ok(_) = test.assert_result(res, expect, None) {
         let remove_path = test.mdev_base().join(uuid).join("remove");

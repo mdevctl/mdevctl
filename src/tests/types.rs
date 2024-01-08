@@ -1,22 +1,23 @@
 use super::*;
 
 fn test_types_helper(
-    test: &TestEnvironment,
+    test: &Rc<TestEnvironment>,
     subtest: &str,
     expect: Expect,
     parent: Option<String>,
 ) {
     use crate::types_command_helper;
+    let env: Rc<dyn Environment> = test.clone();
 
     // test text output
-    let res = types_command_helper(test, parent.clone(), false);
-    if let Ok(output) = test.assert_result(res, expect, Some("text")) {
+    let res = types_command_helper(env.clone(), parent.clone(), false);
+    if let Ok(output) = test.clone().assert_result(res, expect, Some("text")) {
         test.compare_to_file(&format!("{}.text", subtest), &output);
     }
 
     // test JSON output
-    let res = types_command_helper(test, parent.clone(), true);
-    if let Ok(output) = test.assert_result(res, expect, Some("json")) {
+    let res = types_command_helper(env.clone(), parent.clone(), true);
+    if let Ok(output) = test.clone().assert_result(res, expect, Some("json")) {
         test.compare_to_file(&format!("{}.json", subtest), &output);
     }
 }

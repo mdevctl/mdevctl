@@ -14,6 +14,7 @@ use std::fmt::Write;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::vec::Vec;
 use uuid::Uuid;
 
@@ -52,7 +53,7 @@ fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
 
 /// convert 'define' command arguments into a MDev struct
 fn define_command_helper(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -61,7 +62,7 @@ fn define_command_helper(
 ) -> Result<MDev> {
     let uuid_provided = uuid.is_some();
     let uuid = uuid.unwrap_or_else(Uuid::new_v4);
-    let mut dev = MDev::new(env, uuid);
+    let mut dev = MDev::new(env.clone(), uuid);
 
     if let Some(jsonfile) = jsonfile {
         let _ = std::fs::File::open(&jsonfile)
@@ -127,7 +128,7 @@ fn define_command_helper(
 
 /// Implementation of the `mdevctl define` command
 fn define_command(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -162,7 +163,7 @@ fn define_command(
 
 /// Implementation of the `mdevctl undefine` command
 fn undefine_command(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     uuid: Uuid,
     parent: Option<String>,
     force: bool,
@@ -196,7 +197,7 @@ fn undefine_command(
 }
 
 fn dev_from_jsonfile(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     uuid: Uuid,
     parent: String,
     jsonfile: PathBuf,
@@ -215,7 +216,7 @@ fn dev_from_jsonfile(
 /// Implementation of the `mdevctl modify` command
 #[allow(clippy::too_many_arguments)]
 fn modify_command(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     uuid: Uuid,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -241,13 +242,13 @@ fn modify_command(
         if manual {
             return Err(anyhow!("'manual' cannot be changed on active mdev"));
         }
-        let mut act_dev = get_active_device(env, uuid, parent.as_ref())?;
+        let mut act_dev = get_active_device(env.clone(), uuid, parent.as_ref())?;
         if let Some(f) = jsonfile {
             let act_parent = act_dev
                 .parent
                 .clone()
                 .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
-            let json_dev = dev_from_jsonfile(env, uuid, act_parent, f)?;
+            let json_dev = dev_from_jsonfile(env.clone(), uuid, act_parent, f)?;
             if json_dev.mdev_type != act_dev.mdev_type {
                 return Err(anyhow!("'type' cannot be changed on active mdev"));
             }
@@ -280,7 +281,7 @@ fn modify_command(
         if let Some(f) = jsonfile {
             let parent = parent
                 .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
-            dev = dev_from_jsonfile(env, uuid, parent, f)?;
+            dev = dev_from_jsonfile(env.clone(), uuid, parent, f)?;
         } else {
             dev = get_defined_device(env, uuid, parent.as_ref())?;
             if mdev_type.is_some() {
@@ -314,7 +315,7 @@ fn modify_command(
 
 /// convert 'start' command arguments into a MDev struct
 fn start_command_helper(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -337,14 +338,14 @@ fn start_command_helper(
             let parent = parent
                 .ok_or_else(|| anyhow!("Parent device required to start device via json file"))?;
 
-            let mut d = MDev::new(env, uuid.unwrap_or_else(Uuid::new_v4));
+            let mut d = MDev::new(env.clone(), uuid.unwrap_or_else(Uuid::new_v4));
             d.load_from_json(parent, &val)?;
             dev = Some(d);
         }
         _ => {
             // if the user specified a uuid, check to see if they're referring to a defined device
             if uuid.is_some() {
-                let devs = defined_devices(env, uuid.as_ref(), parent.as_ref())?;
+                let devs = defined_devices(env.clone(), uuid.as_ref(), parent.as_ref())?;
                 let n = devs.values().flatten().count();
                 match n.cmp(&1) {
                     Ordering::Greater => {
@@ -377,7 +378,7 @@ fn start_command_helper(
             }
 
             if dev.is_none() {
-                let mut d = MDev::new(env, uuid.unwrap_or_else(Uuid::new_v4));
+                let mut d = MDev::new(env.clone(), uuid.unwrap_or_else(Uuid::new_v4));
                 d.parent = parent;
                 d.mdev_type = mdev_type;
                 dev = Some(d);
@@ -398,7 +399,7 @@ fn start_command_helper(
 
 /// Implementation of the `mdevctl start` command
 fn start_command(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -416,7 +417,7 @@ fn start_command(
 }
 
 /// Implementation of the `mdevctl stop` command
-fn stop_command(env: &dyn Environment, uuid: Uuid, force: bool) -> Result<()> {
+fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
@@ -425,11 +426,11 @@ fn stop_command(env: &dyn Environment, uuid: Uuid, force: bool) -> Result<()> {
 }
 
 /// convenience function to lookup a defined device by uuid and parent
-fn get_defined_device<'a>(
-    env: &'a dyn Environment,
+fn get_defined_device(
+    env: Rc<dyn Environment>,
     uuid: Uuid,
     parent: Option<&String>,
-) -> Result<MDev<'a>> {
+) -> Result<MDev> {
     let devs = defined_devices(env, Some(&uuid), parent)?;
     if devs.is_empty() {
         match parent {
@@ -469,11 +470,11 @@ fn get_defined_device<'a>(
 }
 
 /// Get a map of all defined devices, optionally filtered by uuid and parent
-fn defined_devices<'a>(
-    env: &'a dyn Environment,
+fn defined_devices(
+    env: Rc<dyn Environment>,
     uuid: Option<&Uuid>,
     parent: Option<&String>,
-) -> Result<BTreeMap<String, Vec<MDev<'a>>>> {
+) -> Result<BTreeMap<String, Vec<MDev>>> {
     let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
     debug!(
         "Looking up defined mdevs: uuid={:?}, parent={:?}",
@@ -533,7 +534,7 @@ fn defined_devices<'a>(
                             let mut contents = String::new();
                             f.read_to_string(&mut contents)?;
                             let val = serde_json::from_str(&contents)?;
-                            let mut dev = MDev::new(env, u);
+                            let mut dev = MDev::new(env.clone(), u);
                             dev.load_from_json(parentname.to_string(), &val)?;
                             dev.load_from_sysfs()?;
 
@@ -556,11 +557,11 @@ fn defined_devices<'a>(
 }
 
 /// convenience function to lookup an active device by uuid and parent
-fn get_active_device<'a>(
-    env: &'a dyn Environment,
+fn get_active_device(
+    env: Rc<dyn Environment>,
     uuid: Uuid,
     parent: Option<&String>,
-) -> Result<MDev<'a>> {
+) -> Result<MDev> {
     let devs = active_devices(env, Some(&uuid), parent)?;
     if devs.is_empty() {
         match parent {
@@ -593,11 +594,11 @@ fn get_active_device<'a>(
 }
 
 /// Get a map of all active devices, optionally filtered by uuid and parent
-fn active_devices<'a>(
-    env: &'a dyn Environment,
+fn active_devices(
+    env: Rc<dyn Environment>,
     uuid: Option<&Uuid>,
     parent: Option<&String>,
-) -> Result<BTreeMap<String, Vec<MDev<'a>>>> {
+) -> Result<BTreeMap<String, Vec<MDev>>> {
     let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
     debug!(
         "Looking up active mdevs: uuid={:?}, parent={:?}",
@@ -626,7 +627,7 @@ fn active_devices<'a>(
                 continue;
             }
 
-            let mut dev = MDev::new(env, u);
+            let mut dev = MDev::new(env.clone(), u);
             if dev.load_from_sysfs().is_ok() {
                 if parent.is_some() && (parent != dev.parent.as_ref()) {
                     debug!(
@@ -638,7 +639,7 @@ fn active_devices<'a>(
                 }
 
                 // retrieve autostart from persisted mdev if possible
-                let mut per_dev = MDev::new(env, u);
+                let mut per_dev = MDev::new(env.clone(), u);
                 per_dev.parent = dev.parent.clone();
                 if per_dev.load_definition().is_ok() {
                     dev.autostart = per_dev.autostart;
@@ -665,7 +666,7 @@ fn active_devices<'a>(
 
 /// Implementation of the `mdevctl list` command
 fn list_command(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     defined: bool,
     dumpjson: bool,
     verbose: bool,
@@ -679,7 +680,7 @@ fn list_command(
 
 /// convert 'list' command arguments into a text output
 fn list_command_helper(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     defined: bool,
     dumpjson: bool,
     verbose: bool,
@@ -735,7 +736,7 @@ fn list_command_helper(
 
 /// Get a map of all mediated device types that are supported on this machine
 fn supported_types(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     parent: Option<String>,
 ) -> Result<BTreeMap<String, Vec<MDevType>>> {
     debug!("Finding supported mdev types");
@@ -804,7 +805,7 @@ fn supported_types(
 
 /// convert 'types' command arguments into a text output
 fn types_command_helper(
-    env: &dyn Environment,
+    env: Rc<dyn Environment>,
     parent: Option<String>,
     dumpjson: bool,
 ) -> Result<String> {
@@ -852,14 +853,14 @@ fn types_command_helper(
 }
 
 /// Implementation of the `mdevctl types` command
-fn types_command(env: &dyn Environment, parent: Option<String>, dumpjson: bool) -> Result<()> {
+fn types_command(env: Rc<dyn Environment>, parent: Option<String>, dumpjson: bool) -> Result<()> {
     let output = types_command_helper(env, parent, dumpjson)?;
     println!("{}", output);
     Ok(())
 }
 
 /// Implementation of the `start-parent-mdevs` command
-fn start_parent_mdevs_command(env: &dyn Environment, parent: String) -> Result<()> {
+fn start_parent_mdevs_command(env: Rc<dyn Environment>, parent: String) -> Result<()> {
     let mut devs = defined_devices(env, None, Some(&parent))?;
     if devs.is_empty() {
         // nothing to do
@@ -902,7 +903,7 @@ fn main() -> Result<()> {
             debug!("running as 'lsmdev'");
             let opts = LsmdevOptions::parse();
             list_command(
-                &env,
+                env,
                 opts.defined,
                 opts.dumpjson,
                 opts.verbose,
@@ -918,12 +919,12 @@ fn main() -> Result<()> {
                 mdev_type,
                 jsonfile,
                 force,
-            } => define_command(&env, uuid, auto, parent, mdev_type, jsonfile, force),
+            } => define_command(env, uuid, auto, parent, mdev_type, jsonfile, force),
             MdevctlCommands::Undefine {
                 uuid,
                 parent,
                 force,
-            } => undefine_command(&env, uuid, parent, force),
+            } => undefine_command(env, uuid, parent, force),
             MdevctlCommands::Modify {
                 uuid,
                 parent,
@@ -939,7 +940,7 @@ fn main() -> Result<()> {
                 jsonfile,
                 force,
             } => modify_command(
-                &env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual, live,
+                env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual, live,
                 defined, jsonfile, force,
             ),
             MdevctlCommands::Start {
@@ -948,20 +949,18 @@ fn main() -> Result<()> {
                 mdev_type,
                 jsonfile,
                 force,
-            } => start_command(&env, uuid, parent, mdev_type, jsonfile, force),
-            MdevctlCommands::Stop { uuid, force } => stop_command(&env, uuid, force),
+            } => start_command(env, uuid, parent, mdev_type, jsonfile, force),
+            MdevctlCommands::Stop { uuid, force } => stop_command(env, uuid, force),
             MdevctlCommands::List(list) => list_command(
-                &env,
+                env,
                 list.defined,
                 list.dumpjson,
                 list.verbose,
                 list.uuid,
                 list.parent,
             ),
-            MdevctlCommands::Types { parent, dumpjson } => types_command(&env, parent, dumpjson),
-            MdevctlCommands::StartParentMdevs { parent } => {
-                start_parent_mdevs_command(&env, parent)
-            }
+            MdevctlCommands::Types { parent, dumpjson } => types_command(env, parent, dumpjson),
+            MdevctlCommands::StartParentMdevs { parent } => start_parent_mdevs_command(env, parent),
         },
     }
 }
