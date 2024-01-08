@@ -6,6 +6,7 @@ use log::{debug, warn};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::vec::Vec;
 use uuid::Uuid;
 
@@ -17,18 +18,18 @@ pub enum FormatType {
 
 /// Representation of a mediated device
 #[derive(Debug, Clone)]
-pub struct MDev<'a> {
+pub struct MDev {
     pub uuid: Uuid,
     pub active: bool,
     pub autostart: bool,
     pub parent: Option<String>,
     pub mdev_type: Option<String>,
     pub attrs: Vec<(String, String)>,
-    pub env: &'a dyn Environment,
+    pub env: Rc<dyn Environment>,
 }
 
-impl<'a> MDev<'a> {
-    pub fn new(env: &'a dyn Environment, uuid: Uuid) -> MDev<'a> {
+impl MDev {
+    pub fn new(env: Rc<dyn Environment>, uuid: Uuid) -> MDev {
         MDev {
             uuid,
             active: false,
@@ -323,7 +324,7 @@ impl<'a> MDev<'a> {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
-        let mut existing = MDev::new(self.env, self.uuid);
+        let mut existing = MDev::new(self.env.clone(), self.uuid);
 
         if existing.load_from_sysfs().is_ok() && existing.active {
             if existing.parent != self.parent {

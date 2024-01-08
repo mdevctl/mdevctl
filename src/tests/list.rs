@@ -10,13 +10,14 @@ fn test_invalid_files() {
 
     // just make sure that the list command can deal with invalid files without panic-ing
     let test = TestEnvironment::new("invalid-files", "invalid-active");
+    let env: Rc<dyn Environment> = test.clone();
     test.populate_active_device("invalid-uuid-value", PARENT, MDEV_TYPE);
-    let result = crate::list_command(&test, false, false, false, None, None);
+    let result = crate::list_command(env.clone(), false, false, false, None, None);
     assert!(result.is_ok());
 
     let test = TestEnvironment::new("invalid-files", "invalid-defined");
     test.populate_defined_device("invalid-uuid-value", PARENT, "device.json");
-    let result = crate::list_command(&test, true, false, false, None, None);
+    let result = crate::list_command(env.clone(), true, false, false, None, None);
     assert!(result.is_ok());
 }
 
@@ -29,20 +30,21 @@ fn test_list_helper<F>(
     parent: Option<String>,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(&Rc<TestEnvironment>),
 {
     use crate::list_command_helper;
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
     let test = TestEnvironment::new("list", "default");
+    let env: Rc<dyn Environment> = test.clone();
 
     setupfn(&test);
 
-    let res = list_command_helper(&test, defined, false, verbose, uuid, parent.clone());
+    let res = list_command_helper(env.clone(), defined, false, verbose, uuid, parent.clone());
     if let Ok(output) = test.assert_result(res, expect, Some("json")) {
         test.compare_to_file(&format!("{}.text", subtest), &output);
     }
 
-    let res = list_command_helper(&test, defined, true, verbose, uuid, parent.clone());
+    let res = list_command_helper(env.clone(), defined, true, verbose, uuid, parent.clone());
     if let Ok(output) = test.assert_result(res, expect, Some("text")) {
         test.compare_to_file(&format!("{}.json", subtest), &output);
     }
@@ -85,7 +87,7 @@ fn test_list() {
     // now setup test environment with some active devices and some defined devices. Include
     // multiple parents, multiple types, some parents with multiple devices, some with same UUID on
     // different parents, etc
-    let setup = |test: &TestEnvironment| {
+    let setup = |test: &Rc<TestEnvironment>| {
         test.populate_active_device(UUID[0], PARENT[0], MDEV_TYPE[0]);
         test.populate_active_device(UUID[1], PARENT[1], MDEV_TYPE[1]);
         test.populate_defined_device(UUID[2], PARENT[0], "device2.json");

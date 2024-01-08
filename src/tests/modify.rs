@@ -20,10 +20,11 @@ fn test_modify_helper<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(Rc<TestEnvironment>),
 {
     use crate::modify_command;
     let test = TestEnvironment::new("modify", testname);
+    let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
     let jsonfile = match jsonfile {
@@ -31,11 +32,11 @@ fn test_modify_helper<F>(
         None => None,
     };
 
-    setupfn(&test);
+    setupfn(test.clone());
 
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
-        &test,
+        env.clone(),
         uuid,
         parent.clone(),
         mdev_type,
@@ -55,7 +56,7 @@ fn test_modify_helper<F>(
         return;
     }
 
-    let def = crate::get_defined_device(&test, uuid, parent.as_ref())
+    let def = crate::get_defined_device(env.clone(), uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     let path = def.persist_path().unwrap();
     assert!(path.exists());
@@ -82,10 +83,11 @@ fn test_modify_defined_active_helper<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(Rc<TestEnvironment>),
 {
     use crate::modify_command;
     let test = TestEnvironment::new("modify", testname);
+    let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
     let jsonfile = match jsonfile {
@@ -93,11 +95,11 @@ fn test_modify_defined_active_helper<F>(
         None => None,
     };
 
-    setupfn(&test);
+    setupfn(test.clone());
 
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
-        &test,
+        env.clone(),
         uuid,
         parent.clone(),
         mdev_type,
@@ -119,7 +121,7 @@ fn test_modify_defined_active_helper<F>(
         return;
     }
 
-    let def_active = crate::get_active_device(&test, uuid, parent.as_ref())
+    let def_active = crate::get_active_device(env.clone(), uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     assert!(def_active.active);
     let def_json = serde_json::to_string_pretty(
@@ -130,7 +132,7 @@ fn test_modify_defined_active_helper<F>(
     .expect("Couldn't get json from active device");
     test.compare_to_file(&format!("{}.active.expected", testname), &def_json);
 
-    let def = crate::get_defined_device(&test, uuid, parent.as_ref())
+    let def = crate::get_defined_device(env.clone(), uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     let path = def.persist_path().unwrap();
     assert!(path.exists());

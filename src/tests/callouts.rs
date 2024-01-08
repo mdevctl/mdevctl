@@ -9,12 +9,12 @@ fn test_invoke_callout<F>(
     mdev_type: &str,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(&Rc<TestEnvironment>),
 {
     let test = TestEnvironment::new("invoke-callout", testname);
     setupfn(&test);
 
-    let mut empty_mdev = MDev::new(&test, uuid);
+    let mut empty_mdev = MDev::new(test.clone(), uuid);
     empty_mdev.mdev_type = match mdev_type {
         "" => None,
         _ => Some(mdev_type.to_string()),
@@ -46,7 +46,7 @@ fn test_get_callout<F>(
     let test = TestEnvironment::new("get-callout", testname);
     setupfn(&test);
 
-    let mut empty_mdev = MDev::new(&test, uuid);
+    let mut empty_mdev = MDev::new(test.clone(), uuid);
     empty_mdev.mdev_type = match mdev_type {
         "" => None,
         _ => Some(mdev_type.to_string()),
