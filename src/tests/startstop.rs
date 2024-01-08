@@ -1,0 +1,512 @@
+use super::*;
+use std::{fs, path::PathBuf};
+use uuid::Uuid;
+
+fn test_start_command_callout<F>(
+    testname: &str,
+    expect: Expect,
+    uuid: Option<Uuid>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    force: bool,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("start", testname);
+    setupfn(&test);
+
+    use crate::start_command;
+    let res = start_command(&test, uuid, parent, mdev_type, None, force);
+    let _ = test.assert_result(res, expect, None);
+}
+
+fn test_start_helper<F>(
+    testname: &str,
+    expect_setup: Expect,
+    expect_execute: Expect,
+    uuid: Option<String>,
+    parent: Option<String>,
+    mdev_type: Option<String>,
+    jsonfile: Option<PathBuf>,
+    setupfn: F,
+) where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("start", testname);
+    setupfn(&test);
+    let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
+
+    let result = crate::start_command_helper(&test, uuid, parent, mdev_type, jsonfile);
+
+    if let Ok(mut dev) = test.assert_result(result, expect_setup, Some("setup command")) {
+        let result = dev.start();
+        if test
+            .assert_result(result, expect_execute, Some("execute command"))
+            .is_err()
+        {
+            return;
+        }
+
+        let create_path = test
+            .parent_base()
+            .join(dev.parent.unwrap())
+            .join("mdev_supported_types")
+            .join(dev.mdev_type.unwrap())
+            .join("create");
+        assert!(create_path.exists());
+        if uuid.is_some() {
+            assert_eq!(uuid.unwrap(), dev.uuid);
+        }
+        let contents = fs::read_to_string(create_path).expect("Unable to read 'create' file");
+        assert_eq!(dev.uuid.hyphenated().to_string(), contents);
+    }
+}
+
+#[test]
+fn test_start() {
+    init();
+
+    const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+    const PARENT: &str = "0000:00:03.0";
+    const PARENT2: &str = "0000:00:02.0";
+    const PARENT3: &str = "0000:2b:00.0";
+    const MDEV_TYPE: &str = "arbitrary_type";
+
+    test_start_helper(
+        "uuid-type-parent",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+    test_start_helper(
+        "no-uuid",
+        Expect::Pass,
+        Expect::Pass,
+        None,
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+    test_start_helper(
+        "no-uuid-no-parent",
+        Expect::Fail(None),
+        Expect::Fail(None),
+        None,
+        None,
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+    test_start_helper(
+        "no-uuid-no-type",
+        Expect::Fail(None),
+        Expect::Fail(None),
+        None,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+    test_start_helper(
+        "no-parent",
+        Expect::Fail(None),
+        Expect::Fail(None),
+        Some(UUID.to_string()),
+        None,
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |_| {},
+    );
+    // should fail if there is no defined device with the given uuid
+    test_start_helper(
+        "no-type",
+        Expect::Fail(None),
+        Expect::Fail(None),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        None,
+        None,
+        |_| {},
+    );
+    // should pass if there is a defined device with the given uuid
+    test_start_helper(
+        "no-type-defined",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+    test_start_helper(
+        "no-type-parent-defined",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        None,
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+    test_start_helper(
+        "defined-with-type",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+    // if there are multiple defined devices with the same UUID, must disambiguate with parent
+    test_start_helper(
+        "defined-multiple-underspecified",
+        Expect::Fail(None),
+        Expect::Fail(None),
+        Some(UUID.to_string()),
+        None,
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+    test_start_helper(
+        "defined-multiple",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        None,
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+        },
+    );
+    // test specifying a uuid and a parent matching an existing defined device but with a different
+    // type. See https://github.com/mdevctl/mdevctl/issues/38
+    test_start_helper(
+        "defined-diff-type",
+        Expect::Fail(None),
+        Expect::Fail(None),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some("wrong-type".to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+        },
+    );
+    test_start_helper(
+        "already-running",
+        Expect::Pass,
+        Expect::Fail(None),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        },
+    );
+    test_start_helper(
+        "no-instances",
+        Expect::Pass,
+        Expect::Fail(None),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 0, "vfio-pci", "testdev", None);
+        },
+    );
+
+    test_start_helper(
+        "uuid-type-parent",
+        Expect::Pass,
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+
+    test_start_command_callout(
+        "defined-multiple-callout-success",
+        Expect::Pass,
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc0.sh");
+        },
+    );
+    test_start_command_callout(
+        "defined-multiple-callout-fail",
+        Expect::Fail(None),
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    test_start_command_callout(
+        "defined-multiple-callout-fail-force",
+        Expect::Pass,
+        Uuid::parse_str(UUID).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        true,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_parent_device(PARENT2, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT2, "defined.json");
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    test_start_helper(
+        "missing-parent",
+        Expect::Pass,
+        Expect::Fail(Some(
+            format!("Unable to find parent device '{}'", PARENT).as_str(),
+        )),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |_| {},
+    );
+    test_start_helper(
+        "parent-case",
+        Expect::Pass,
+        Expect::Fail(Some(
+            format!(
+                "Unable to find parent device '{}'. Did you mean '{}'?",
+                PARENT3.to_string().to_uppercase(),
+                PARENT3.to_string()
+            )
+            .as_str(),
+        )),
+        Some(UUID.to_string()),
+        Some(PARENT3.to_string().to_uppercase()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        |test| {
+            test.populate_parent_device(PARENT3, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+        },
+    );
+
+    // TODO: test attributes -- difficult because executing the 'start' command by writing to
+    // the 'create' file in sysfs does not automatically create the device file structure in
+    // the temporary test environment, so writing the sysfs attribute files fails.
+
+    // test start with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
+    test_start_command_callout(
+        "start-single-with-version-callout-pass",
+        Expect::Pass,
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_start_command_callout(
+        "start-single-with-version-callout-fail",
+        Expect::Fail(None),
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+    test_start_command_callout(
+        "start-with-version-callout-multiple-with-version-pass",
+        Expect::Pass,
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_start_command_callout(
+        "start-with-version-callout-multiple-with-version-pass2",
+        Expect::Pass,
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc1.sh"); // no versioning error
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_start_command_callout(
+        "start-with-version-callout-multiple-with-version-fail",
+        Expect::Fail(None),
+        Uuid::parse_str(UUID_VER).ok(),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID_VER, PARENT, "defined.json");
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning error
+        },
+    );
+}
+
+fn test_stop_helper<F>(testname: &str, expect: Expect, uuid: &str, force: bool, setupfn: F)
+where
+    F: Fn(&TestEnvironment),
+{
+    let test = TestEnvironment::new("stop", testname);
+    setupfn(&test);
+
+    let res = crate::stop_command(&test, Uuid::parse_str(uuid).unwrap(), force);
+
+    if let Ok(_) = test.assert_result(res, expect, None) {
+        let remove_path = test.mdev_base().join(uuid).join("remove");
+        assert!(remove_path.exists());
+        let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
+        assert_eq!("1", contents);
+    }
+}
+
+#[test]
+fn test_stop() {
+    init();
+
+    const UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
+    const PARENT: &str = "0000:00:03.0";
+    const MDEV_TYPE: &str = "arbitrary_type";
+
+    test_stop_helper("default", Expect::Pass, UUID, false, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE)
+    });
+    test_stop_helper("callout-success", Expect::Pass, UUID, false, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        t.populate_callout_script("rc0.sh")
+    });
+    test_stop_helper("callout-fail", Expect::Fail(None), UUID, false, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        t.populate_callout_script("rc1.sh")
+    });
+    test_stop_helper("callout-fail-force", Expect::Pass, UUID, true, |t| {
+        t.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        t.populate_callout_script("rc1.sh")
+    });
+
+    // test start with versioning callouts
+    // uuid=11111111-1111-0000-0000-000000000000 has a supported version
+    const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
+    test_stop_helper(
+        "stop-single-callout-with-version-all-pass",
+        Expect::Pass,
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_stop_helper(
+        "stop-single-callout-with-version-all-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("ver-rc1.sh"); // versioning
+        },
+    );
+    test_stop_helper(
+        "stop-single-callouts-mix-all-pass",
+        Expect::Pass,
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("rc1.sh"); // no versioning
+            test.populate_callout_script("ver-rc0.sh"); // versioning
+        },
+    );
+    test_stop_helper(
+        "stop-single-callouts-mix-all-fail",
+        Expect::Fail(None),
+        UUID_VER,
+        false,
+        |test| {
+            test.populate_active_device(UUID_VER, PARENT, MDEV_TYPE);
+            test.populate_callout_script("rc0.sh"); // no versioning
+            test.populate_callout_script("ver-rc1.sh"); // versioning
+        },
+    );
+}
