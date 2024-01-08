@@ -16,7 +16,7 @@ use crate::environment::Environment;
 use crate::logger::logger;
 use crate::mdev::MDev;
 
-const TEST_DATA_DIR: &str = "tests";
+const TEST_DATA_DIR: &str = "testdata";
 
 fn init() {
     let _ = logger().is_test(true).try_init();
