@@ -260,7 +260,7 @@ impl CalloutScriptCache {
         }
     }
 
-    fn lookup_callout_script(&self, parent: &str, mdev_type: &str) -> Option<CalloutScriptInfo> {
+    fn lookup_cached_script(&self, parent: &str, mdev_type: &str) -> Option<CalloutScriptInfo> {
         self.callouts
             .iter()
             .find(|cs| cs.mdev_type == mdev_type && cs.parent == parent)
@@ -286,7 +286,7 @@ impl CalloutScriptCache {
             }
         };
         debug!("Looking up callout script for mdev type '{:?}'", mdev_type);
-        match self.lookup_callout_script(&parent, &mdev_type) {
+        match self.lookup_cached_script(&parent, &mdev_type) {
             Some(cs) => {
                 debug!(
                     "Callout script lookup for mdev type '{:?}' and parent {:?} successful",
