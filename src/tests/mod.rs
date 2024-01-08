@@ -193,8 +193,7 @@ impl TestEnvironment {
 
     fn compare_to_file(&self, filename: &str, actual: &str) {
         let path = self.datapath.join(filename);
-        let flag = get_flag(REGEN_FLAG);
-        if flag {
+        if get_flag(REGEN_FLAG) {
             regen(&path, actual).expect("Failed to regenerate expected output");
         }
         let expected = fs::read_to_string(path).unwrap_or_else(|e| {
@@ -249,15 +248,10 @@ impl TestEnvironment {
 }
 
 fn get_flag(varname: &str) -> bool {
-    match env::var(varname) {
-        Err(_) => {
-            return false;
-        }
-        Ok(s) => match s.trim().parse::<i32>() {
-            Err(_) => return false,
-            Ok(n) => return n > 0,
-        },
-    }
+    env::var(varname).map_or(false, |s| match s.trim().parse::<i32>() {
+        Ok(n) if n > 0 => true,
+        _ => false,
+    })
 }
 
 fn regen(filename: &PathBuf, data: &str) -> Result<()> {
