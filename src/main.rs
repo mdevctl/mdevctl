@@ -407,7 +407,7 @@ fn get_defined_device<'a>(
                 uuid.hyphenated().to_string()
             ));
         }
-        Ok(children.get(0).unwrap().clone())
+        Ok(children.first().unwrap().clone())
     }
 }
 
