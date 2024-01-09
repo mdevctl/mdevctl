@@ -7,17 +7,18 @@ fn test_invalid_files() {
 
     const PARENT: &str = "0000:00:03.0";
     const MDEV_TYPE: &str = "arbitrary_type";
+    let mut outbuf: Vec<u8> = Default::default();
 
     // just make sure that the list command can deal with invalid files without panic-ing
     let test = TestEnvironment::new("invalid-files", "invalid-active");
     let env: Rc<dyn Environment> = test.clone();
     test.populate_active_device("invalid-uuid-value", PARENT, MDEV_TYPE);
-    let result = crate::list_command(env.clone(), false, false, false, None, None);
+    let result = crate::list_command(env.clone(), false, false, false, None, None, &mut outbuf);
     assert!(result.is_ok());
 
     let test = TestEnvironment::new("invalid-files", "invalid-defined");
     test.populate_defined_device("invalid-uuid-value", PARENT, "device.json");
-    let result = crate::list_command(env.clone(), true, false, false, None, None);
+    let result = crate::list_command(env.clone(), true, false, false, None, None, &mut outbuf);
     assert!(result.is_ok());
 }
 
@@ -32,21 +33,41 @@ fn test_list_helper<F>(
 ) where
     F: Fn(&Rc<TestEnvironment>),
 {
-    use crate::list_command_helper;
+    use crate::list_command;
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
     let test = TestEnvironment::new("list", "default");
     let env: Rc<dyn Environment> = test.clone();
 
     setupfn(&test);
 
-    let res = list_command_helper(env.clone(), defined, false, verbose, uuid, parent.clone());
-    if let Ok(output) = test.assert_result(res, expect, Some("json")) {
-        test.compare_to_file(&format!("{}.text", subtest), &output);
+    let mut outbuf: Vec<u8> = Default::default();
+    let res = list_command(
+        env.clone(),
+        defined,
+        false,
+        verbose,
+        uuid,
+        parent.clone(),
+        &mut outbuf,
+    );
+    if let Ok(_) = test.assert_result(res, expect, Some("json")) {
+        let actual = String::from_utf8(outbuf).expect("failed to convert list output from utf8");
+        test.compare_to_file(&format!("{}.text", subtest), &actual);
     }
 
-    let res = list_command_helper(env.clone(), defined, true, verbose, uuid, parent.clone());
-    if let Ok(output) = test.assert_result(res, expect, Some("text")) {
-        test.compare_to_file(&format!("{}.json", subtest), &output);
+    let mut outbuf: Vec<u8> = Default::default();
+    let res = list_command(
+        env.clone(),
+        defined,
+        true,
+        verbose,
+        uuid,
+        parent.clone(),
+        &mut outbuf,
+    );
+    if let Ok(_) = test.assert_result(res, expect, Some("text")) {
+        let actual = String::from_utf8(outbuf).expect("failed to convert list output from utf8");
+        test.compare_to_file(&format!("{}.json", subtest), &actual);
     }
 }
 
