@@ -58,6 +58,10 @@ impl Environment for TestEnvironment {
             .unwrap()
             .find_versioned_script(dev);
     }
+
+    fn as_env(self: Rc<Self>) -> Rc<dyn Environment> {
+        self.clone()
+    }
 }
 
 impl TestEnvironment {

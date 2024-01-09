@@ -56,13 +56,16 @@ fn test_modify_helper<F>(
         return;
     }
 
-    let def = crate::get_defined_device(env.clone(), uuid, parent.as_ref())
+    let def = test
+        .clone()
+        .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     let path = def.persist_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    test.compare_to_file(&format!("{}.expected", testname), &filecontents);
+    test.clone()
+        .compare_to_file(&format!("{}.expected", testname), &filecontents);
 }
 
 fn test_modify_defined_active_helper<F>(
@@ -121,7 +124,9 @@ fn test_modify_defined_active_helper<F>(
         return;
     }
 
-    let def_active = crate::get_active_device(env.clone(), uuid, parent.as_ref())
+    let def_active = test
+        .clone()
+        .get_active_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     assert!(def_active.active);
     let def_json = serde_json::to_string_pretty(
@@ -130,15 +135,19 @@ fn test_modify_defined_active_helper<F>(
             .expect("Couldn't get json from active device"),
     )
     .expect("Couldn't get json from active device");
-    test.compare_to_file(&format!("{}.active.expected", testname), &def_json);
+    test.clone()
+        .compare_to_file(&format!("{}.active.expected", testname), &def_json);
 
-    let def = crate::get_defined_device(env.clone(), uuid, parent.as_ref())
+    let def = test
+        .clone()
+        .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     let path = def.persist_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    test.compare_to_file(&format!("{}.defined.expected", testname), &filecontents);
+    test.clone()
+        .compare_to_file(&format!("{}.defined.expected", testname), &filecontents);
 }
 
 #[test]

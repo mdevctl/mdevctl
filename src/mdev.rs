@@ -86,7 +86,7 @@ impl MDev {
     pub fn load_from_sysfs(&mut self) -> Result<()> {
         debug!("Loading device '{:?}' from sysfs", self.uuid);
         if !self.path().exists() {
-            debug!("loaded device {:?}", self);
+            debug!("device did not exist in sysfs: {:?}", self);
             return Ok(());
         }
 
