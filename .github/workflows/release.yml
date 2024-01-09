@@ -6,7 +6,7 @@ jobs:
   upload-vendor-sources:
     env:
       VENDOR_TARBALL: mdevctl-${{ github.event.release.name }}-vendor.tar.gz
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     name: Attach vendor source tarball
     runs-on: ubuntu-latest
     steps:
@@ -19,7 +19,7 @@ jobs:
       - name: package vendor sources
         run: tar -czvf ${VENDOR_TARBALL} vendor/
       - name: upload vendor source package
-        run: hub release edit -m "" -a "${VENDOR_TARBALL}" "${{ github.event.release.tag_name }}"
+        run: gh release upload "${{ github.event.release.tag_name }}" "${VENDOR_TARBALL}"
   publish-crate:
     name: Publish to crates.io
     runs-on: ubuntu-latest
