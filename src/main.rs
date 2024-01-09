@@ -492,13 +492,13 @@ fn list_command(
 }
 
 /// convert 'types' command arguments into a text output
-fn types_command_helper(
+fn types_command(
     env: Rc<dyn Environment>,
     parent: Option<String>,
     dumpjson: bool,
-) -> Result<String> {
+    output: &mut dyn std::io::Write,
+) -> Result<()> {
     let types = env.clone().get_supported_types(parent)?;
-    let mut output = String::new();
     debug!("{:?}", types);
     if dumpjson {
         let mut parents = serde_json::map::Map::new();
@@ -514,37 +514,35 @@ fn types_command_helper(
             0 => serde_json::json!([]),
             _ => serde_json::json!([parents]),
         };
-        let jsonstr = serde_json::to_string_pretty(&jsonval)
-            .map_err(|_e| anyhow!("Unable to serialize json"))?;
-        output.push_str(&jsonstr);
+        output.write(
+            serde_json::to_string_pretty(&jsonval)
+                .map_err(|_e| anyhow!("Unable to serialize json"))?
+                .as_bytes(),
+        )
     } else {
+        let mut text: String = Default::default();
         for (parent, children) in types {
-            let _ = writeln!(output, "{}", parent);
+            let _ = writeln!(text, "{}", parent);
             for child in children {
-                let _ = writeln!(output, "  {}", child.typename);
+                let _ = writeln!(text, "  {}", child.typename);
                 let _ = writeln!(
-                    output,
+                    text,
                     "    Available instances: {}",
                     child.available_instances
                 );
-                let _ = writeln!(output, "    Device API: {}", child.device_api);
+                let _ = writeln!(text, "    Device API: {}", child.device_api);
                 if !child.name.is_empty() {
-                    let _ = writeln!(output, "    Name: {}", child.name);
+                    let _ = writeln!(text, "    Name: {}", child.name);
                 }
                 if !child.description.is_empty() {
-                    let _ = writeln!(output, "    Description: {}", child.description);
+                    let _ = writeln!(text, "    Description: {}", child.description);
                 }
             }
         }
+        output.write(text.as_bytes())
     }
-    Ok(output)
-}
-
-/// Implementation of the `mdevctl types` command
-fn types_command(env: Rc<dyn Environment>, parent: Option<String>, dumpjson: bool) -> Result<()> {
-    let output = types_command_helper(env, parent, dumpjson)?;
-    println!("{}", output);
-    Ok(())
+    .map(|_| ())
+    .with_context(|| "Unable to write output")
 }
 
 /// Implementation of the `start-parent-mdevs` command
@@ -649,7 +647,9 @@ fn main() -> Result<()> {
                 list.parent,
                 &mut stdout(),
             ),
-            MdevctlCommands::Types { parent, dumpjson } => types_command(env, parent, dumpjson),
+            MdevctlCommands::Types { parent, dumpjson } => {
+                types_command(env, parent, dumpjson, &mut stdout())
+            }
             MdevctlCommands::StartParentMdevs { parent } => start_parent_mdevs_command(env, parent),
         },
     }
