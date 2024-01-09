@@ -12,6 +12,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::fs;
+use std::io::stdout;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::vec::Vec;
@@ -426,21 +427,8 @@ fn list_command(
     verbose: bool,
     uuid: Option<Uuid>,
     parent: Option<String>,
+    output: &mut dyn std::io::Write,
 ) -> Result<()> {
-    let output = list_command_helper(env, defined, dumpjson, verbose, uuid, parent)?;
-    println!("{}", output);
-    Ok(())
-}
-
-/// convert 'list' command arguments into a text output
-fn list_command_helper(
-    env: Rc<dyn Environment>,
-    defined: bool,
-    dumpjson: bool,
-    verbose: bool,
-    uuid: Option<Uuid>,
-    parent: Option<String>,
-) -> Result<String> {
     let mut devices: BTreeMap<String, Vec<MDev>>;
     if defined {
         devices = env
@@ -457,12 +445,16 @@ fn list_command_helper(
         v.sort_by_key(|e| e.uuid);
     }
 
-    let output = match dumpjson {
+    match dumpjson {
         true => {
             // if specified to a single device, output such that it can be piped into a config
             // file, else print entire heirarchy
             if uuid.is_none() || devices.values().flatten().count() > 1 {
-                format_json(devices)?
+                output.write(
+                    format_json(devices)
+                        .with_context(|| "Failed to format as JSON")?
+                        .as_bytes(),
+                )
             } else {
                 let jsonval = match devices.values().next() {
                     Some(children) => children
@@ -471,8 +463,11 @@ fn list_command_helper(
                         .to_json(false)?,
                     None => serde_json::json!([]),
                 };
-                serde_json::to_string_pretty(&jsonval)
-                    .map_err(|_e| anyhow!("Unable to serialize json"))?
+                output.write(
+                    serde_json::to_string_pretty(&jsonval)
+                        .with_context(|| "Unable to serialize json")?
+                        .as_bytes(),
+                )
             }
         }
         false => {
@@ -480,16 +475,20 @@ fn list_command_helper(
                 true => FormatType::Defined,
                 false => FormatType::Active,
             };
-            devices
-                .values()
-                // convert child vector into an iterator over the vector's elements
-                .flat_map(|v| v.iter())
-                // convert MDev elements to a text representation, filtering out errors
-                .flat_map(|d| d.to_text(ft, verbose))
-                .collect::<String>()
+            output.write(
+                devices
+                    .values()
+                    // convert child vector into an iterator over the vector's elements
+                    .flat_map(|v| v.iter())
+                    // convert MDev elements to a text representation, filtering out errors
+                    .flat_map(|d| d.to_text(ft, verbose))
+                    .collect::<String>()
+                    .as_bytes(),
+            )
         }
-    };
-    Ok(output)
+    }
+    .map(|_| ())
+    .with_context(|| "Failed to write data")
 }
 
 /// convert 'types' command arguments into a text output
@@ -598,6 +597,7 @@ fn main() -> Result<()> {
                 opts.verbose,
                 opts.uuid,
                 opts.parent,
+                &mut stdout(),
             )
         }
         _ => match MdevctlCommands::parse() {
@@ -647,6 +647,7 @@ fn main() -> Result<()> {
                 list.verbose,
                 list.uuid,
                 list.parent,
+                &mut stdout(),
             ),
             MdevctlCommands::Types { parent, dumpjson } => types_command(env, parent, dumpjson),
             MdevctlCommands::StartParentMdevs { parent } => start_parent_mdevs_command(env, parent),
