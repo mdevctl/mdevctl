@@ -6,19 +6,27 @@ fn test_types_helper(
     expect: Expect,
     parent: Option<String>,
 ) {
-    use crate::types_command_helper;
+    use crate::types_command;
     let env: Rc<dyn Environment> = test.clone();
 
     // test text output
-    let res = types_command_helper(env.clone(), parent.clone(), false);
-    if let Ok(output) = test.clone().assert_result(res, expect, Some("text")) {
-        test.compare_to_file(&format!("{}.text", subtest), &output);
+    let mut outbuf: Vec<u8> = Default::default();
+    let res = types_command(env.clone(), parent.clone(), false, &mut outbuf);
+    if let Ok(_) = test.clone().assert_result(res, expect, Some("text")) {
+        test.compare_to_file(
+            &format!("{}.text", subtest),
+            &String::from_utf8(outbuf).expect("invalid utf8 output"),
+        );
     }
 
     // test JSON output
-    let res = types_command_helper(env.clone(), parent.clone(), true);
-    if let Ok(output) = test.clone().assert_result(res, expect, Some("json")) {
-        test.compare_to_file(&format!("{}.json", subtest), &output);
+    let mut outbuf: Vec<u8> = Default::default();
+    let res = types_command(env.clone(), parent.clone(), true, &mut outbuf);
+    if let Ok(_) = test.clone().assert_result(res, expect, Some("json")) {
+        test.compare_to_file(
+            &format!("{}.json", subtest),
+            &String::from_utf8(outbuf).expect("invalid utf8 output"),
+        );
     }
 }
 
