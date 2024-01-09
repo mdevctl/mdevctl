@@ -12,7 +12,6 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 use std::fs;
-use std::io::Read;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::vec::Vec;
@@ -78,7 +77,9 @@ fn define_command_helper(
         let parent = parent
             .ok_or_else(|| anyhow!("Parent device required to define device via {:?}", jsonfile))?;
 
-        let devs = defined_devices(env, Some(&uuid), Some(&parent))?;
+        let devs = env
+            .clone()
+            .get_defined_devices(Some(&uuid), Some(&parent))?;
         if !devs.is_empty() {
             return Err(anyhow!(
                 "Cowardly refusing to overwrite existing config for {}/{}",
@@ -170,7 +171,9 @@ fn undefine_command(
 ) -> Result<()> {
     debug!("Undefining mdev {:?}", uuid);
     let mut failed = false;
-    let devs = defined_devices(env, Some(&uuid), parent.as_ref())?;
+    let devs = env
+        .clone()
+        .get_defined_devices(Some(&uuid), parent.as_ref())?;
     if devs.is_empty() {
         return Err(anyhow!("No devices match the specified uuid"));
     }
@@ -242,7 +245,7 @@ fn modify_command(
         if manual {
             return Err(anyhow!("'manual' cannot be changed on active mdev"));
         }
-        let mut act_dev = get_active_device(env.clone(), uuid, parent.as_ref())?;
+        let mut act_dev = env.clone().get_active_device(uuid, parent.as_ref())?;
         if let Some(f) = jsonfile {
             let act_parent = act_dev
                 .parent
@@ -262,7 +265,9 @@ fn modify_command(
 
         if defined {
             // live and stored modify - defined dev config exists and types match
-            let def_dev = get_defined_device(env, uuid, act_dev.parent.as_ref())?;
+            let def_dev = env
+                .clone()
+                .get_defined_device(uuid, act_dev.parent.as_ref())?;
             if def_dev.mdev_type != act_dev.mdev_type {
                 return Err(anyhow!("'type' of active and defined mdev does not match"));
             }
@@ -283,7 +288,7 @@ fn modify_command(
                 .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
             dev = dev_from_jsonfile(env.clone(), uuid, parent, f)?;
         } else {
-            dev = get_defined_device(env, uuid, parent.as_ref())?;
+            dev = env.clone().get_defined_device(uuid, parent.as_ref())?;
             if mdev_type.is_some() {
                 dev.mdev_type = mdev_type;
             }
@@ -346,7 +351,9 @@ fn start_command_helper(
         _ => {
             // if the user specified a uuid, check to see if they're referring to a defined device
             if uuid.is_some() {
-                let devs = defined_devices(env.clone(), uuid.as_ref(), parent.as_ref())?;
+                let devs = env
+                    .clone()
+                    .get_defined_devices(uuid.as_ref(), parent.as_ref())?;
                 let n = devs.values().flatten().count();
                 match n.cmp(&1) {
                     Ordering::Greater => {
@@ -428,245 +435,6 @@ fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()>
     callout(&mut dev).invoke(Action::Stop, force, |c| c.dev.stop())
 }
 
-/// convenience function to lookup a defined device by uuid and parent
-fn get_defined_device(
-    env: Rc<dyn Environment>,
-    uuid: Uuid,
-    parent: Option<&String>,
-) -> Result<MDev> {
-    let devs = defined_devices(env, Some(&uuid), parent)?;
-    if devs.is_empty() {
-        match parent {
-            None => Err(anyhow!(
-                "Mediated device {} is not defined",
-                uuid.hyphenated().to_string()
-            )),
-            Some(p) => Err(anyhow!(
-                "Mediated device {}/{} is not defined",
-                p,
-                uuid.hyphenated().to_string()
-            )),
-        }
-    } else if devs.len() > 1 {
-        match parent {
-            None => Err(anyhow!(
-                "Multiple definitions found for {}, specify a parent",
-                uuid.hyphenated().to_string()
-            )),
-            Some(p) => Err(anyhow!(
-                "Multiple definitions found for {}/{}",
-                p,
-                uuid.hyphenated().to_string()
-            )),
-        }
-    } else {
-        let (parent, children) = devs.iter().next().unwrap();
-        if children.len() > 1 {
-            return Err(anyhow!(
-                "Multiple definitions found for {}/{}",
-                parent,
-                uuid.hyphenated().to_string()
-            ));
-        }
-        Ok(children.first().unwrap().clone())
-    }
-}
-
-/// Get a map of all defined devices, optionally filtered by uuid and parent
-fn defined_devices(
-    env: Rc<dyn Environment>,
-    uuid: Option<&Uuid>,
-    parent: Option<&String>,
-) -> Result<BTreeMap<String, Vec<MDev>>> {
-    let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
-    debug!(
-        "Looking up defined mdevs: uuid={:?}, parent={:?}",
-        uuid, parent
-    );
-    for parentpath in env.config_base().read_dir()?.skip_while(|x| match x {
-        Ok(d) => d.path() == env.scripts_base(),
-        _ => false,
-    }) {
-        let parentpath = parentpath?;
-        let parentname = parentpath.file_name();
-        let parentname = parentname.to_str().unwrap();
-        if (parent.is_some() && parent.unwrap() != parentname) || !parentpath.metadata()?.is_dir() {
-            debug!("Ignoring child devices for parent {}", parentname);
-            continue;
-        }
-
-        let mut childdevices = Vec::new();
-
-        match parentpath.path().read_dir() {
-            Ok(res) => {
-                for child in res {
-                    let child = child?;
-                    match child.metadata() {
-                        Ok(metadata) => {
-                            if !metadata.is_file() {
-                                continue;
-                            }
-                        }
-                        Err(e) => {
-                            warn!("unable to access file {:?}: {}", child.path(), e);
-                            continue;
-                        }
-                    }
-
-                    let path = child.path();
-                    let basename = path.file_name().unwrap().to_str().unwrap();
-                    let u = Uuid::parse_str(basename);
-                    if u.is_err() {
-                        warn!("Can't determine uuid for file '{}'", basename);
-                        continue;
-                    }
-                    let u = u.unwrap();
-
-                    debug!("found mdev {:?}", u);
-                    if uuid.is_some() && uuid != Some(&u) {
-                        debug!(
-                            "Ignoring device {} because it doesn't match uuid {}",
-                            u,
-                            uuid.unwrap()
-                        );
-                        continue;
-                    }
-
-                    match fs::File::open(&path) {
-                        Ok(mut f) => {
-                            let mut contents = String::new();
-                            f.read_to_string(&mut contents)?;
-                            let val = serde_json::from_str(&contents)?;
-                            let mut dev = MDev::new(env.clone(), u);
-                            dev.load_from_json(parentname.to_string(), &val)?;
-                            dev.load_from_sysfs()?;
-
-                            childdevices.push(dev);
-                        }
-                        Err(e) => {
-                            warn!("Unable to open file {:?}: {}", path, e);
-                            continue;
-                        }
-                    };
-                }
-            }
-            Err(e) => warn!("Unable to read directory {:?}: {}", parentpath.path(), e),
-        }
-        if !childdevices.is_empty() {
-            devices.insert(parentname.to_string(), childdevices);
-        }
-    }
-    Ok(devices)
-}
-
-/// convenience function to lookup an active device by uuid and parent
-fn get_active_device(
-    env: Rc<dyn Environment>,
-    uuid: Uuid,
-    parent: Option<&String>,
-) -> Result<MDev> {
-    let devs = active_devices(env, Some(&uuid), parent)?;
-    if devs.is_empty() {
-        match parent {
-            None => Err(anyhow!(
-                "Mediated device {} is not active",
-                uuid.hyphenated().to_string()
-            )),
-            Some(p) => Err(anyhow!(
-                "Mediated device {}/{} is not active",
-                p,
-                uuid.hyphenated().to_string()
-            )),
-        }
-    } else if devs.len() > 1 {
-        Err(anyhow!(
-            "Multiple parents found for {}. System error?",
-            uuid.hyphenated().to_string()
-        ))
-    } else {
-        let (parent, children) = devs.iter().next().unwrap();
-        if children.len() > 1 {
-            return Err(anyhow!(
-                "Multiple definitions found for {}/{}",
-                parent,
-                uuid.hyphenated().to_string()
-            ));
-        }
-        Ok(children.first().unwrap().clone())
-    }
-}
-
-/// Get a map of all active devices, optionally filtered by uuid and parent
-fn active_devices(
-    env: Rc<dyn Environment>,
-    uuid: Option<&Uuid>,
-    parent: Option<&String>,
-) -> Result<BTreeMap<String, Vec<MDev>>> {
-    let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
-    debug!(
-        "Looking up active mdevs: uuid={:?}, parent={:?}",
-        uuid, parent
-    );
-    if let Ok(dir) = env.mdev_base().read_dir() {
-        for dir_dev in dir {
-            let dir_dev = dir_dev?;
-            let fname = dir_dev.file_name();
-            let basename = fname.to_str().unwrap();
-            debug!("found defined mdev {}", basename);
-            let u = Uuid::parse_str(basename);
-
-            if u.is_err() {
-                warn!("Can't determine uuid for file '{}'", basename);
-                continue;
-            }
-            let u = u.unwrap();
-
-            if uuid.is_some() && uuid != Some(&u) {
-                debug!(
-                    "Ignoring device {} because it doesn't match uuid {}",
-                    u,
-                    uuid.unwrap()
-                );
-                continue;
-            }
-
-            let mut dev = MDev::new(env.clone(), u);
-            if dev.load_from_sysfs().is_ok() {
-                if parent.is_some() && (parent != dev.parent.as_ref()) {
-                    debug!(
-                        "Ignoring device {} because it doesn't match parent {}",
-                        dev.uuid,
-                        parent.as_ref().unwrap()
-                    );
-                    continue;
-                }
-
-                // retrieve autostart from persisted mdev if possible
-                let mut per_dev = MDev::new(env.clone(), u);
-                per_dev.parent = dev.parent.clone();
-                if per_dev.load_definition().is_ok() {
-                    dev.autostart = per_dev.autostart;
-                }
-
-                // if the device is supported by a callout script that gets attributes, show
-                // those in the output
-                let mut c = callout(&mut dev);
-                if let Ok(attrs) = c.get_attributes() {
-                    let _ = c.dev.add_attributes(&attrs);
-                }
-
-                let devparent = dev.parent()?;
-                if !devices.contains_key(devparent) {
-                    devices.insert(devparent.clone(), Vec::new());
-                };
-
-                devices.get_mut(devparent).unwrap().push(dev);
-            };
-        }
-    }
-    Ok(devices)
-}
-
 /// Implementation of the `mdevctl list` command
 fn list_command(
     env: Rc<dyn Environment>,
@@ -692,9 +460,13 @@ fn list_command_helper(
 ) -> Result<String> {
     let mut devices: BTreeMap<String, Vec<MDev>>;
     if defined {
-        devices = defined_devices(env, uuid.as_ref(), parent.as_ref())?;
+        devices = env
+            .clone()
+            .get_defined_devices(uuid.as_ref(), parent.as_ref())?;
     } else {
-        devices = active_devices(env, uuid.as_ref(), parent.as_ref())?;
+        devices = env
+            .clone()
+            .get_active_devices(uuid.as_ref(), parent.as_ref())?;
     }
 
     // ensure that devices are sorted in a stable order
@@ -737,82 +509,13 @@ fn list_command_helper(
     Ok(output)
 }
 
-/// Get a map of all mediated device types that are supported on this machine
-fn supported_types(
-    env: Rc<dyn Environment>,
-    parent: Option<String>,
-) -> Result<BTreeMap<String, Vec<MDevType>>> {
-    debug!("Finding supported mdev types");
-    let mut types: BTreeMap<String, Vec<MDevType>> = BTreeMap::new();
-
-    if let Ok(dir) = env.parent_base().read_dir() {
-        for parentpath in dir {
-            let parentpath = parentpath?;
-            let parentname = parentpath.file_name();
-            let parentname = parentname.to_str().unwrap();
-            debug!("Looking for supported types for device {}", parentname);
-            if parent.is_some() && parent.as_ref().unwrap() != parentname {
-                debug!("Ignoring types for parent {}", parentname);
-                continue;
-            }
-
-            let mut childtypes = Vec::new();
-            let mut parentpath = parentpath.path();
-            parentpath.push("mdev_supported_types");
-            for child in parentpath.read_dir()? {
-                let child = child?;
-                if !child.metadata()?.is_dir() {
-                    continue;
-                }
-
-                let mut t = MDevType::new();
-                t.parent = parentname.to_string();
-
-                let mut path = child.path();
-                t.typename = path.file_name().unwrap().to_str().unwrap().to_string();
-                debug!("found mdev type {}", t.typename);
-
-                path.push("available_instances");
-                debug!("Checking available instances: {:?}", path);
-                t.available_instances = fs::read_to_string(&path)?.trim().parse()?;
-
-                path.pop();
-                path.push("device_api");
-                t.device_api = fs::read_to_string(&path)?.trim().to_string();
-
-                path.pop();
-                path.push("name");
-                if path.exists() {
-                    t.name = fs::read_to_string(&path)?.trim().to_string();
-                }
-
-                path.pop();
-                path.push("description");
-                if path.exists() {
-                    t.description = fs::read_to_string(&path)?
-                        .trim()
-                        .replace('\n', ", ")
-                        .to_string();
-                }
-
-                childtypes.push(t);
-            }
-            types.insert(parentname.to_string(), childtypes);
-        }
-    }
-    for v in types.values_mut() {
-        v.sort_by(|a, b| a.typename.cmp(&b.typename));
-    }
-    Ok(types)
-}
-
 /// convert 'types' command arguments into a text output
 fn types_command_helper(
     env: Rc<dyn Environment>,
     parent: Option<String>,
     dumpjson: bool,
 ) -> Result<String> {
-    let types = supported_types(env, parent)?;
+    let types = env.clone().get_supported_types(parent)?;
     let mut output = String::new();
     debug!("{:?}", types);
     if dumpjson {
@@ -864,7 +567,7 @@ fn types_command(env: Rc<dyn Environment>, parent: Option<String>, dumpjson: boo
 
 /// Implementation of the `start-parent-mdevs` command
 fn start_parent_mdevs_command(env: Rc<dyn Environment>, parent: String) -> Result<()> {
-    let mut devs = defined_devices(env, None, Some(&parent))?;
+    let mut devs = env.clone().get_defined_devices(None, Some(&parent))?;
     if devs.is_empty() {
         // nothing to do
         return Ok(());

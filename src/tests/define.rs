@@ -341,7 +341,8 @@ fn test_undefine_helper<F>(
         return;
     }
 
-    let devs = crate::defined_devices(env.clone(), Some(&uuid), parent.as_ref())
+    let devs = test
+        .get_defined_devices(Some(&uuid), parent.as_ref())
         .expect("failed to query defined devices");
     assert!(devs.is_empty());
 }
