@@ -2,26 +2,6 @@ use super::*;
 use std::{fs, path::PathBuf};
 use uuid::Uuid;
 
-fn test_start_command_callout<F>(
-    testname: &str,
-    expect: Expect,
-    uuid: Option<Uuid>,
-    parent: Option<String>,
-    mdev_type: Option<String>,
-    force: bool,
-    setupfn: F,
-) where
-    F: Fn(Rc<TestEnvironment>),
-{
-    let test = TestEnvironment::new("start", testname);
-    let env: Rc<dyn Environment> = test.clone();
-    setupfn(test.clone());
-
-    use crate::start_command;
-    let res = start_command(env, uuid, parent, mdev_type, None, force);
-    let _ = test.assert_result(res, expect, None);
-}
-
 fn test_start_helper<F>(
     testname: &str,
     expect: Expect,
@@ -263,12 +243,13 @@ fn test_start() {
         },
     );
 
-    test_start_command_callout(
+    test_start_helper(
         "defined-multiple-callout-success",
         Expect::Pass,
-        Uuid::parse_str(UUID).ok(),
+        Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -278,12 +259,13 @@ fn test_start() {
             test.populate_callout_script("rc0.sh");
         },
     );
-    test_start_command_callout(
+    test_start_helper(
         "defined-multiple-callout-fail",
         Expect::Fail(None),
-        Uuid::parse_str(UUID).ok(),
+        Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -293,12 +275,13 @@ fn test_start() {
             test.populate_callout_script("rc1.sh");
         },
     );
-    test_start_command_callout(
+    test_start_helper(
         "defined-multiple-callout-fail-force",
         Expect::Pass,
-        Uuid::parse_str(UUID).ok(),
+        Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         true,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -347,12 +330,13 @@ fn test_start() {
     // test start with versioning callouts
     // uuid=11111111-1111-0000-0000-000000000000 has a supported version
     const UUID_VER: &str = "11111111-1111-0000-0000-000000000000";
-    test_start_command_callout(
+    test_start_helper(
         "start-single-with-version-callout-pass",
         Expect::Pass,
-        Uuid::parse_str(UUID_VER).ok(),
+        Some(UUID_VER.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -360,12 +344,13 @@ fn test_start() {
             test.populate_callout_script("ver-rc0.sh"); // versioning
         },
     );
-    test_start_command_callout(
+    test_start_helper(
         "start-single-with-version-callout-fail",
         Expect::Fail(None),
-        Uuid::parse_str(UUID_VER).ok(),
+        Some(UUID_VER.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -373,12 +358,13 @@ fn test_start() {
             test.populate_callout_script("ver-rc1.sh"); // versioning error
         },
     );
-    test_start_command_callout(
+    test_start_helper(
         "start-with-version-callout-multiple-with-version-pass",
         Expect::Pass,
-        Uuid::parse_str(UUID_VER).ok(),
+        Some(UUID_VER.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -387,12 +373,13 @@ fn test_start() {
             test.populate_callout_script("ver-rc0.sh"); // versioning
         },
     );
-    test_start_command_callout(
+    test_start_helper(
         "start-with-version-callout-multiple-with-version-pass2",
         Expect::Pass,
-        Uuid::parse_str(UUID_VER).ok(),
+        Some(UUID_VER.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
@@ -401,12 +388,13 @@ fn test_start() {
             test.populate_callout_script("ver-rc0.sh"); // versioning
         },
     );
-    test_start_command_callout(
+    test_start_helper(
         "start-with-version-callout-multiple-with-version-fail",
         Expect::Fail(None),
-        Uuid::parse_str(UUID_VER).ok(),
+        Some(UUID_VER.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
+        None,
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
