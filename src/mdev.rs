@@ -41,6 +41,23 @@ impl MDev {
         }
     }
 
+    pub fn new_from_jsonfile(
+        env: Rc<dyn Environment>,
+        uuid: Uuid,
+        parent: String,
+        jsonfile: PathBuf,
+    ) -> Result<Self> {
+        let _ = std::fs::File::open(&jsonfile)
+            .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
+        let filecontents = fs::read_to_string(&jsonfile)
+            .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
+        let jsonval = serde_json::from_str(&filecontents)?;
+
+        let mut d = MDev::new(env, uuid);
+        d.load_from_json(parent, &jsonval)?;
+        Ok(d)
+    }
+
     pub fn path(&self) -> PathBuf {
         let mut p = self.env.mdev_base();
         p.push(self.uuid.hyphenated().to_string());

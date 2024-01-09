@@ -199,23 +199,6 @@ fn undefine_command(
     Ok(())
 }
 
-fn dev_from_jsonfile(
-    env: Rc<dyn Environment>,
-    uuid: Uuid,
-    parent: String,
-    jsonfile: PathBuf,
-) -> Result<MDev, anyhow::Error> {
-    let _ = std::fs::File::open(&jsonfile)
-        .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
-    let filecontents = fs::read_to_string(&jsonfile)
-        .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
-    let jsonval = serde_json::from_str(&filecontents)?;
-
-    let mut d = MDev::new(env, uuid);
-    d.load_from_json(parent, &jsonval)?;
-    Ok(d)
-}
-
 /// Implementation of the `mdevctl modify` command
 #[allow(clippy::too_many_arguments)]
 fn modify_command(
@@ -251,7 +234,7 @@ fn modify_command(
                 .parent
                 .clone()
                 .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
-            let json_dev = dev_from_jsonfile(env.clone(), uuid, act_parent, f)?;
+            let json_dev = MDev::new_from_jsonfile(env.clone(), uuid, act_parent, f)?;
             if json_dev.mdev_type != act_dev.mdev_type {
                 return Err(anyhow!("'type' cannot be changed on active mdev"));
             }
@@ -286,7 +269,7 @@ fn modify_command(
         if let Some(f) = jsonfile {
             let parent = parent
                 .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
-            dev = dev_from_jsonfile(env.clone(), uuid, parent, f)?;
+            dev = MDev::new_from_jsonfile(env.clone(), uuid, parent, f)?;
         } else {
             dev = env.clone().get_defined_device(uuid, parent.as_ref())?;
             if mdev_type.is_some() {
