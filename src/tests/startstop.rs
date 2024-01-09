@@ -24,12 +24,12 @@ fn test_start_command_callout<F>(
 
 fn test_start_helper<F>(
     testname: &str,
-    expect_setup: Expect,
-    expect_execute: Expect,
+    expect: Expect,
     uuid: Option<String>,
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
+    force: bool,
     setupfn: F,
 ) where
     F: Fn(Rc<TestEnvironment>),
@@ -39,17 +39,9 @@ fn test_start_helper<F>(
     setupfn(test.clone());
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
 
-    let result = crate::start_command_helper(env, uuid, parent, mdev_type, jsonfile);
+    let result = crate::start_command_helper(env, uuid, parent, mdev_type, jsonfile, force);
 
-    if let Ok(mut dev) = test.assert_result(result, expect_setup, Some("setup command")) {
-        let result = dev.start();
-        if test
-            .assert_result(result, expect_execute, Some("execute command"))
-            .is_err()
-        {
-            return;
-        }
-
+    if let Ok(dev) = test.assert_result(result, expect, None) {
         let create_path = test
             .parent_base()
             .join(dev.parent.unwrap())
@@ -78,11 +70,11 @@ fn test_start() {
     test_start_helper(
         "uuid-type-parent",
         Expect::Pass,
-        Expect::Pass,
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
@@ -90,11 +82,11 @@ fn test_start() {
     test_start_helper(
         "no-uuid",
         Expect::Pass,
-        Expect::Pass,
         None,
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
@@ -102,11 +94,11 @@ fn test_start() {
     test_start_helper(
         "no-uuid-no-parent",
         Expect::Fail(None),
-        Expect::Fail(None),
         None,
         None,
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
@@ -114,11 +106,11 @@ fn test_start() {
     test_start_helper(
         "no-uuid-no-type",
         Expect::Fail(None),
-        Expect::Fail(None),
         None,
         Some(PARENT.to_string()),
         None,
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
@@ -126,33 +118,33 @@ fn test_start() {
     test_start_helper(
         "no-parent",
         Expect::Fail(None),
-        Expect::Fail(None),
         Some(UUID.to_string()),
         None,
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |_| {},
     );
     // should fail if there is no defined device with the given uuid
     test_start_helper(
         "no-type",
         Expect::Fail(None),
-        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         None,
         None,
+        false,
         |_| {},
     );
     // should pass if there is a defined device with the given uuid
     test_start_helper(
         "no-type-defined",
         Expect::Pass,
-        Expect::Pass,
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         None,
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -161,11 +153,11 @@ fn test_start() {
     test_start_helper(
         "no-type-parent-defined",
         Expect::Pass,
-        Expect::Pass,
         Some(UUID.to_string()),
         None,
         None,
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -174,11 +166,11 @@ fn test_start() {
     test_start_helper(
         "defined-with-type",
         Expect::Pass,
-        Expect::Pass,
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -190,11 +182,11 @@ fn test_start() {
     test_start_helper(
         "defined-multiple-underspecified",
         Expect::Fail(None),
-        Expect::Fail(None),
         Some(UUID.to_string()),
         None,
         None,
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -205,11 +197,11 @@ fn test_start() {
     test_start_helper(
         "defined-multiple",
         Expect::Pass,
-        Expect::Pass,
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         None,
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -222,11 +214,11 @@ fn test_start() {
     test_start_helper(
         "defined-diff-type",
         Expect::Fail(None),
-        Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some("wrong-type".to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_defined_device(UUID, PARENT, "defined.json");
@@ -234,12 +226,12 @@ fn test_start() {
     );
     test_start_helper(
         "already-running",
-        Expect::Pass,
         Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
             test.populate_active_device(UUID, PARENT, MDEV_TYPE);
@@ -247,12 +239,12 @@ fn test_start() {
     );
     test_start_helper(
         "no-instances",
-        Expect::Pass,
         Expect::Fail(None),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 0, "vfio-pci", "testdev", None);
         },
@@ -261,11 +253,11 @@ fn test_start() {
     test_start_helper(
         "uuid-type-parent",
         Expect::Pass,
-        Expect::Pass,
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },
@@ -318,7 +310,6 @@ fn test_start() {
     );
     test_start_helper(
         "missing-parent",
-        Expect::Pass,
         Expect::Fail(Some(
             format!("Unable to find parent device '{}'", PARENT).as_str(),
         )),
@@ -326,11 +317,11 @@ fn test_start() {
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |_| {},
     );
     test_start_helper(
         "parent-case",
-        Expect::Pass,
         Expect::Fail(Some(
             format!(
                 "Unable to find parent device '{}'. Did you mean '{}'?",
@@ -343,6 +334,7 @@ fn test_start() {
         Some(PARENT3.to_string().to_uppercase()),
         Some(MDEV_TYPE.to_string()),
         None,
+        false,
         |test| {
             test.populate_parent_device(PARENT3, MDEV_TYPE, 1, "vfio-pci", "test device", None);
         },

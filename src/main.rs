@@ -320,6 +320,7 @@ fn start_command_helper(
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
+    force: bool,
 ) -> Result<MDev> {
     debug!("Starting device '{:?}'", uuid);
     let mut dev: Option<MDev> = None;
@@ -394,7 +395,11 @@ fn start_command_helper(
             }
         }
     }
-    dev.ok_or_else(|| anyhow!("Unknown error"))
+    let mut dev = dev.ok_or_else(|| anyhow!("Unknown error"))?;
+
+    let mut c = callout(&mut dev);
+    c.invoke(Action::Start, force, |c| c.dev.start())?;
+    Ok(dev)
 }
 
 /// Implementation of the `mdevctl start` command
@@ -406,14 +411,12 @@ fn start_command(
     jsonfile: Option<PathBuf>,
     force: bool,
 ) -> Result<()> {
-    let mut dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile)?;
+    let dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile, force)?;
 
-    let mut c = callout(&mut dev);
-    c.invoke(Action::Start, force, |c| c.dev.start()).map(|_| {
-        if uuid.is_none() {
-            println!("{}", c.dev.uuid.hyphenated());
-        }
-    })
+    if uuid.is_none() {
+        println!("{}", dev.uuid.hyphenated());
+    }
+    Ok(())
 }
 
 /// Implementation of the `mdevctl stop` command
