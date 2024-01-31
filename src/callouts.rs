@@ -269,15 +269,15 @@ impl CalloutScriptCache {
 
     pub fn find_versioned_script(&mut self, dev: &MDev) -> Option<CalloutScriptInfo> {
         // check already found scripts
-        let mut dev = dev.clone();
-        let mut callout = callout(&mut dev);
-        let mdev_type = match callout.dev.mdev_type() {
+        let mdev_type = match dev.mdev_type() {
             Ok(t) => t.clone(),
             Err(_) => {
                 debug!("mdev_type is required on device => cannot find a callout script");
                 return None;
             }
         };
+        let mut dev = dev.clone();
+        let mut callout = callout(&mut dev);
         let parent = match callout.dev.parent() {
             Ok(p) => p.clone(),
             Err(_) => {
