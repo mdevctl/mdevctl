@@ -4,9 +4,9 @@ PREFIX?=/usr
 UDEVDIR=$(shell pkg-config --variable=udevdir udev)
 SBINDIR=$(PREFIX)/sbin
 CONFDIR=/etc/mdevctl.d
-SCRIPTDIR=$(PREFIX)/lib/mdevctl/scripts.d
-CALLOUTS_DIR=$(SCRIPTDIR)/callouts
-NOTIFIERS_DIR=$(SCRIPTDIR)/notifiers
+MDEVCTL_SCRIPTDIR=@@script_base_dir@@
+CALLOUTS_DIR=$(MDEVCTL_SCRIPTDIR)/callouts
+NOTIFIERS_DIR=$(MDEVCTL_SCRIPTDIR)/notifiers
 DATADIR=$(PREFIX)/share
 MANDIR=$(DATADIR)/man
 BASH_COMPLETION_DIR=$(DATADIR)/bash-completion/completions
