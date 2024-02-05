@@ -270,7 +270,16 @@ impl CalloutScriptCache {
     pub fn find_versioned_script(&mut self, dev: &MDev) -> Option<CalloutScriptInfo> {
         // check already found scripts
         let mut dev = dev.clone();
-        let mut callout = callout(&mut dev);
+        let mut callout = match callout(&mut dev) {
+            Ok(c) => c,
+            Err(e) => {
+                debug!(
+                    "cannot find a callout script for mdev with uuid {:?}: {:?}",
+                    dev.uuid, e
+                );
+                return None;
+            }
+        };
         let mdev_type = match callout.dev.mdev_type() {
             Ok(t) => t.clone(),
             Err(_) => {
@@ -414,20 +423,20 @@ pub struct Callout<'a> {
     pub dev: &'a mut MDev,
 }
 
-pub fn callout(dev: &mut MDev) -> Callout {
+pub fn callout(dev: &mut MDev) -> Result<Callout> {
     Callout::new(dev)
 }
 
 impl<'a> Callout<'a> {
-    pub fn new(dev: &'a mut MDev) -> Callout<'a> {
+    pub fn new(dev: &'a mut MDev) -> Result<Callout<'a>> {
         if dev.mdev_type.is_none() {
-            panic!("Device dev must have a defined mdev_type!")
+            return Err(anyhow!("Device must have a defined mdev_type"));
         }
-        Callout {
+        Ok(Callout {
             state: State::None,
             script: None,
             dev,
-        }
+        })
     }
 
     fn find_callout_script(&self) -> Option<CalloutScriptInfo> {

@@ -21,7 +21,10 @@ fn test_invoke_callout<F>(
     };
     empty_mdev.parent = Some(parent.to_string());
 
-    let mut callout = callout(&mut empty_mdev);
+    let mut callout = match callout(&mut empty_mdev) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
     let res = callout.invoke(action, false, |_| Ok(()));
     let try_force = res.is_err();
     let _ = test.assert_result(res, expect, Some("non-forced"));
@@ -53,47 +56,12 @@ fn test_get_callout<F>(
     };
     empty_mdev.parent = Some(parent.to_string());
 
-    let res = callout(&mut empty_mdev).get_attributes();
+    let mut callout = match callout(&mut empty_mdev) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    let res = callout.get_attributes();
     let _ = test.assert_result(res, expect, None);
-}
-
-#[test]
-#[should_panic]
-fn test_invoke_callout_panic() {
-    init();
-    const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
-    const DEFAULT_PARENT: &str = "test_parent";
-
-    test_invoke_callout(
-        "test_invoke_callout_create_panic",
-        Expect::Pass,
-        Action::Test,
-        Uuid::parse_str(DEFAULT_UUID).unwrap(),
-        DEFAULT_PARENT,
-        "",
-        |test| {
-            test.populate_callout_script("rc0.sh");
-        },
-    );
-}
-
-#[test]
-#[should_panic]
-fn test_get_callout_panic() {
-    init();
-    const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
-    const DEFAULT_PARENT: &str = "test_parent";
-
-    test_get_callout(
-        "test_get_callout_create_panic",
-        Expect::Pass,
-        Uuid::parse_str(DEFAULT_UUID).unwrap(),
-        DEFAULT_PARENT,
-        "",
-        |test| {
-            test.populate_callout_script("rc0.sh");
-        },
-    );
 }
 
 #[test]
@@ -103,6 +71,32 @@ fn test_callouts() {
     const DEFAULT_UUID: &str = "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9";
     const DEFAULT_TYPE: &str = "test_type";
     const DEFAULT_PARENT: &str = "test_parent";
+    // NOTE: Expect::Pass is used as error indicator since test should
+    // just return instead of running a callout
+    test_invoke_callout(
+        "test_invoke_callout_without_mdevtype",
+        Expect::Pass,
+        Action::Test,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        "",
+        |test| {
+            test.populate_callout_script("rc1.sh");
+        },
+    );
+    // NOTE: Expect::Pass is used as error indicator since test should
+    // just return instead of running a callout
+    test_get_callout(
+        "test_get_callout_without_mdevtype",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).unwrap(),
+        DEFAULT_PARENT,
+        "",
+        |test| {
+            test.populate_callout_script("bad-json.sh");
+        },
+    );
+
     test_invoke_callout(
         "test_callout_all_success",
         Expect::Pass,
