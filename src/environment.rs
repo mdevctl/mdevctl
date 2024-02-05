@@ -172,7 +172,7 @@ pub trait Environment: std::fmt::Debug {
 
                     // if the device is supported by a callout script that gets attributes, show
                     // those in the output
-                    let mut c = callout(&mut dev);
+                    let mut c = callout(&mut dev)?;
                     if let Ok(attrs) = c.get_attributes() {
                         let _ = c.dev.add_attributes(&attrs);
                     }

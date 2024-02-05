@@ -148,7 +148,7 @@ fn define_command(
         and populate the attrs field correspondingly before the device is defined in the system.
         The device config file will contain the same attributes that were used to start this device。
     */
-    let mut c = callout(&mut dev);
+    let mut c = callout(&mut dev)?;
     c.invoke(Action::Define, force, |c| {
         if c.dev.active {
             let attrs = c.get_attributes()?;
@@ -180,7 +180,7 @@ fn undefine_command(
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
-            let mut c = callout(child);
+            let mut c = callout(child)?;
             if let Err(e) = c.invoke(Action::Undefine, force, |c| c.dev.undefine()) {
                 failed = true;
                 for x in e.chain() {
@@ -256,14 +256,14 @@ fn modify_command(
                 return Err(anyhow!("'type' of active and defined mdev does not match"));
             }
 
-            let mut c = callout(&mut act_dev);
+            let mut c = callout(&mut act_dev)?;
             debug!("mdev device used for live update '{:?}'", c.dev);
             return c
                 .invoke_modify_live()
                 .and_then(|_| c.invoke(Action::Modify, force, |c| c.dev.write_config()));
         }
         // live modify only
-        callout(&mut act_dev).invoke_modify_live()
+        callout(&mut act_dev)?.invoke_modify_live()
     } else {
         let mut dev: MDev;
         // stored configuration modify
@@ -298,7 +298,7 @@ fn modify_command(
                 }
             }
         }
-        callout(&mut dev).invoke(Action::Modify, force, |c| c.dev.write_config())
+        callout(&mut dev)?.invoke(Action::Modify, force, |c| c.dev.write_config())
     }
 }
 
@@ -388,8 +388,7 @@ fn start_command_helper(
     }
     let mut dev = dev.ok_or_else(|| anyhow!("Unknown error"))?;
 
-    let mut c = callout(&mut dev);
-    c.invoke(Action::Start, force, |c| c.dev.start())?;
+    callout(&mut dev)?.invoke(Action::Start, force, |c| c.dev.start())?;
     Ok(dev)
 }
 
@@ -416,7 +415,7 @@ fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()>
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
 
-    callout(&mut dev).invoke(Action::Stop, force, |c| c.dev.stop())
+    callout(&mut dev)?.invoke(Action::Stop, force, |c| c.dev.stop())
 }
 
 /// Implementation of the `mdevctl list` command
@@ -559,7 +558,7 @@ fn start_parent_mdevs_command(env: Rc<dyn Environment>, parent: String) -> Resul
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = callout(child).invoke(Action::Start, false, |c| c.dev.start()) {
+                if let Err(e) = callout(child)?.invoke(Action::Start, false, |c| c.dev.start()) {
                     for x in e.chain() {
                         warn!("{}", x);
                     }
