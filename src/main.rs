@@ -576,6 +576,7 @@ fn main() -> Result<()> {
 
     let env = DefaultEnvironment::new();
     debug!("{:?}", env);
+    debug!("script dir: {:?}", env.scripts_base());
 
     // make sure the environment is sane
     env.self_check()?;

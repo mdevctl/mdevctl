@@ -1,0 +1,3 @@
+[env]
+# Set MDEVCTL_SCRIPTDIR to directory as base for callout and notify scripts
+MDEVCTL_SCRIPTDIR = "/usr/lib/mdevctl/scripts.d"
