@@ -159,7 +159,9 @@ impl MDev {
                     }
                     // get the key and value from the first (only) map entry
                     if let Some((key, val)) = attrobj.iter().next() {
-                        let valstr = val.as_str().unwrap();
+                        let valstr = val.as_str().ok_or_else(|| {
+                            anyhow!("invalid JSON format for attribute {{{:?}, {}}}: value must be of type str", key, val)
+                        })?;
                         self.attrs.push((key.to_string(), valstr.to_string()));
                     }
                 }
