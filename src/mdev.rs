@@ -102,14 +102,25 @@ impl MDev {
 
     pub fn load_from_sysfs(&mut self) -> Result<()> {
         debug!("Loading device '{:?}' from sysfs", self.uuid);
+        let parentname = || -> Result<String> {
+            let canonpath = self.path().canonicalize()?;
+            let sysfsparent = canonpath
+                .parent()
+                .ok_or_else(|| anyhow!("Path to parent of mdev {:?} does not exist", self.uuid))?;
+            canonical_basename(sysfsparent)
+        };
+        let mdev_type = || -> Result<String> {
+            let typepath = self.path().join("mdev_type");
+            canonical_basename(typepath)
+        };
+
         if !self.path().exists() {
             debug!("device did not exist in sysfs: {:?}", self);
             return Ok(());
         }
+        let parentname = parentname()?;
+        let mdev_type = mdev_type()?;
 
-        let canonpath = self.path().canonicalize()?;
-        let sysfsparent = canonpath.parent().unwrap();
-        let parentname = canonical_basename(sysfsparent)?;
         if self.parent.is_some() && self.parent.as_ref() != Some(&parentname) {
             debug!(
                 "Active mdev {:?} has different parent: {}!={}. No match.",
@@ -119,9 +130,6 @@ impl MDev {
             );
             return Ok(());
         }
-        let mut typepath = self.path();
-        typepath.push("mdev_type");
-        let mdev_type = canonical_basename(typepath)?;
         if self.mdev_type.is_some() && self.mdev_type.as_ref() != Some(&mdev_type) {
             debug!(
                 "Active mdev {:?} has different type: {}!={}. No match.",
