@@ -414,6 +414,9 @@ fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()>
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     dev.load_from_sysfs()?;
+    if !dev.active {
+        return Err(anyhow!("Device {} is not an active mdev", uuid));
+    }
 
     callout(&mut dev)?.invoke(Action::Stop, force, |c| c.dev.stop())
 }

@@ -507,7 +507,9 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-success-broken-active-parent",
-        Expect::Fail(Some("Device must have a defined mdev_type")),
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
         UUID,
         false,
         |t| {
@@ -517,7 +519,9 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-success-removed-active-parent",
-        Expect::Fail(Some("Device must have a defined mdev_type")),
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
         UUID,
         false,
         |t| {
@@ -547,7 +551,9 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-fail-force-broken-active-parent",
-        Expect::Fail(Some("Device must have a defined mdev_type")),
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
         UUID,
         true,
         |t| {
@@ -557,7 +563,9 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-fail-force-removed-active-parent",
-        Expect::Fail(Some("Device must have a defined mdev_type")),
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
         UUID,
         true,
         |t| {
