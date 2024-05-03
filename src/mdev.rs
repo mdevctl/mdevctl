@@ -420,15 +420,23 @@ impl MDev {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
-        if let Ok(mdev_sysfs_data) = MDevSysfsData::load(&self.env, &self.uuid) {
-            if mdev_sysfs_data.active {
-                if mdev_sysfs_data.parent != self.parent {
-                    return Err(anyhow!("Device exists under different parent"));
+        match MDevSysfsData::load(&self.env, &self.uuid) {
+            Ok(mdev_sysfs_data) => {
+                if mdev_sysfs_data.active {
+                    if mdev_sysfs_data.parent != self.parent {
+                        return Err(anyhow!("Device exists under different parent"));
+                    }
+                    if mdev_sysfs_data.mdev_type != self.mdev_type {
+                        return Err(anyhow!("Device exists with different type"));
+                    }
+                    return Err(anyhow!("Device already exists"));
                 }
-                if mdev_sysfs_data.mdev_type != self.mdev_type {
-                    return Err(anyhow!("Device exists with different type"));
-                }
-                return Err(anyhow!("Device already exists"));
+            }
+            Err(e) => {
+                warn!(
+                    "A sysfs lookup for device {} caused the error: {:?}",
+                    self.uuid, e
+                );
             }
         }
 
