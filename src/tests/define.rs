@@ -48,7 +48,7 @@ fn test_define_helper<F>(
     let res = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile);
     let expected_testfilename = format!("{}.expected", testname);
     if let Ok(def) = test.assert_result(res, expect, None) {
-        let path = def.persist_path().unwrap();
+        let path = def.persistent_path().unwrap();
         assert!(!path.exists());
         def.define().expect("Failed to define device");
         assert!(path.exists());

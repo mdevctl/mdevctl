@@ -58,7 +58,7 @@ impl MDev {
         Ok(d)
     }
 
-    pub fn path(&self) -> PathBuf {
+    pub fn active_path(&self) -> PathBuf {
         let mut p = self.env.mdev_base();
         p.push(self.uuid.hyphenated().to_string());
         p
@@ -84,7 +84,7 @@ impl MDev {
         })
     }
 
-    pub fn persist_path(&self) -> Option<PathBuf> {
+    pub fn persistent_path(&self) -> Option<PathBuf> {
         self.parent.as_ref().map(|x| {
             let mut path = self.env.config_base();
             path.push(x);
@@ -94,7 +94,7 @@ impl MDev {
     }
 
     pub fn is_defined(&self) -> bool {
-        match self.persist_path() {
+        match self.persistent_path() {
             Some(p) => p.exists(),
             None => false,
         }
@@ -103,25 +103,25 @@ impl MDev {
     pub fn load_from_sysfs(&mut self) -> Result<()> {
         debug!("Loading device '{:?}' from sysfs", self.uuid);
         let parentname = || -> Result<String> {
-            let canonpath = self.path().canonicalize()?;
+            let canonpath = self.active_path().canonicalize()?;
             let sysfsparent = canonpath
                 .parent()
                 .ok_or_else(|| anyhow!("Path to parent of mdev {:?} does not exist", self.uuid))?;
             canonical_basename(sysfsparent)
         };
         let mdev_type = || -> Result<String> {
-            let typepath = self.path().join("mdev_type");
+            let typepath = self.active_path().join("mdev_type");
             canonical_basename(typepath)
         };
 
-        if !self.path().exists() {
+        if !self.active_path().exists() {
             debug!("device did not exist in sysfs: {:?}", self);
             return Ok(());
         }
         let parentname = match parentname() {
             Ok(parentname) => parentname,
             Err(e) => {
-                if self.path().exists() {
+                if self.active_path().exists() {
                     return Err(e);
                 } else {
                     debug!("Mdev {:?} does no longer exist in sysfs", self.uuid);
@@ -132,7 +132,7 @@ impl MDev {
         let mdev_type = match mdev_type() {
             Ok(mdev_type) => mdev_type,
             Err(e) => {
-                if self.path().exists() {
+                if self.active_path().exists() {
                     return Err(e);
                 } else {
                     debug!("Mdev {:?} does no longer exist in sysfs", self.uuid);
@@ -237,7 +237,7 @@ impl MDev {
 
     // load the stored definition from disk if it exists
     pub fn load_definition(&mut self) -> Result<()> {
-        if let Some(path) = self.persist_path() {
+        if let Some(path) = self.persistent_path() {
             let mut f = fs::File::open(path)?;
             let mut contents = String::new();
             f.read_to_string(&mut contents)?;
@@ -331,7 +331,7 @@ impl MDev {
 
     pub fn stop(&mut self) -> Result<()> {
         debug!("Removing mdev {:?}", self.uuid);
-        let mut remove_path = self.path();
+        let mut remove_path = self.active_path();
         remove_path.push("remove");
         debug!("remove path '{:?}'", remove_path);
         match fs::write(remove_path, "1") {
@@ -437,7 +437,7 @@ impl MDev {
 
         debug!("Setting attributes for mdev {:?}", self.uuid);
         for (k, v) in self.attrs.iter() {
-            if let Err(e) = write_attr(&self.path(), k, v) {
+            if let Err(e) = write_attr(&self.active_path(), k, v) {
                 self.stop()?;
                 return Err(e);
             }
@@ -448,7 +448,7 @@ impl MDev {
 
     pub fn write_config(&self) -> Result<()> {
         let jsonstring = serde_json::to_string_pretty(&self.to_json(false)?)?;
-        let path = self.persist_path().unwrap();
+        let path = self.persistent_path().unwrap();
         let parentdir = path.parent().unwrap();
         debug!("Ensuring parent directory {:?} exists", parentdir);
         fs::create_dir_all(parentdir)?;
@@ -463,7 +463,7 @@ impl MDev {
 
     pub fn undefine(&mut self) -> Result<()> {
         let p = self
-            .persist_path()
+            .persistent_path()
             .ok_or_else(|| anyhow!("Failed to undefine {}", self.uuid.hyphenated().to_string()))?;
 
         fs::remove_file(&p).with_context(|| format!("Failed to remove file {:?}", p))?;

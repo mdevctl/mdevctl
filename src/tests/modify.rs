@@ -60,7 +60,7 @@ fn test_modify_helper<F>(
         .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
-    let path = def.persist_path().unwrap();
+    let path = def.persistent_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
@@ -144,7 +144,7 @@ fn test_modify_defined_active_helper<F>(
         .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
-    let path = def.persist_path().unwrap();
+    let path = def.persistent_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
