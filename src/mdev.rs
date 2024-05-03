@@ -16,6 +16,94 @@ pub enum FormatType {
     Defined,
 }
 
+pub struct MDevSysfsData {
+    pub uuid: Uuid,
+    pub active: bool,
+    pub parent: Option<String>,
+    pub mdev_type: Option<String>,
+}
+
+impl MDevSysfsData {
+    pub fn load(env: &Rc<dyn Environment>, uuid: &Uuid) -> Result<MDevSysfsData> {
+        let mut parent: Option<String> = None;
+        let mut mdev_type: Option<String> = None;
+        let active_path = Self::active_path(env.clone(), uuid);
+        let mut active = Self::is_active(&active_path);
+        if active {
+            parent = match Self::load_parent_from_sysfs(&active_path) {
+                Ok(parentname) => Some(parentname),
+                Err(e) => {
+                    if Self::is_active(&active_path) {
+                        return Err(e);
+                    } else {
+                        debug!("Mdev {:?} does no longer exist in sysfs", uuid);
+                        active = false;
+                        None
+                    }
+                }
+            };
+            if active {
+                mdev_type = match Self::load_mdev_type_from_sysfs(&active_path) {
+                    Ok(mdev_type) => Some(mdev_type),
+                    Err(e) => {
+                        if Self::is_active(&active_path) {
+                            return Err(e);
+                        } else {
+                            debug!("Mdev {:?} does no longer exist in sysfs", uuid);
+                            parent = None; // remove invalid data
+                            active = false;
+                            None
+                        }
+                    }
+                };
+            }
+        } else {
+            debug!("Mdev {:?} does not exist in sysfs", uuid);
+        }
+        Ok(MDevSysfsData {
+            uuid: uuid.to_owned(),
+            active,
+            parent,
+            mdev_type,
+        })
+    }
+
+    pub fn load_with_mdev(mdev: &MDev) -> Result<MDevSysfsData> {
+        Self::load(&mdev.env, &mdev.uuid)
+    }
+
+    fn active_path(env: Rc<dyn Environment>, uuid: &Uuid) -> PathBuf {
+        env.mdev_base().join(uuid.hyphenated().to_string())
+    }
+
+    fn is_active(active_path: &Path) -> bool {
+        active_path.exists()
+    }
+
+    fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> Result<String> {
+        let canonpath = fs::canonicalize(&active_path)?;
+        let sysfsparent = canonpath
+            .parent()
+            .ok_or_else(|| anyhow!("Path to parent of mdev {:?} does not exist", canonpath))?;
+        Self::canonical_basename(sysfsparent)
+    }
+
+    fn load_mdev_type_from_sysfs<P: Into<PathBuf>>(active_path: P) -> Result<String> {
+        let mut typepath: PathBuf = active_path.into();
+        typepath.push("mdev_type");
+        Self::canonical_basename(typepath)
+    }
+
+    fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String> {
+        let path = fs::canonicalize(path)?;
+        let fname = path.file_name().ok_or_else(|| anyhow!("Invalid path"))?;
+        match fname.to_str() {
+            Some(x) => Ok(x.to_string()),
+            None => Err(anyhow!("Invalid file name")),
+        }
+    }
+}
+
 /// Representation of a mediated device
 #[derive(Debug, Clone)]
 pub struct MDev {
@@ -100,72 +188,33 @@ impl MDev {
         }
     }
 
-    pub fn load_from_sysfs(&mut self) -> Result<()> {
-        debug!("Loading device '{:?}' from sysfs", self.uuid);
-        let parentname = || -> Result<String> {
-            let canonpath = self.active_path().canonicalize()?;
-            let sysfsparent = canonpath
-                .parent()
-                .ok_or_else(|| anyhow!("Path to parent of mdev {:?} does not exist", self.uuid))?;
-            canonical_basename(sysfsparent)
-        };
-        let mdev_type = || -> Result<String> {
-            let typepath = self.active_path().join("mdev_type");
-            canonical_basename(typepath)
-        };
+    pub fn set_sysfs_data(&mut self, sysfs_data: MDevSysfsData) {
+        self.active = sysfs_data.active;
+        self.parent = sysfs_data.parent;
+        self.mdev_type = sysfs_data.mdev_type;
+    }
 
-        if !self.active_path().exists() {
-            debug!("device did not exist in sysfs: {:?}", self);
-            return Ok(());
-        }
-        let parentname = match parentname() {
-            Ok(parentname) => parentname,
-            Err(e) => {
-                if self.active_path().exists() {
-                    return Err(e);
-                } else {
-                    debug!("Mdev {:?} does no longer exist in sysfs", self.uuid);
-                    return Ok(());
-                }
-            }
-        };
-        let mdev_type = match mdev_type() {
-            Ok(mdev_type) => mdev_type,
-            Err(e) => {
-                if self.active_path().exists() {
-                    return Err(e);
-                } else {
-                    debug!("Mdev {:?} does no longer exist in sysfs", self.uuid);
-                    return Ok(());
-                }
-            }
-        };
-
-        if self.parent.is_some() && self.parent.as_ref() != Some(&parentname) {
+    pub fn is_sysfs_data_matching(&self, sysfs_data: &MDevSysfsData) -> bool {
+        if self.parent.is_some() && self.parent != sysfs_data.parent {
             debug!(
                 "Active mdev {:?} has different parent: {}!={}. No match.",
                 self.uuid,
                 self.parent.as_ref().unwrap(),
-                parentname
+                sysfs_data.parent.as_ref().unwrap()
             );
-            return Ok(());
+            return false;
         }
-        if self.mdev_type.is_some() && self.mdev_type.as_ref() != Some(&mdev_type) {
+
+        if self.mdev_type.is_some() && self.mdev_type != sysfs_data.mdev_type {
             debug!(
                 "Active mdev {:?} has different type: {}!={}. No match.",
                 self.uuid,
                 self.mdev_type.as_ref().unwrap(),
-                mdev_type
+                sysfs_data.mdev_type.as_ref().unwrap()
             );
-            return Ok(());
+            return false;
         }
-
-        // active device in sysfs matches this device. update information
-        self.mdev_type = Some(mdev_type);
-        self.parent = Some(parentname);
-        self.active = true;
-        debug!("loaded device {:?}", self);
-        Ok(())
+        true
     }
 
     pub fn add_attributes(&mut self, attrs: &serde_json::Value) -> Result<()> {
@@ -371,16 +420,16 @@ impl MDev {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
-        let mut existing = MDev::new(self.env.clone(), self.uuid);
-
-        if existing.load_from_sysfs().is_ok() && existing.active {
-            if existing.parent != self.parent {
-                return Err(anyhow!("Device exists under different parent"));
+        if let Ok(mdev_sysfs_data) = MDevSysfsData::load(&self.env, &self.uuid) {
+            if mdev_sysfs_data.active {
+                if mdev_sysfs_data.parent != self.parent {
+                    return Err(anyhow!("Device exists under different parent"));
+                }
+                if mdev_sysfs_data.mdev_type != self.mdev_type {
+                    return Err(anyhow!("Device exists with different type"));
+                }
+                return Err(anyhow!("Device already exists"));
             }
-            if existing.mdev_type != self.mdev_type {
-                return Err(anyhow!("Device exists with different type"));
-            }
-            return Err(anyhow!("Device already exists"));
         }
 
         let mut path = self.find_parent_dir()?;
@@ -518,15 +567,6 @@ impl MDev {
         }
 
         Ok(())
-    }
-}
-
-fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String> {
-    let path = fs::canonicalize(path)?;
-    let fname = path.file_name().ok_or_else(|| anyhow!("Invalid path"))?;
-    match fname.to_str() {
-        Some(x) => Ok(x.to_string()),
-        None => Err(anyhow!("Invalid file name")),
     }
 }
 

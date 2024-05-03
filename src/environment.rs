@@ -1,7 +1,7 @@
 //! A filesystem environment for mdevctl
 
 use crate::callouts::{callout, CalloutScriptCache, CalloutScriptInfo};
-use crate::mdev::{MDev, MDevType};
+use crate::mdev::{MDev, MDevSysfsData, MDevType};
 use anyhow::{anyhow, Result};
 use log::{debug, warn};
 use std::collections::BTreeMap;
@@ -153,36 +153,39 @@ pub trait Environment: std::fmt::Debug {
                 }
 
                 let mut dev = MDev::new(self.clone().as_env(), u);
-                if dev.load_from_sysfs().is_ok() && dev.active {
-                    if parent.is_some() && (parent != dev.parent.as_ref()) {
-                        debug!(
-                            "Ignoring device {} because it doesn't match parent {}",
-                            dev.uuid,
-                            parent.as_ref().unwrap()
-                        );
-                        continue;
-                    }
+                if let Ok(sysfs_data) = MDevSysfsData::load_with_mdev(&dev) {
+                    dev.set_sysfs_data(sysfs_data);
+                    if dev.active {
+                        if parent.is_some() && (parent != dev.parent.as_ref()) {
+                            debug!(
+                                "Ignoring device {} because it doesn't match parent {}",
+                                dev.uuid,
+                                parent.as_ref().unwrap()
+                            );
+                            continue;
+                        }
 
-                    // retrieve autostart from persisted mdev if possible
-                    let mut per_dev = MDev::new(self.clone().as_env(), u);
-                    per_dev.parent.clone_from(&dev.parent);
-                    if per_dev.load_definition().is_ok() {
-                        dev.autostart = per_dev.autostart;
-                    }
+                        // retrieve autostart from persisted mdev if possible
+                        let mut per_dev = MDev::new(self.clone().as_env(), u);
+                        per_dev.parent.clone_from(&dev.parent);
+                        if per_dev.load_definition().is_ok() {
+                            dev.autostart = per_dev.autostart;
+                        }
 
-                    // if the device is supported by a callout script that gets attributes, show
-                    // those in the output
-                    let mut c = callout(&mut dev)?;
-                    if let Ok(attrs) = c.get_attributes() {
-                        let _ = c.dev.add_attributes(&attrs);
-                    }
+                        // if the device is supported by a callout script that gets attributes, show
+                        // those in the output
+                        let mut c = callout(&mut dev)?;
+                        if let Ok(attrs) = c.get_attributes() {
+                            let _ = c.dev.add_attributes(&attrs);
+                        }
 
-                    let devparent = dev.parent()?;
-                    if !devices.contains_key(devparent) {
-                        devices.insert(devparent.clone(), Vec::new());
+                        let devparent = dev.parent()?;
+                        if !devices.contains_key(devparent) {
+                            devices.insert(devparent.clone(), Vec::new());
+                        };
+
+                        devices.get_mut(devparent).unwrap().push(dev);
                     };
-
-                    devices.get_mut(devparent).unwrap().push(dev);
                 };
             }
         }
@@ -259,8 +262,10 @@ pub trait Environment: std::fmt::Debug {
                                 let val = serde_json::from_str(&contents)?;
                                 let mut dev = MDev::new(thisenv.clone(), u);
                                 dev.load_from_json(parentname.to_string(), &val)?;
-                                dev.load_from_sysfs()?;
-
+                                let sysfs_data = MDevSysfsData::load_with_mdev(&dev)?;
+                                if sysfs_data.active && dev.is_sysfs_data_matching(&sysfs_data) {
+                                    dev.set_sysfs_data(sysfs_data);
+                                }
                                 childdevices.push(dev);
                             }
                             Err(e) => {
