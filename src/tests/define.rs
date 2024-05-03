@@ -46,6 +46,7 @@ fn test_define_helper<F>(
     setupfn(&test);
 
     let res = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile);
+    let expected_testfilename = format!("{}.expected", testname);
     if let Ok(def) = test.assert_result(res, expect, None) {
         let path = def.persist_path().unwrap();
         assert!(!path.exists());
@@ -53,7 +54,9 @@ fn test_define_helper<F>(
         assert!(path.exists());
         assert!(def.is_defined());
         let filecontents = fs::read_to_string(&path).unwrap();
-        test.compare_to_file(&format!("{}.expected", testname), &filecontents);
+        test.compare_to_file(&expected_testfilename, &filecontents);
+    } else {
+        test.unused_file(&expected_testfilename);
     }
 }
 

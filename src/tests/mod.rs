@@ -288,6 +288,15 @@ impl TestEnvironment {
         assert_eq!(expected, actual);
     }
 
+    fn unused_file(&self, filename: &str) {
+        let path = self.datapath.join(filename);
+        assert!(
+            !path.exists(),
+            "Unused file {:?} found! Please remove it.",
+            path
+        );
+    }
+
     fn load_from_json(self: &Rc<Self>, uuid: &str, parent: &str, filename: &str) -> Result<MDev> {
         let path = self.datapath.join(filename);
         let uuid = Uuid::parse_str(uuid);

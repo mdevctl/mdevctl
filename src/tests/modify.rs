@@ -50,7 +50,9 @@ fn test_modify_helper<F>(
         force,
     );
 
+    let testfilename = format!("{}.expected", testname);
     if test.assert_result(result, expect, None).is_err() {
+        test.unused_file(&testfilename);
         return;
     }
 
@@ -62,8 +64,7 @@ fn test_modify_helper<F>(
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    test.clone()
-        .compare_to_file(&format!("{}.expected", testname), &filecontents);
+    test.clone().compare_to_file(&testfilename, &filecontents);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -113,10 +114,15 @@ fn test_modify_defined_active_helper<F>(
         jsonfile,
         force,
     );
+    let active_expect_testfilename = format!("{}.active.expected", testname);
+    let defined_expect_testfilename = format!("{}.defined.expected", testname);
     if test
         .assert_result(result, expect, Some("modify command"))
         .is_err()
     {
+        let active_expect_testfilename = format!("{}.active.expected", testname);
+        test.unused_file(&active_expect_testfilename);
+        test.unused_file(&defined_expect_testfilename);
         return;
     }
 
@@ -132,7 +138,7 @@ fn test_modify_defined_active_helper<F>(
     )
     .expect("Couldn't get json from active device");
     test.clone()
-        .compare_to_file(&format!("{}.active.expected", testname), &def_json);
+        .compare_to_file(&active_expect_testfilename, &def_json);
 
     let def = test
         .clone()
@@ -143,7 +149,7 @@ fn test_modify_defined_active_helper<F>(
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
     test.clone()
-        .compare_to_file(&format!("{}.defined.expected", testname), &filecontents);
+        .compare_to_file(&defined_expect_testfilename, &filecontents);
 }
 
 #[test]
