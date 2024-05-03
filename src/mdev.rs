@@ -118,8 +118,28 @@ impl MDev {
             debug!("device did not exist in sysfs: {:?}", self);
             return Ok(());
         }
-        let parentname = parentname()?;
-        let mdev_type = mdev_type()?;
+        let parentname = match parentname() {
+            Ok(parentname) => parentname,
+            Err(e) => {
+                if self.path().exists() {
+                    return Err(e);
+                } else {
+                    debug!("Mdev {:?} does no longer exist in sysfs", self.uuid);
+                    return Ok(());
+                }
+            }
+        };
+        let mdev_type = match mdev_type() {
+            Ok(mdev_type) => mdev_type,
+            Err(e) => {
+                if self.path().exists() {
+                    return Err(e);
+                } else {
+                    debug!("Mdev {:?} does no longer exist in sysfs", self.uuid);
+                    return Ok(());
+                }
+            }
+        };
 
         if self.parent.is_some() && self.parent.as_ref() != Some(&parentname) {
             debug!(
