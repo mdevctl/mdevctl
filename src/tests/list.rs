@@ -342,7 +342,7 @@ fn test_list() {
     );
     test_list_helper(
         "active-verbose-removed-active-parent",
-        Expect::Fail(Some("Device must have a defined mdev_type")),
+        Expect::Pass,
         false,
         true,
         None,
@@ -462,7 +462,7 @@ fn test_list() {
     );
     test_list_helper(
         "active-uuid-verbose-removed-active-parent",
-        Expect::Fail(Some("Device must have a defined mdev_type")), // removed mdev type file
+        Expect::Pass, // removed mdev type file
         false,
         true,
         Some(UUID[5].to_string()),

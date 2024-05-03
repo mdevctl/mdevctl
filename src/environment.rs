@@ -153,7 +153,7 @@ pub trait Environment: std::fmt::Debug {
                 }
 
                 let mut dev = MDev::new(self.clone().as_env(), u);
-                if dev.load_from_sysfs().is_ok() {
+                if dev.load_from_sysfs().is_ok() && dev.active {
                     if parent.is_some() && (parent != dev.parent.as_ref()) {
                         debug!(
                             "Ignoring device {} because it doesn't match parent {}",
