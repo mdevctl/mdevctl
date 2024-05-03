@@ -1,0 +1,13 @@
+[
+  {
+    "0000:00:02.0": [
+      {
+        "976d8cc2-4bfc-43b9-b9f9-f4af2de91ab9": {
+          "mdev_type": "arbitrary_type1",
+          "start": "manual",
+          "attrs": []
+        }
+      }
+    ]
+  }
+]

@@ -104,6 +104,59 @@ impl TestEnvironment {
 
     // set up a few files in the test environment to simulate an active mediated device
     fn populate_active_device(&self, uuid: &str, parent: &str, mdev_type: &str) {
+        self.general_populate_active_device(uuid, parent, mdev_type, false, false, false, false);
+    }
+
+    // set up a few files in the test environment to simulate an active mediated device with error
+    fn populate_broken_active_device_links(
+        &self,
+        uuid: &str,
+        parent: &str,
+        mdev_type: &str,
+        break_parent: bool,
+        break_type: bool,
+    ) {
+        self.general_populate_active_device(
+            uuid,
+            parent,
+            mdev_type,
+            break_parent,
+            false,
+            break_type,
+            false,
+        );
+    }
+
+    fn populate_removed_active_device_attributes(
+        &self,
+        uuid: &str,
+        parent: &str,
+        mdev_type: &str,
+        break_parent: bool,
+        break_type: bool,
+    ) {
+        self.general_populate_active_device(
+            uuid,
+            parent,
+            mdev_type,
+            break_parent,
+            true,
+            break_type,
+            true,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn general_populate_active_device(
+        &self,
+        uuid: &str,
+        parent: &str,
+        mdev_type: &str,
+        break_parent: bool,
+        remove_parent_link: bool,
+        break_type: bool,
+        remove_type_link: bool,
+    ) {
         use std::os::unix::fs::symlink;
 
         let (parentdir, parenttypedir) =
@@ -114,10 +167,30 @@ impl TestEnvironment {
 
         let devdir = self.mdev_base().join(uuid);
         fs::create_dir_all(devdir.parent().unwrap()).expect("Unable to setup mdev dir");
-        symlink(&parentdevdir, &devdir).expect("Unable to setup mdev dir");
+        symlink(&parentdevdir, &devdir).expect("Unable to setup parent dir");
 
         let typefile = devdir.join("mdev_type");
-        symlink(parenttypedir, typefile).expect("Unable to setup mdev type");
+        symlink(&parenttypedir, &typefile).expect("Unable to setup mdev type");
+
+        if break_type {
+            if remove_type_link {
+                // removes directory link is pointing to
+                fs::remove_dir_all(parenttypedir)
+                    .expect("Unable to remove setup for supported mdev type");
+            } else {
+                fs::remove_file(typefile)
+                    .expect("Unable to remove setup for link to supported mdev type");
+            }
+        }
+        if break_parent {
+            if remove_parent_link {
+                // removes directory link is pointing to
+                fs::remove_dir_all(parentdevdir).expect("Unable to remove setup parent dir");
+            } else {
+                // remove link itself
+                fs::remove_file(devdir).expect("Unable to remove setup for dev link to parent dir");
+            }
+        }
     }
 
     // set up a script in the test environment to simulate a callout

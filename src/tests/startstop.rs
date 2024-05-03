@@ -207,7 +207,7 @@ fn test_start() {
     );
     test_start_helper(
         "already-running",
-        Expect::Fail(None),
+        Expect::Fail(Some("Device already exists")),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -215,7 +215,37 @@ fn test_start() {
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        },
+    );
+    // test with active broken mdev
+    test_start_helper(
+        "already-running-broken-active-mdev-type",
+        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, false, true);
+        },
+    );
+    test_start_helper(
+        "already-running-removed-active-mdev-type",
+        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, false, true);
         },
     );
     test_start_helper(
@@ -447,6 +477,94 @@ fn test_stop() {
         t.populate_active_device(UUID, PARENT, MDEV_TYPE);
         t.populate_callout_script("rc1.sh")
     });
+    test_stop_helper(
+        "broken-active-mdev-type",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, false, true),
+    );
+    test_stop_helper(
+        "broken-active-mdev-type",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, false, true),
+    );
+    test_stop_helper(
+        "broken-active-parent",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, true, false),
+    );
+    test_stop_helper(
+        "removed-active-parent",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, true, false),
+    );
+    test_stop_helper(
+        "callout-success-broken-active-parent",
+        Expect::Fail(Some("Device must have a defined mdev_type")),
+        UUID,
+        false,
+        |t| {
+            t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc0.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-success-removed-active-parent",
+        Expect::Fail(Some("Device must have a defined mdev_type")),
+        UUID,
+        false,
+        |t| {
+            t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc0.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-broken-active-mdev-type",
+        Expect::Fail(Some("No such file or directory (os error 2)")),
+        UUID,
+        true,
+        |t| {
+            t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, false, true);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-removed-active-mdev-type",
+        Expect::Fail(Some("No such file or directory (os error 2)")),
+        UUID,
+        true,
+        |t| {
+            t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, false, true);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-broken-active-parent",
+        Expect::Fail(Some("Device must have a defined mdev_type")),
+        UUID,
+        true,
+        |t| {
+            t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-removed-active-parent",
+        Expect::Fail(Some("Device must have a defined mdev_type")),
+        UUID,
+        true,
+        |t| {
+            t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
 
     // test start with versioning callouts
     // uuid=11111111-1111-0000-0000-000000000000 has a supported version

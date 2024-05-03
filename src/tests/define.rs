@@ -182,6 +182,80 @@ fn test_define() {
             test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "different_type");
         },
     );
+    // defining a device with the same uuid as a running device with a broken mdev_type
+    test_define_helper(
+        "uuid-running-broken-active-mdev_type",
+        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        |test| {
+            test.populate_broken_active_device_links(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    test_define_helper(
+        "uuid-running-removed-active-mdev_type",
+        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    // defining a device with the same uuid as a running device with a broken parent
+    test_define_helper(
+        "uuid-running-broken-active-parent",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        |test| {
+            test.populate_broken_active_device_links(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                true,
+                false,
+            );
+        },
+    );
+    test_define_helper(
+        "uuid-running-removed-active-parent",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                true,
+                false,
+            );
+        },
+    );
     // defining a device that is already defined should result in an error
     test_define_helper(
         "uuid-already-defined",

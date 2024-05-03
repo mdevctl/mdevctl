@@ -757,4 +757,126 @@ fn test_modify() {
             test.populate_callout_script("modify-active.sh");
         },
     );
+
+    // tests with active broken mdev are below
+    test_modify_helper(
+        "live-event-supported-broken-active-mdev-type",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_broken_active_device_links(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                false,
+                true,
+            );
+            test.populate_callout_script("live-rc0.sh");
+        },
+    );
+    test_modify_helper(
+        "live-event-supported-removed-active-mdev-type",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_removed_active_device_attributes(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                false,
+                true,
+            );
+            test.populate_callout_script("live-rc0.sh");
+        },
+    );
+    test_modify_defined_active_helper(
+        "live-defined-supported-broken-active-parent",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        true,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_broken_active_device_links(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                true,
+                false,
+            );
+            test.populate_callout_script("modify-active.sh");
+        },
+    );
+    test_modify_defined_active_helper(
+        "live-defined-supported-removed-active-parent",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        true,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_removed_active_device_attributes(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                true,
+                false,
+            );
+            test.populate_callout_script("modify-active.sh");
+        },
+    );
 }

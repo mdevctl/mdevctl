@@ -81,6 +81,7 @@ fn test_list() {
         "4a0a190f-dcf3-4def-9342-c48768f0c940",
         "9f579710-6ffc-4201-987a-4ffa0fb1f3a5",
         "3eee6cd9-35ad-43bd-9be1-14ee2b7389c9",
+        "bad1bad2-bad3-bad4-bad5-bad6bad7bad8",
     ];
     const PARENT: &[&str] = &["0000:00:02.0", "0000:00:03.0"];
     const MDEV_TYPE: &[&str] = &["arbitrary_type1", "arbitrary_type2"];
@@ -287,6 +288,248 @@ fn test_list() {
         |test| {
             setup(test);
             test.populate_callout_script("bad-json.sh");
+        },
+    );
+
+    // tests with broken active mdev are below
+    test_list_helper(
+        "active-verbose-broken-active-mdev-type",
+        Expect::Pass, // broken mdev type link contains mdev type!
+        false,
+        true,
+        None,
+        None,
+        |test| {
+            setup(test);
+            test.populate_broken_active_device_links(UUID[5], PARENT[0], MDEV_TYPE[1], false, true);
+        },
+    );
+    test_list_helper(
+        "active-verbose-removed-active-mdev-type",
+        Expect::Pass, // removed mdev type file
+        false,
+        true,
+        None,
+        None,
+        |test| {
+            setup(test);
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[0],
+                MDEV_TYPE[1],
+                false,
+                true,
+            );
+        },
+    );
+    test_list_helper(
+        "active-verbose-broken-active-parent",
+        Expect::Pass,
+        false,
+        true,
+        None,
+        None,
+        |test| {
+            setup(test);
+            test.populate_broken_active_device_links(UUID[5], PARENT[0], MDEV_TYPE[1], true, false);
+        },
+    );
+    test_list_helper(
+        "active-verbose-removed-active-parent",
+        Expect::Fail(Some("Device must have a defined mdev_type")),
+        false,
+        true,
+        None,
+        None,
+        |test| {
+            setup(test);
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[0],
+                MDEV_TYPE[1],
+                true,
+                false,
+            );
+        },
+    );
+    test_list_helper(
+        "active-parent-verbose-broken-active-mdev-type",
+        Expect::Pass, // broken mdev missing (two reg with parent and one returned)
+        false,
+        true,
+        None,
+        Some(PARENT[0].to_string()),
+        |test| {
+            test.populate_broken_active_device_links(UUID[5], PARENT[0], MDEV_TYPE[1], false, true);
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-parent-verbose-removed-active-mdev-type",
+        Expect::Pass, // removed mdev type file (two reg with parent and one returned)
+        false,
+        true,
+        None,
+        Some(PARENT[0].to_string()),
+        |test| {
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[0],
+                MDEV_TYPE[1],
+                false,
+                true,
+            );
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-parent-verbose-broken-active-parent",
+        Expect::Pass, // broken mdev missing (two reg with parent and one returned)
+        false,
+        true,
+        None,
+        Some(PARENT[0].to_string()),
+        |test| {
+            test.populate_broken_active_device_links(UUID[5], PARENT[0], MDEV_TYPE[1], true, false);
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-parent-verbose-removed-active-parent",
+        Expect::Pass, // removed mdev type file
+        false,
+        true,
+        None,
+        Some(PARENT[0].to_string()),
+        |test| {
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[0],
+                MDEV_TYPE[1],
+                true,
+                false,
+            );
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-verbose-broken-active-mdev-type",
+        Expect::Pass, // broken link still provides mdev type (one reg with uuid and one returned)
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        None,
+        |test| {
+            test.populate_broken_active_device_links(UUID[5], PARENT[1], MDEV_TYPE[1], false, true);
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-verbose-removed-active-mdev-type",
+        Expect::Pass, // removed mdev type file
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        None,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[1],
+                MDEV_TYPE[1],
+                false,
+                true,
+            );
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-verbose-broken-active-parent",
+        Expect::Pass, // broken link still provides mdev type (one reg with uuid and one returned)
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        None,
+        |test| {
+            test.populate_broken_active_device_links(UUID[5], PARENT[1], MDEV_TYPE[1], true, false);
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-verbose-removed-active-parent",
+        Expect::Fail(Some("Device must have a defined mdev_type")), // removed mdev type file
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        None,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[1],
+                MDEV_TYPE[1],
+                true,
+                false,
+            );
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-parent-verbose-broken-active-mdev-type",
+        Expect::Pass, // broken mdev missing (one reg and none returned)
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        Some(PARENT[1].to_string()),
+        |test| {
+            test.populate_broken_active_device_links(UUID[5], PARENT[1], MDEV_TYPE[1], false, true);
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-parent-verbose-removed-active-mdev-type",
+        Expect::Pass, // removed mdev type file (one reg and none returned)
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        Some(PARENT[1].to_string()),
+        |test| {
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[1],
+                MDEV_TYPE[1],
+                false,
+                true,
+            );
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-parent-verbose-broken-active-parent",
+        Expect::Pass,
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        Some(PARENT[1].to_string()),
+        |test| {
+            test.populate_broken_active_device_links(UUID[5], PARENT[1], MDEV_TYPE[1], true, false);
+            setup(test);
+        },
+    );
+    test_list_helper(
+        "active-uuid-parent-verbose-removed-active-parent",
+        Expect::Pass, // removed mdev type (one reg and none returned)
+        false,
+        true,
+        Some(UUID[5].to_string()),
+        Some(PARENT[1].to_string()),
+        |test| {
+            test.populate_removed_active_device_attributes(
+                UUID[5],
+                PARENT[1],
+                MDEV_TYPE[1],
+                true,
+                false,
+            );
+            setup(test);
         },
     );
 }
