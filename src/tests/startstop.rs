@@ -222,7 +222,7 @@ fn test_start() {
     // test with active broken mdev
     test_start_helper(
         "already-running-broken-active-mdev-type",
-        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Expect::Pass,
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -236,7 +236,9 @@ fn test_start() {
     );
     test_start_helper(
         "already-running-removed-active-mdev-type",
-        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Expect::Fail(Some(
+            "Parent 0000:00:03.0 does not support mdev type arbitrary_type",
+        )),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
