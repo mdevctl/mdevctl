@@ -414,11 +414,23 @@ fn start_command(
 fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
-    let sysfs_data = MDevSysfsData::load_with_mdev(&dev)?;
-    if !sysfs_data.active {
-        return Err(anyhow!("Device {} is not an active mdev", uuid));
-    }
-    dev.set_sysfs_data(sysfs_data);
+    match MDevSysfsData::load_with_mdev(&dev) {
+        Ok(sysfs_data) => {
+            if !sysfs_data.active {
+                return Err(anyhow!("Device {} is not an active mdev", uuid));
+            }
+            dev.set_sysfs_data(sysfs_data);
+        }
+        Err(e) => {
+            if !force {
+                return Err(e);
+            }
+            warn!(
+                "For device {} a sysfs update caused the error: {:?}",
+                dev.uuid, e
+            );
+        }
+    };
 
     callout(&mut dev)?.invoke(Action::Stop, force, |c| c.dev.stop())
 }

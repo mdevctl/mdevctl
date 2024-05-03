@@ -531,7 +531,7 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-fail-force-broken-active-mdev-type",
-        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Expect::Fail(Some("Device must have a defined mdev_type")),
         UUID,
         true,
         |t| {
@@ -541,7 +541,7 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-fail-force-removed-active-mdev-type",
-        Expect::Fail(Some("No such file or directory (os error 2)")),
+        Expect::Fail(Some("Device must have a defined mdev_type")),
         UUID,
         true,
         |t| {
