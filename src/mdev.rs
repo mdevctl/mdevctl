@@ -495,12 +495,8 @@ impl MDev {
 
 fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String> {
     let path = fs::canonicalize(path)?;
-    let fname = path.file_name();
-    if fname.is_none() {
-        return Err(anyhow!("Invalid path"));
-    }
-    let fname = fname.unwrap().to_str();
-    match fname {
+    let fname = path.file_name().ok_or_else(|| anyhow!("Invalid path"))?;
+    match fname.to_str() {
         Some(x) => Ok(x.to_string()),
         None => Err(anyhow!("Invalid file name")),
     }
