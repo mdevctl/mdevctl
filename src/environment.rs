@@ -165,7 +165,7 @@ pub trait Environment: std::fmt::Debug {
 
                     // retrieve autostart from persisted mdev if possible
                     let mut per_dev = MDev::new(self.clone().as_env(), u);
-                    per_dev.parent = dev.parent.clone();
+                    per_dev.parent.clone_from(&dev.parent);
                     if per_dev.load_definition().is_ok() {
                         dev.autostart = per_dev.autostart;
                     }
