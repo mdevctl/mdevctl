@@ -50,7 +50,7 @@ fn test_list_helper<F>(
         parent.clone(),
         &mut outbuf,
     );
-    if let Ok(_) = test.assert_result(res, expect, Some("json")) {
+    if test.assert_result(res, expect, Some("json")).is_ok() {
         let actual = String::from_utf8(outbuf).expect("failed to convert list output from utf8");
         test.compare_to_file(&format!("{}.text", subtest), &actual);
     }
@@ -65,7 +65,7 @@ fn test_list_helper<F>(
         parent.clone(),
         &mut outbuf,
     );
-    if let Ok(_) = test.assert_result(res, expect, Some("text")) {
+    if test.assert_result(res, expect, Some("text")).is_ok() {
         let actual = String::from_utf8(outbuf).expect("failed to convert list output from utf8");
         test.compare_to_file(&format!("{}.json", subtest), &actual);
     }

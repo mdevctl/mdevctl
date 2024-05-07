@@ -2,6 +2,7 @@ use super::*;
 use std::{fs, path::PathBuf};
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 fn test_modify_helper<F>(
     testname: &str,
     expect: Expect,
@@ -27,10 +28,7 @@ fn test_modify_helper<F>(
     let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
-    let jsonfile = match jsonfile {
-        Some(f) => Some(test.datapath.join(f)),
-        None => None,
-    };
+    let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
     setupfn(test.clone());
 
@@ -68,6 +66,7 @@ fn test_modify_helper<F>(
         .compare_to_file(&format!("{}.expected", testname), &filecontents);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn test_modify_defined_active_helper<F>(
     testname: &str,
     expect: Expect,
@@ -93,10 +92,7 @@ fn test_modify_defined_active_helper<F>(
     let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
-    let jsonfile = match jsonfile {
-        Some(f) => Some(test.datapath.join(f)),
-        None => None,
-    };
+    let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
     setupfn(test.clone());
 
@@ -626,9 +622,7 @@ fn test_modify() {
     );
     test_modify_helper(
         "live-unsupported-script-without-version-support",
-        Expect::Fail(Some(
-            format!("'live' option must be used with 'jsonfile' option").as_str(),
-        )),
+        Expect::Fail(Some("'live' option must be used with 'jsonfile' option")),
         UUID,
         Some(PARENT.to_string()),
         None,
@@ -673,7 +667,9 @@ fn test_modify() {
     test_modify_helper(
         "live-fail-without-jsonfile",
         Expect::Fail(Some(
-            format!("'live' option must be used with 'jsonfile' option").as_str(),
+            "'live' option must be used with 'jsonfile' option"
+                .to_string()
+                .as_str(),
         )),
         UUID_LIVE,
         Some(PARENT.to_string()),

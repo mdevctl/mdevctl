@@ -12,7 +12,11 @@ fn test_types_helper(
     // test text output
     let mut outbuf: Vec<u8> = Default::default();
     let res = types_command(env.clone(), parent.clone(), false, &mut outbuf);
-    if let Ok(_) = test.clone().assert_result(res, expect, Some("text")) {
+    if test
+        .clone()
+        .assert_result(res, expect, Some("text"))
+        .is_ok()
+    {
         test.compare_to_file(
             &format!("{}.text", subtest),
             &String::from_utf8(outbuf).expect("invalid utf8 output"),
@@ -22,7 +26,11 @@ fn test_types_helper(
     // test JSON output
     let mut outbuf: Vec<u8> = Default::default();
     let res = types_command(env.clone(), parent.clone(), true, &mut outbuf);
-    if let Ok(_) = test.clone().assert_result(res, expect, Some("json")) {
+    if test
+        .clone()
+        .assert_result(res, expect, Some("json"))
+        .is_ok()
+    {
         test.compare_to_file(
             &format!("{}.json", subtest),
             &String::from_utf8(outbuf).expect("invalid utf8 output"),

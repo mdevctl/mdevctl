@@ -23,6 +23,7 @@ fn test_define_command_callout<F>(
     let _ = test.assert_result(res, expect, None);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn test_define_helper<F>(
     testname: &str,
     expect: Expect,
@@ -40,10 +41,7 @@ fn test_define_helper<F>(
     let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
-    let jsonfile = match jsonfile {
-        Some(f) => Some(test.datapath.join(f)),
-        None => None,
-    };
+    let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
     setupfn(&test);
 

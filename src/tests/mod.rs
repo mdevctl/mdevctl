@@ -81,11 +81,11 @@ impl TestEnvironment {
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
         for dir in test.callout_dirs() {
             fs::create_dir_all(&dir)
-                .expect(format!("Unable to create callout_dir {:?}", &dir).as_str());
+                .unwrap_or_else(|_| panic!("Unable to create callout_dir {:?}", &dir))
         }
         for dir in test.notification_dirs() {
             fs::create_dir_all(&dir)
-                .expect(format!("Unable to create notification_dir '{:?}'", &dir).as_str());
+                .unwrap_or_else(|_| panic!("Unable to create notification_dir '{:?}'", &dir))
         }
         info!("---- Running test '{}/{}' ----", testname, testcase);
         Rc::new(test)
@@ -113,11 +113,11 @@ impl TestEnvironment {
         fs::create_dir_all(&parentdevdir).expect("Unable to setup parent device dir");
 
         let devdir = self.mdev_base().join(uuid);
-        fs::create_dir_all(&devdir.parent().unwrap()).expect("Unable to setup mdev dir");
+        fs::create_dir_all(devdir.parent().unwrap()).expect("Unable to setup mdev dir");
         symlink(&parentdevdir, &devdir).expect("Unable to setup mdev dir");
 
         let typefile = devdir.join("mdev_type");
-        symlink(&parenttypedir, &typefile).expect("Unable to setup mdev type");
+        symlink(parenttypedir, typefile).expect("Unable to setup mdev type");
     }
 
     // set up a script in the test environment to simulate a callout
@@ -155,7 +155,7 @@ impl TestEnvironment {
                 waitpid(child, None).expect("Failed to wait for child");
             }
             ForkResult::Child => {
-                fs::copy(calloutscript, &dest).expect("Unable to copy callout script");
+                fs::copy(calloutscript, dest).expect("Unable to copy callout script");
                 unsafe {
                     libc::_exit(0);
                 }
@@ -183,14 +183,14 @@ impl TestEnvironment {
             .expect("Unable to write available_instances");
 
         let apifile = parenttypedir.join("device_api");
-        fs::write(apifile, format!("{}", device_api)).expect("Unable to write device_api");
+        fs::write(apifile, device_api).expect("Unable to write device_api");
 
         let namefile = parenttypedir.join("name");
-        fs::write(namefile, format!("{}", name)).expect("Unable to write name");
+        fs::write(namefile, name).expect("Unable to write name");
 
         if let Some(desc) = description {
             let descfile = parenttypedir.join("description");
-            fs::write(descfile, format!("{}", desc)).expect("Unable to write description");
+            fs::write(descfile, desc).expect("Unable to write description");
         }
 
         (parentdir, parenttypedir)
@@ -247,16 +247,13 @@ impl TestEnvironment {
                 }
                 Err(anyhow!(e))
             }
-            Expect::Pass => Ok(res.expect(format!("Expected {} to pass", testname).as_str())),
+            Expect::Pass => Ok(res.unwrap_or_else(|_| panic!("Expected {} to pass", testname))),
         }
     }
 }
 
 fn get_flag(varname: &str) -> bool {
-    env::var(varname).map_or(false, |s| match s.trim().parse::<i32>() {
-        Ok(n) if n > 0 => true,
-        _ => false,
-    })
+    env::var(varname).map_or(false, |s| matches!(s.trim().parse::<i32>(), Ok(n) if n > 0))
 }
 
 fn regen(filename: &PathBuf, data: &str) -> Result<()> {
@@ -264,10 +261,7 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
     fs::create_dir_all(parentdir)?;
 
     fs::write(filename, data.as_bytes())
-        .and_then(|_| {
-            println!("Regenerated expected data file {:?}", filename);
-            Ok(())
-        })
+        .map(|_| println!("Regenerated expected data file {:?}", filename))
         .map_err(|err| err.into())
 }
 

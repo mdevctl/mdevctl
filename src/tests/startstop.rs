@@ -2,6 +2,7 @@ use super::*;
 use std::{fs, path::PathBuf};
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 fn test_start_helper<F>(
     testname: &str,
     expect: Expect,
@@ -309,7 +310,7 @@ fn test_start() {
             format!(
                 "Unable to find parent device '{}'. Did you mean '{}'?",
                 PARENT3.to_string().to_uppercase(),
-                PARENT3.to_string()
+                PARENT3
             )
             .as_str(),
         )),
@@ -415,7 +416,7 @@ where
 
     let res = crate::stop_command(env, Uuid::parse_str(uuid).unwrap(), force);
 
-    if let Ok(_) = test.assert_result(res, expect, None) {
+    if test.assert_result(res, expect, None).is_ok() {
         let remove_path = test.mdev_base().join(uuid).join("remove");
         assert!(remove_path.exists());
         let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
