@@ -96,14 +96,15 @@ fn define_command_helper(
         dev.load_from_json(parent, &jsonval)?;
     } else {
         if uuid_provided {
-            match MDevSysfsData::load_with_mdev(&dev) {
-                Ok(sysfs_data) => {
+            MDevSysfsData::load_with_mdev(&dev)
+                .and_then(|sysfs_data| {
                     if parent.is_none() && (!sysfs_data.active || mdev_type.is_some()) {
                         return Err(anyhow!("No parent specified"));
                     }
                     dev.set_sysfs_data(sysfs_data);
-                }
-                Err(e) => {
+                    Ok(())
+                })
+                .or_else(|e| {
                     if !force {
                         return Err(e);
                     }
@@ -111,8 +112,8 @@ fn define_command_helper(
                         "For device {} a sysfs update caused the error: {:?}",
                         dev.uuid, e
                     );
-                }
-            }
+                    Ok(())
+                })?;
         }
 
         dev.autostart = auto;
