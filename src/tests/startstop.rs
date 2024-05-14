@@ -533,7 +533,9 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-fail-force-broken-active-mdev-type",
-        Expect::Fail(Some("Device must have a defined mdev_type")),
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
         UUID,
         true,
         |t| {
@@ -543,7 +545,9 @@ fn test_stop() {
     );
     test_stop_helper(
         "callout-fail-force-removed-active-mdev-type",
-        Expect::Fail(Some("Device must have a defined mdev_type")),
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
         UUID,
         true,
         |t| {

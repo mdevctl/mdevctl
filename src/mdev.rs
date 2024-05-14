@@ -4,7 +4,7 @@ use crate::environment::Environment;
 use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
 use std::fs;
-use std::io::Read;
+use std::io::{Error as ioError, ErrorKind, Read, Result as ioResult};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::vec::Vec;
@@ -25,40 +25,35 @@ pub struct MDevSysfsData {
 
 impl MDevSysfsData {
     pub fn load(env: &Rc<dyn Environment>, uuid: &Uuid) -> Result<MDevSysfsData> {
-        let mut parent: Option<String> = None;
         let mut mdev_type: Option<String> = None;
+        let mut active = true;
         let active_path = Self::active_path(env.clone(), uuid);
-        let mut active = Self::is_active(&active_path);
-        if active {
-            parent = match Self::load_parent_from_sysfs(&active_path) {
-                Ok(parentname) => Some(parentname),
-                Err(e) => {
-                    if Self::is_active(&active_path) {
-                        return Err(e);
-                    } else {
-                        debug!("Mdev {:?} does no longer exist in sysfs", uuid);
-                        active = false;
-                        None
-                    }
+        let mut parent = match Self::load_parent_from_sysfs(&active_path) {
+            Ok(parentname) => Some(parentname),
+            Err(e) => match e.kind() {
+                ErrorKind::NotFound => {
+                    debug!("Mdev {:?} does not exist in sysfs", uuid);
+                    active = false;
+                    None
                 }
-            };
-            if active {
-                mdev_type = match Self::load_mdev_type_from_sysfs(&active_path) {
-                    Ok(mdev_type) => Some(mdev_type),
-                    Err(e) => {
-                        if Self::is_active(&active_path) {
-                            return Err(e);
-                        } else {
+                _ => return Err(e.into()),
+            },
+        };
+        if active {
+            mdev_type = match Self::load_mdev_type_from_sysfs(&active_path) {
+                Ok(mdev_type) => Some(mdev_type),
+                Err(e) => {
+                    match e.kind() {
+                        ErrorKind::NotFound => {
                             debug!("Mdev {:?} does no longer exist in sysfs", uuid);
                             parent = None; // remove invalid data
                             active = false;
                             None
                         }
+                        _ => return Err(e.into()),
                     }
-                };
-            }
-        } else {
-            debug!("Mdev {:?} does not exist in sysfs", uuid);
+                }
+            };
         }
         Ok(MDevSysfsData {
             uuid: uuid.to_owned(),
@@ -76,30 +71,35 @@ impl MDevSysfsData {
         env.mdev_base().join(uuid.hyphenated().to_string())
     }
 
-    fn is_active(active_path: &Path) -> bool {
-        active_path.exists()
-    }
-
-    fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> Result<String> {
+    fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> ioResult<String> {
         let canonpath = fs::canonicalize(&active_path)?;
-        let sysfsparent = canonpath
-            .parent()
-            .ok_or_else(|| anyhow!("Path to parent of mdev {:?} does not exist", canonpath))?;
+        let sysfsparent = match canonpath.parent() {
+            Some(sysfsparent) => sysfsparent,
+            None => {
+                return Err(ioError::new(
+                    ErrorKind::Other,
+                    format!("Path to parent of mdev {:?} does not exist", canonpath),
+                ))
+            }
+        };
         Self::canonical_basename(sysfsparent)
     }
 
-    fn load_mdev_type_from_sysfs<P: Into<PathBuf>>(active_path: P) -> Result<String> {
+    fn load_mdev_type_from_sysfs<P: Into<PathBuf>>(active_path: P) -> ioResult<String> {
         let mut typepath: PathBuf = active_path.into();
         typepath.push("mdev_type");
         Self::canonical_basename(typepath)
     }
 
-    fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String> {
+    fn canonical_basename<P: AsRef<Path>>(path: P) -> ioResult<String> {
         let path = fs::canonicalize(path)?;
-        let fname = path.file_name().ok_or_else(|| anyhow!("Invalid path"))?;
+        let fname = match path.file_name() {
+            Some(fname) => fname,
+            None => return Err(ioError::new(ErrorKind::Other, "Invalid path")),
+        };
         match fname.to_str() {
             Some(x) => Ok(x.to_string()),
-            None => Err(anyhow!("Invalid file name")),
+            None => Err(ioError::new(ErrorKind::Other, "Invalid file name")),
         }
     }
 }
