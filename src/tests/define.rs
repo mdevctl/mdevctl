@@ -23,6 +23,7 @@ fn test_define_command_callout<F>(
     let _ = test.assert_result(res, expect, None);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn test_define_helper<F>(
     testname: &str,
     expect: Expect,
@@ -31,6 +32,7 @@ fn test_define_helper<F>(
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
+    force: bool,
     setupfn: F,
 ) where
     F: Fn(&TestEnvironment),
@@ -40,22 +42,22 @@ fn test_define_helper<F>(
     let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
-    let jsonfile = match jsonfile {
-        Some(f) => Some(test.datapath.join(f)),
-        None => None,
-    };
+    let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
     setupfn(&test);
 
-    let res = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile);
+    let res = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile, force);
+    let expected_testfilename = format!("{}.expected", testname);
     if let Ok(def) = test.assert_result(res, expect, None) {
-        let path = def.persist_path().unwrap();
+        let path = def.persistent_path().unwrap();
         assert!(!path.exists());
         def.define().expect("Failed to define device");
         assert!(path.exists());
         assert!(def.is_defined());
         let filecontents = fs::read_to_string(&path).unwrap();
-        test.compare_to_file(&format!("{}.expected", testname), &filecontents);
+        test.compare_to_file(&expected_testfilename, &filecontents);
+    } else {
+        test.unused_file(&expected_testfilename);
     }
 }
 
@@ -73,6 +75,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         None,
         None,
+        false,
         |_| {},
     );
     // if no uuid is specified, one will be auto-generated
@@ -84,6 +87,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
         None,
+        false,
         |_| {},
     );
     // specify autostart
@@ -95,6 +99,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
         None,
+        false,
         |_| {},
     );
     // specify manual start
@@ -106,6 +111,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
         None,
+        false,
         |_| {},
     );
     // invalid to specify an separate mdev_type if defining via jsonfile
@@ -117,6 +123,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
         Some(PathBuf::from("defined.json")),
+        false,
         |_| {},
     );
     // specifying via jsonfile properly
@@ -128,6 +135,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         None,
         Some(PathBuf::from("defined.json")),
+        false,
         |_| {},
     );
     // If uuid is already active, specifying mdev_type will result in an error
@@ -139,6 +147,7 @@ fn test_define() {
         None,
         Some("i915-GVTg_V5_4".to_string()),
         None,
+        false,
         |test| {
             test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
         },
@@ -152,6 +161,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         None,
         None,
+        false,
         |test| {
             test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "i915-GVTg_V5_4");
         },
@@ -166,6 +176,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
         None,
+        false,
         |test| {
             test.populate_active_device(DEFAULT_UUID, "0000:00:02.0", "i915-GVTg_V5_4");
         },
@@ -180,8 +191,204 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
         None,
+        false,
         |test| {
             test.populate_active_device(DEFAULT_UUID, DEFAULT_PARENT, "different_type");
+        },
+    );
+    // defining a device with the same uuid as a running device with a broken mdev_type
+    test_define_helper(
+        "uuid-running-broken-active-mdev_type",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_broken_active_device_links(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    test_define_helper(
+        "uuid-running-removed-active-mdev_type",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    // defining a device with the same uuid as a running device with a broken mdev_type without specifying mdev_type
+    test_define_helper(
+        "uuid-running-broken-active-mdev_type-no-mdev_type",
+        Expect::Fail(Some("No type specified")),
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        None,
+        None,
+        false,
+        |test| {
+            test.populate_broken_active_device_links(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    test_define_helper(
+        "uuid-running-removed-active-mdev_type-no-mdev_type",
+        Expect::Fail(Some("No type specified")),
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        None,
+        None,
+        false,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    // defining a device with the same uuid as a running device with a broken parent
+    test_define_helper(
+        "uuid-running-broken-active-parent",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_broken_active_device_links(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                true,
+                false,
+            );
+        },
+    );
+    test_define_helper(
+        "uuid-running-removed-active-parent",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                true,
+                false,
+            );
+        },
+    );
+    // force defining a device with the same uuid as a running device with a broken mdev_type
+    test_define_helper(
+        "uuid-running-force-broken-active-mdev_type",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        true,
+        |test| {
+            test.populate_broken_active_device_links(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    test_define_helper(
+        "uuid-running-force-removed-active-mdev_type",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        true,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                false,
+                true,
+            );
+        },
+    );
+    // force defining a device with the same uuid as a running device with a broken parent
+    test_define_helper(
+        "uuid-running-force-broken-active-parent",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        true,
+        |test| {
+            test.populate_broken_active_device_links(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                true,
+                false,
+            );
+        },
+    );
+    test_define_helper(
+        "uuid-running-force-removed-active-parent",
+        Expect::Pass,
+        Uuid::parse_str(DEFAULT_UUID).ok(),
+        false,
+        Some(DEFAULT_PARENT.to_string()),
+        Some("i915-GVTg_V5_4".to_string()),
+        None,
+        true,
+        |test| {
+            test.populate_removed_active_device_attributes(
+                DEFAULT_UUID,
+                DEFAULT_PARENT,
+                "i915-GVTg_V5_4",
+                true,
+                false,
+            );
         },
     );
     // defining a device that is already defined should result in an error
@@ -193,6 +400,7 @@ fn test_define() {
         Some(DEFAULT_PARENT.to_string()),
         Some("i915-GVTg_V5_4".to_string()),
         None,
+        false,
         |test| {
             test.populate_defined_device(DEFAULT_UUID, DEFAULT_PARENT, "defined.json");
         },

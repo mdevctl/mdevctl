@@ -2,6 +2,7 @@ use super::*;
 use std::{fs, path::PathBuf};
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 fn test_modify_helper<F>(
     testname: &str,
     expect: Expect,
@@ -27,10 +28,7 @@ fn test_modify_helper<F>(
     let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
-    let jsonfile = match jsonfile {
-        Some(f) => Some(test.datapath.join(f)),
-        None => None,
-    };
+    let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
     setupfn(test.clone());
 
@@ -52,7 +50,9 @@ fn test_modify_helper<F>(
         force,
     );
 
+    let testfilename = format!("{}.expected", testname);
     if test.assert_result(result, expect, None).is_err() {
+        test.unused_file(&testfilename);
         return;
     }
 
@@ -60,14 +60,14 @@ fn test_modify_helper<F>(
         .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
-    let path = def.persist_path().unwrap();
+    let path = def.persistent_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    test.clone()
-        .compare_to_file(&format!("{}.expected", testname), &filecontents);
+    test.clone().compare_to_file(&testfilename, &filecontents);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn test_modify_defined_active_helper<F>(
     testname: &str,
     expect: Expect,
@@ -93,10 +93,7 @@ fn test_modify_defined_active_helper<F>(
     let env: Rc<dyn Environment> = test.clone();
 
     // load the jsonfile from the test path.
-    let jsonfile = match jsonfile {
-        Some(f) => Some(test.datapath.join(f)),
-        None => None,
-    };
+    let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
     setupfn(test.clone());
 
@@ -117,10 +114,15 @@ fn test_modify_defined_active_helper<F>(
         jsonfile,
         force,
     );
+    let active_expect_testfilename = format!("{}.active.expected", testname);
+    let defined_expect_testfilename = format!("{}.defined.expected", testname);
     if test
         .assert_result(result, expect, Some("modify command"))
         .is_err()
     {
+        let active_expect_testfilename = format!("{}.active.expected", testname);
+        test.unused_file(&active_expect_testfilename);
+        test.unused_file(&defined_expect_testfilename);
         return;
     }
 
@@ -136,18 +138,18 @@ fn test_modify_defined_active_helper<F>(
     )
     .expect("Couldn't get json from active device");
     test.clone()
-        .compare_to_file(&format!("{}.active.expected", testname), &def_json);
+        .compare_to_file(&active_expect_testfilename, &def_json);
 
     let def = test
         .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
-    let path = def.persist_path().unwrap();
+    let path = def.persistent_path().unwrap();
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
     test.clone()
-        .compare_to_file(&format!("{}.defined.expected", testname), &filecontents);
+        .compare_to_file(&defined_expect_testfilename, &filecontents);
 }
 
 #[test]
@@ -626,9 +628,7 @@ fn test_modify() {
     );
     test_modify_helper(
         "live-unsupported-script-without-version-support",
-        Expect::Fail(Some(
-            format!("'live' option must be used with 'jsonfile' option").as_str(),
-        )),
+        Expect::Fail(Some("'live' option must be used with 'jsonfile' option")),
         UUID,
         Some(PARENT.to_string()),
         None,
@@ -673,7 +673,9 @@ fn test_modify() {
     test_modify_helper(
         "live-fail-without-jsonfile",
         Expect::Fail(Some(
-            format!("'live' option must be used with 'jsonfile' option").as_str(),
+            "'live' option must be used with 'jsonfile' option"
+                .to_string()
+                .as_str(),
         )),
         UUID_LIVE,
         Some(PARENT.to_string()),
@@ -758,6 +760,128 @@ fn test_modify() {
         |test| {
             test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_active_device(UUID, PARENT, "vfio_ap-passthrough");
+            test.populate_callout_script("modify-active.sh");
+        },
+    );
+
+    // tests with active broken mdev are below
+    test_modify_helper(
+        "live-event-supported-broken-active-mdev-type",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_broken_active_device_links(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                false,
+                true,
+            );
+            test.populate_callout_script("live-rc0.sh");
+        },
+    );
+    test_modify_helper(
+        "live-event-supported-removed-active-mdev-type",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        false,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_removed_active_device_attributes(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                false,
+                true,
+            );
+            test.populate_callout_script("live-rc0.sh");
+        },
+    );
+    test_modify_defined_active_helper(
+        "live-defined-supported-broken-active-parent",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        true,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_broken_active_device_links(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                true,
+                false,
+            );
+            test.populate_callout_script("modify-active.sh");
+        },
+    );
+    test_modify_defined_active_helper(
+        "live-defined-supported-removed-active-parent",
+        Expect::Fail(Some(
+            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+        )),
+        UUID_LIVE,
+        Some(PARENT.to_string()),
+        None,
+        None,
+        false,
+        None,
+        None,
+        false,
+        false,
+        true,
+        true,
+        Some(PathBuf::from("modified.json")),
+        false,
+        |test| {
+            test.populate_defined_device(UUID_LIVE, PARENT, "defined.json");
+            test.populate_removed_active_device_attributes(
+                UUID_LIVE,
+                PARENT,
+                "vfio_ap-passthrough",
+                true,
+                false,
+            );
             test.populate_callout_script("modify-active.sh");
         },
     );

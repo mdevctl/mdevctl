@@ -59,6 +59,7 @@ fn define_command_helper(
     parent: Option<String>,
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
+    force: bool,
 ) -> Result<MDev> {
     let uuid_provided = uuid.is_some();
     let uuid = uuid.unwrap_or_else(Uuid::new_v4);
@@ -95,9 +96,22 @@ fn define_command_helper(
         dev.load_from_json(parent, &jsonval)?;
     } else {
         if uuid_provided {
-            dev.load_from_sysfs()?;
-            if parent.is_none() && (!dev.active || mdev_type.is_some()) {
-                return Err(anyhow!("No parent specified"));
+            match MDevSysfsData::load_with_mdev(&dev) {
+                Ok(sysfs_data) => {
+                    if parent.is_none() && (!sysfs_data.active || mdev_type.is_some()) {
+                        return Err(anyhow!("No parent specified"));
+                    }
+                    dev.set_sysfs_data(sysfs_data);
+                }
+                Err(e) => {
+                    if !force {
+                        return Err(e);
+                    }
+                    warn!(
+                        "For device {} a sysfs update caused the error: {:?}",
+                        dev.uuid, e
+                    );
+                }
             }
         }
 
@@ -140,7 +154,7 @@ fn define_command(
 ) -> Result<()> {
     debug!("Defining mdev {:?}", uuid);
 
-    let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile)?;
+    let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile, force)?;
 
     /*
         Call Callout::get_attributes() when defining an active device without a config file.
@@ -413,7 +427,23 @@ fn start_command(
 fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
-    dev.load_from_sysfs()?;
+    match MDevSysfsData::load_with_mdev(&dev) {
+        Ok(sysfs_data) => {
+            if !sysfs_data.active {
+                return Err(anyhow!("Device {} is not an active mdev", uuid));
+            }
+            dev.set_sysfs_data(sysfs_data);
+        }
+        Err(e) => {
+            if !force {
+                return Err(e);
+            }
+            warn!(
+                "For device {} a sysfs update caused the error: {:?}",
+                dev.uuid, e
+            );
+        }
+    };
 
     callout(&mut dev)?.invoke(Action::Stop, force, |c| c.dev.stop())
 }

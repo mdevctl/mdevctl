@@ -81,11 +81,11 @@ impl TestEnvironment {
         fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
         for dir in test.callout_dirs() {
             fs::create_dir_all(&dir)
-                .expect(format!("Unable to create callout_dir {:?}", &dir).as_str());
+                .unwrap_or_else(|_| panic!("Unable to create callout_dir {:?}", &dir))
         }
         for dir in test.notification_dirs() {
             fs::create_dir_all(&dir)
-                .expect(format!("Unable to create notification_dir '{:?}'", &dir).as_str());
+                .unwrap_or_else(|_| panic!("Unable to create notification_dir '{:?}'", &dir))
         }
         info!("---- Running test '{}/{}' ----", testname, testcase);
         Rc::new(test)
@@ -104,6 +104,59 @@ impl TestEnvironment {
 
     // set up a few files in the test environment to simulate an active mediated device
     fn populate_active_device(&self, uuid: &str, parent: &str, mdev_type: &str) {
+        self.general_populate_active_device(uuid, parent, mdev_type, false, false, false, false);
+    }
+
+    // set up a few files in the test environment to simulate an active mediated device with error
+    fn populate_broken_active_device_links(
+        &self,
+        uuid: &str,
+        parent: &str,
+        mdev_type: &str,
+        break_parent: bool,
+        break_type: bool,
+    ) {
+        self.general_populate_active_device(
+            uuid,
+            parent,
+            mdev_type,
+            break_parent,
+            false,
+            break_type,
+            false,
+        );
+    }
+
+    fn populate_removed_active_device_attributes(
+        &self,
+        uuid: &str,
+        parent: &str,
+        mdev_type: &str,
+        break_parent: bool,
+        break_type: bool,
+    ) {
+        self.general_populate_active_device(
+            uuid,
+            parent,
+            mdev_type,
+            break_parent,
+            true,
+            break_type,
+            true,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn general_populate_active_device(
+        &self,
+        uuid: &str,
+        parent: &str,
+        mdev_type: &str,
+        break_parent: bool,
+        remove_parent_link: bool,
+        break_type: bool,
+        remove_type_link: bool,
+    ) {
         use std::os::unix::fs::symlink;
 
         let (parentdir, parenttypedir) =
@@ -113,11 +166,31 @@ impl TestEnvironment {
         fs::create_dir_all(&parentdevdir).expect("Unable to setup parent device dir");
 
         let devdir = self.mdev_base().join(uuid);
-        fs::create_dir_all(&devdir.parent().unwrap()).expect("Unable to setup mdev dir");
-        symlink(&parentdevdir, &devdir).expect("Unable to setup mdev dir");
+        fs::create_dir_all(devdir.parent().unwrap()).expect("Unable to setup mdev dir");
+        symlink(&parentdevdir, &devdir).expect("Unable to setup parent dir");
 
         let typefile = devdir.join("mdev_type");
         symlink(&parenttypedir, &typefile).expect("Unable to setup mdev type");
+
+        if break_type {
+            if remove_type_link {
+                // removes directory link is pointing to
+                fs::remove_dir_all(parenttypedir)
+                    .expect("Unable to remove setup for supported mdev type");
+            } else {
+                fs::remove_file(typefile)
+                    .expect("Unable to remove setup for link to supported mdev type");
+            }
+        }
+        if break_parent {
+            if remove_parent_link {
+                // removes directory link is pointing to
+                fs::remove_dir_all(parentdevdir).expect("Unable to remove setup parent dir");
+            } else {
+                // remove link itself
+                fs::remove_file(devdir).expect("Unable to remove setup for dev link to parent dir");
+            }
+        }
     }
 
     // set up a script in the test environment to simulate a callout
@@ -155,7 +228,7 @@ impl TestEnvironment {
                 waitpid(child, None).expect("Failed to wait for child");
             }
             ForkResult::Child => {
-                fs::copy(calloutscript, &dest).expect("Unable to copy callout script");
+                fs::copy(calloutscript, dest).expect("Unable to copy callout script");
                 unsafe {
                     libc::_exit(0);
                 }
@@ -183,14 +256,14 @@ impl TestEnvironment {
             .expect("Unable to write available_instances");
 
         let apifile = parenttypedir.join("device_api");
-        fs::write(apifile, format!("{}", device_api)).expect("Unable to write device_api");
+        fs::write(apifile, device_api).expect("Unable to write device_api");
 
         let namefile = parenttypedir.join("name");
-        fs::write(namefile, format!("{}", name)).expect("Unable to write name");
+        fs::write(namefile, name).expect("Unable to write name");
 
         if let Some(desc) = description {
             let descfile = parenttypedir.join("description");
-            fs::write(descfile, format!("{}", desc)).expect("Unable to write description");
+            fs::write(descfile, desc).expect("Unable to write description");
         }
 
         (parentdir, parenttypedir)
@@ -213,6 +286,15 @@ impl TestEnvironment {
         });
 
         assert_eq!(expected, actual);
+    }
+
+    fn unused_file(&self, filename: &str) {
+        let path = self.datapath.join(filename);
+        assert!(
+            !path.exists(),
+            "Unused file {:?} found! Please remove it.",
+            path
+        );
     }
 
     fn load_from_json(self: &Rc<Self>, uuid: &str, parent: &str, filename: &str) -> Result<MDev> {
@@ -247,16 +329,13 @@ impl TestEnvironment {
                 }
                 Err(anyhow!(e))
             }
-            Expect::Pass => Ok(res.expect(format!("Expected {} to pass", testname).as_str())),
+            Expect::Pass => Ok(res.unwrap_or_else(|_| panic!("Expected {} to pass", testname))),
         }
     }
 }
 
 fn get_flag(varname: &str) -> bool {
-    env::var(varname).map_or(false, |s| match s.trim().parse::<i32>() {
-        Ok(n) if n > 0 => true,
-        _ => false,
-    })
+    env::var(varname).map_or(false, |s| matches!(s.trim().parse::<i32>(), Ok(n) if n > 0))
 }
 
 fn regen(filename: &PathBuf, data: &str) -> Result<()> {
@@ -264,10 +343,7 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
     fs::create_dir_all(parentdir)?;
 
     fs::write(filename, data.as_bytes())
-        .and_then(|_| {
-            println!("Regenerated expected data file {:?}", filename);
-            Ok(())
-        })
+        .map(|_| println!("Regenerated expected data file {:?}", filename))
         .map_err(|err| err.into())
 }
 

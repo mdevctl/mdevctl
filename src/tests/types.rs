@@ -11,22 +11,36 @@ fn test_types_helper(
 
     // test text output
     let mut outbuf: Vec<u8> = Default::default();
+    let text_testfilename = format!("{}.text", subtest);
     let res = types_command(env.clone(), parent.clone(), false, &mut outbuf);
-    if let Ok(_) = test.clone().assert_result(res, expect, Some("text")) {
+    if test
+        .clone()
+        .assert_result(res, expect, Some("text"))
+        .is_ok()
+    {
         test.compare_to_file(
-            &format!("{}.text", subtest),
+            &text_testfilename,
             &String::from_utf8(outbuf).expect("invalid utf8 output"),
         );
+    } else {
+        test.unused_file(&text_testfilename);
     }
 
     // test JSON output
     let mut outbuf: Vec<u8> = Default::default();
+    let json_testfilename = format!("{}.json", subtest);
     let res = types_command(env.clone(), parent.clone(), true, &mut outbuf);
-    if let Ok(_) = test.clone().assert_result(res, expect, Some("json")) {
+    if test
+        .clone()
+        .assert_result(res, expect, Some("json"))
+        .is_ok()
+    {
         test.compare_to_file(
-            &format!("{}.json", subtest),
+            &json_testfilename,
             &String::from_utf8(outbuf).expect("invalid utf8 output"),
         );
+    } else {
+        test.unused_file(&json_testfilename);
     }
 }
 

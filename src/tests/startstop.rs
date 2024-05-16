@@ -2,6 +2,7 @@ use super::*;
 use std::{fs, path::PathBuf};
 use uuid::Uuid;
 
+#[allow(clippy::too_many_arguments)]
 fn test_start_helper<F>(
     testname: &str,
     expect: Expect,
@@ -206,7 +207,7 @@ fn test_start() {
     );
     test_start_helper(
         "already-running",
-        Expect::Fail(None),
+        Expect::Fail(Some("Device already exists")),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -214,7 +215,39 @@ fn test_start() {
         false,
         |test| {
             test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
             test.populate_active_device(UUID, PARENT, MDEV_TYPE);
+        },
+    );
+    // test with active broken mdev
+    test_start_helper(
+        "already-running-broken-active-mdev-type",
+        Expect::Pass,
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, false, true);
+        },
+    );
+    test_start_helper(
+        "already-running-removed-active-mdev-type",
+        Expect::Fail(Some(
+            "Parent 0000:00:03.0 does not support mdev type arbitrary_type",
+        )),
+        Some(UUID.to_string()),
+        Some(PARENT.to_string()),
+        Some(MDEV_TYPE.to_string()),
+        None,
+        false,
+        |test| {
+            test.populate_parent_device(PARENT, MDEV_TYPE, 1, "vfio-pci", "test device", None);
+            test.populate_defined_device(UUID, PARENT, "defined.json");
+            test.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, false, true);
         },
     );
     test_start_helper(
@@ -309,7 +342,7 @@ fn test_start() {
             format!(
                 "Unable to find parent device '{}'. Did you mean '{}'?",
                 PARENT3.to_string().to_uppercase(),
-                PARENT3.to_string()
+                PARENT3
             )
             .as_str(),
         )),
@@ -415,7 +448,7 @@ where
 
     let res = crate::stop_command(env, Uuid::parse_str(uuid).unwrap(), force);
 
-    if let Ok(_) = test.assert_result(res, expect, None) {
+    if test.assert_result(res, expect, None).is_ok() {
         let remove_path = test.mdev_base().join(uuid).join("remove");
         assert!(remove_path.exists());
         let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
@@ -446,6 +479,106 @@ fn test_stop() {
         t.populate_active_device(UUID, PARENT, MDEV_TYPE);
         t.populate_callout_script("rc1.sh")
     });
+    test_stop_helper(
+        "broken-active-mdev-type",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, false, true),
+    );
+    test_stop_helper(
+        "broken-active-mdev-type",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, false, true),
+    );
+    test_stop_helper(
+        "broken-active-parent",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, true, false),
+    );
+    test_stop_helper(
+        "removed-active-parent",
+        Expect::Fail(None),
+        UUID,
+        false,
+        |t| t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, true, false),
+    );
+    test_stop_helper(
+        "callout-success-broken-active-parent",
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
+        UUID,
+        false,
+        |t| {
+            t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc0.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-success-removed-active-parent",
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
+        UUID,
+        false,
+        |t| {
+            t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc0.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-broken-active-mdev-type",
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
+        UUID,
+        true,
+        |t| {
+            t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, false, true);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-removed-active-mdev-type",
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
+        UUID,
+        true,
+        |t| {
+            t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, false, true);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-broken-active-parent",
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
+        UUID,
+        true,
+        |t| {
+            t.populate_broken_active_device_links(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
+    test_stop_helper(
+        "callout-fail-force-removed-active-parent",
+        Expect::Fail(Some(
+            format!("Device {UUID} is not an active mdev").as_str(),
+        )),
+        UUID,
+        true,
+        |t| {
+            t.populate_removed_active_device_attributes(UUID, PARENT, MDEV_TYPE, true, false);
+            t.populate_callout_script("rc1.sh")
+        },
+    );
 
     // test start with versioning callouts
     // uuid=11111111-1111-0000-0000-000000000000 has a supported version
