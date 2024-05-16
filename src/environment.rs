@@ -41,9 +41,7 @@ pub trait Environment: std::fmt::Debug {
         self.config_base().join("scripts.d")
     }
 
-    fn scripts_base(&self) -> PathBuf {
-        self.root().join("usr/lib/mdevctl/scripts.d")
-    }
+    fn scripts_base(&self) -> PathBuf;
 
     fn callout_dir(&self) -> PathBuf {
         self.scripts_base().join("callouts")
@@ -411,6 +409,13 @@ impl Environment for DefaultEnvironment {
 
     fn as_env(self: Rc<Self>) -> Rc<dyn Environment> {
         self.clone()
+    }
+
+    fn scripts_base(&self) -> PathBuf {
+        PathBuf::from(env!(
+            "MDEVCTL_SCRIPTDIR",
+            "MDEVCTL_SCRIPTDIR environment variable not defined"
+        ))
     }
 }
 
