@@ -455,13 +455,13 @@ impl<'a> Callout<'a> {
 
         let mut res = Ok(());
         let sysfs_data = MDevSysfsData::load_with_mdev(self.dev)?;
-        if sysfs_data.active {
-            if sysfs_data.parent != self.dev.parent {
+        if let Some(sysfs_data) = sysfs_data {
+            if Some(sysfs_data.parent) != self.dev.parent {
                 debug!("Device exists under different parent - cannot run live update");
                 res = Err(anyhow!(
                     "Device exists under different parent - cannot run live update"
                 ));
-            } else if sysfs_data.mdev_type != self.dev.mdev_type {
+            } else if Some(sysfs_data.mdev_type) != self.dev.mdev_type {
                 debug!("Device exists with different type - cannot run live update");
                 res = Err(anyhow!(
                     "Device exists with different type - cannot run live update"

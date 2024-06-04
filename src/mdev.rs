@@ -4,7 +4,7 @@ use crate::environment::Environment;
 use anyhow::{anyhow, Context, Result};
 use log::{debug, warn};
 use std::fs;
-use std::io::{Error as ioError, ErrorKind, Read, Result as ioResult};
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::vec::Vec;
@@ -18,52 +18,44 @@ pub enum FormatType {
 
 pub struct MDevSysfsData {
     pub uuid: Uuid,
-    pub active: bool,
-    pub parent: Option<String>,
-    pub mdev_type: Option<String>,
+    pub parent: String,
+    pub mdev_type: String,
 }
 
 impl MDevSysfsData {
-    pub fn load(env: &Rc<dyn Environment>, uuid: &Uuid) -> Result<MDevSysfsData> {
-        let mut mdev_type: Option<String> = None;
-        let mut active = true;
+    pub fn load(env: &Rc<dyn Environment>, uuid: &Uuid) -> Result<Option<MDevSysfsData>> {
         let active_path = Self::active_path(env.clone(), uuid);
-        let mut parent = match Self::load_parent_from_sysfs(&active_path) {
-            Ok(parentname) => Some(parentname),
-            Err(e) => match e.kind() {
+        let parent = Self::load_parent_from_sysfs(&active_path)
+            .map(Some)
+            .or_else(|e: std::io::Error| match e.kind() {
                 ErrorKind::NotFound => {
-                    debug!("Mdev {:?} does not exist in sysfs", uuid);
-                    active = false;
-                    None
+                    debug!("Mdev {:?} does no longer exist in sysfs", uuid);
+                    Ok(None)
                 }
-                _ => return Err(e.into()),
-            },
-        };
-        if active {
-            mdev_type = match Self::load_mdev_type_from_sysfs(&active_path) {
-                Ok(mdev_type) => Some(mdev_type),
-                Err(e) => {
-                    match e.kind() {
-                        ErrorKind::NotFound => {
-                            debug!("Mdev {:?} does no longer exist in sysfs", uuid);
-                            parent = None; // remove invalid data
-                            active = false;
-                            None
-                        }
-                        _ => return Err(e.into()),
-                    }
+                _ => Err(e),
+            })?;
+        let mdev_type = Self::load_mdev_type_from_sysfs(&active_path)
+            .map(Some)
+            .or_else(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    debug!("Mdev {:?} does no longer exist in sysfs", uuid);
+                    Ok(None)
                 }
-            };
+                _ => Err(e),
+            })?;
+        if let (Some(parent), Some(mdev_type)) = (parent, mdev_type) {
+            Ok(Some(MDevSysfsData {
+                uuid: uuid.to_owned(),
+                parent,
+                mdev_type,
+            }))
+        } else {
+            debug!("Mdev {:?} does not exist in sysfs", uuid);
+            Ok(None)
         }
-        Ok(MDevSysfsData {
-            uuid: uuid.to_owned(),
-            active,
-            parent,
-            mdev_type,
-        })
     }
 
-    pub fn load_with_mdev(mdev: &MDev) -> Result<MDevSysfsData> {
+    pub fn load_with_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>> {
         Self::load(&mdev.env, &mdev.uuid)
     }
 
@@ -71,35 +63,34 @@ impl MDevSysfsData {
         env.mdev_base().join(uuid.hyphenated().to_string())
     }
 
-    fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> ioResult<String> {
+    fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> std::io::Result<String> {
         let canonpath = fs::canonicalize(&active_path)?;
-        let sysfsparent = match canonpath.parent() {
-            Some(sysfsparent) => sysfsparent,
-            None => {
-                return Err(ioError::new(
-                    ErrorKind::Other,
-                    format!("Path to parent of mdev {:?} does not exist", canonpath),
-                ))
-            }
-        };
+        let sysfsparent = canonpath.parent().ok_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                anyhow!("Path to parent of mdev {:?} does not exist", canonpath),
+            )
+        })?;
         Self::canonical_basename(sysfsparent)
     }
 
-    fn load_mdev_type_from_sysfs<P: Into<PathBuf>>(active_path: P) -> ioResult<String> {
+    fn load_mdev_type_from_sysfs<P: Into<PathBuf>>(active_path: P) -> std::io::Result<String> {
         let mut typepath: PathBuf = active_path.into();
         typepath.push("mdev_type");
         Self::canonical_basename(typepath)
     }
 
-    fn canonical_basename<P: AsRef<Path>>(path: P) -> ioResult<String> {
+    fn canonical_basename<P: AsRef<Path>>(path: P) -> std::io::Result<String> {
         let path = fs::canonicalize(path)?;
-        let fname = match path.file_name() {
-            Some(fname) => fname,
-            None => return Err(ioError::new(ErrorKind::Other, "Invalid path")),
-        };
+        let fname = path
+            .file_name()
+            .ok_or_else(|| std::io::Error::new(ErrorKind::InvalidInput, anyhow!("Invalid path")))?;
         match fname.to_str() {
             Some(x) => Ok(x.to_string()),
-            None => Err(ioError::new(ErrorKind::Other, "Invalid file name")),
+            None => Err(std::io::Error::new(
+                ErrorKind::InvalidInput,
+                anyhow!("Invalid file name"),
+            )),
         }
     }
 }
@@ -188,29 +179,33 @@ impl MDev {
         }
     }
 
-    pub fn set_sysfs_data(&mut self, sysfs_data: MDevSysfsData) {
-        self.active = sysfs_data.active;
-        self.parent = sysfs_data.parent;
-        self.mdev_type = sysfs_data.mdev_type;
+    pub fn set_sysfs_data(&mut self, sysfs_data: Option<MDevSysfsData>) {
+        if let Some(d) = sysfs_data {
+            self.parent = Some(d.parent);
+            self.mdev_type = Some(d.mdev_type);
+            self.active = true;
+        } else {
+            self.active = false;
+        }
     }
 
     pub fn is_sysfs_data_matching(&self, sysfs_data: &MDevSysfsData) -> bool {
-        if self.parent.is_some() && self.parent != sysfs_data.parent {
+        if self.parent.as_ref() != Some(&sysfs_data.parent) {
             debug!(
                 "Active mdev {:?} has different parent: {}!={}. No match.",
                 self.uuid,
                 self.parent.as_ref().unwrap(),
-                sysfs_data.parent.as_ref().unwrap()
+                sysfs_data.parent
             );
             return false;
         }
 
-        if self.mdev_type.is_some() && self.mdev_type != sysfs_data.mdev_type {
+        if self.mdev_type.as_ref() != Some(&sysfs_data.mdev_type) {
             debug!(
                 "Active mdev {:?} has different type: {}!={}. No match.",
                 self.uuid,
                 self.mdev_type.as_ref().unwrap(),
-                sysfs_data.mdev_type.as_ref().unwrap()
+                sysfs_data.mdev_type
             );
             return false;
         }
@@ -421,17 +416,16 @@ impl MDev {
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
         match MDevSysfsData::load(&self.env, &self.uuid) {
-            Ok(mdev_sysfs_data) => {
-                if mdev_sysfs_data.active {
-                    if mdev_sysfs_data.parent != self.parent {
-                        return Err(anyhow!("Device exists under different parent"));
-                    }
-                    if mdev_sysfs_data.mdev_type != self.mdev_type {
-                        return Err(anyhow!("Device exists with different type"));
-                    }
-                    return Err(anyhow!("Device already exists"));
+            Ok(Some(mdev_sysfs_data)) => {
+                if Some(mdev_sysfs_data.parent) != self.parent {
+                    return Err(anyhow!("Device exists under different parent"));
                 }
+                if Some(mdev_sysfs_data.mdev_type) != self.mdev_type {
+                    return Err(anyhow!("Device exists with different type"));
+                }
+                return Err(anyhow!("Device already exists"));
             }
+            Ok(_) => (),
             Err(e) => {
                 warn!(
                     "A sysfs lookup for device {} caused the error: {:?}",

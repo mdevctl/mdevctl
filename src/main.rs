@@ -98,7 +98,7 @@ fn define_command_helper(
         if uuid_provided {
             MDevSysfsData::load_with_mdev(&dev)
                 .and_then(|sysfs_data| {
-                    if parent.is_none() && (!sysfs_data.active || mdev_type.is_some()) {
+                    if parent.is_none() && (sysfs_data.is_none() || mdev_type.is_some()) {
                         return Err(anyhow!("No parent specified"));
                     }
                     dev.set_sysfs_data(sysfs_data);
@@ -429,12 +429,8 @@ fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()>
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     match MDevSysfsData::load_with_mdev(&dev) {
-        Ok(sysfs_data) => {
-            if !sysfs_data.active {
-                return Err(anyhow!("Device {} is not an active mdev", uuid));
-            }
-            dev.set_sysfs_data(sysfs_data);
-        }
+        Ok(None) => return Err(anyhow!("Device {} is not an active mdev", uuid)),
+        Ok(sysfs_data) => dev.set_sysfs_data(sysfs_data),
         Err(e) => {
             if !force {
                 return Err(e);
