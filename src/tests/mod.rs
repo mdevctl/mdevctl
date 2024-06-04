@@ -342,9 +342,9 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
     let parentdir = filename.parent().unwrap();
     fs::create_dir_all(parentdir)?;
 
-    fs::write(filename, data.as_bytes())
-        .map(|_| println!("Regenerated expected data file {:?}", filename))
-        .map_err(|err| err.into())
+    fs::write(filename, data.as_bytes())?;
+    println!("Regenerated expected data file {:?}", filename);
+    Ok(())
 }
 
 const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
