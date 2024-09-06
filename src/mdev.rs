@@ -181,6 +181,13 @@ impl MDev {
 
     pub fn set_sysfs_data(&mut self, sysfs_data: Option<MDevSysfsData>) {
         if let Some(d) = sysfs_data {
+            if self.uuid != d.uuid {
+                warn!(
+                    "Attempting to set sysfs data for device {} from sysfs data for UUID {}",
+                    self.uuid, d.uuid
+                );
+                return;
+            }
             self.parent = Some(d.parent);
             self.mdev_type = Some(d.mdev_type);
             self.active = true;
