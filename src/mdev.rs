@@ -189,7 +189,7 @@ impl MDev {
         }
     }
 
-    pub fn is_sysfs_data_matching(&self, sysfs_data: &MDevSysfsData) -> bool {
+    pub fn sysfs_data_matches(&self, sysfs_data: &MDevSysfsData) -> bool {
         if self.parent.as_ref() != Some(&sysfs_data.parent) {
             debug!(
                 "Active mdev {:?} has different parent: {}!={}. No match.",

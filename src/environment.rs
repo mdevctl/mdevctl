@@ -268,7 +268,7 @@ pub trait Environment: std::fmt::Debug {
                                         u, e
                                     ),
                                     Ok(Some(sysfs_data)) => {
-                                        if dev.is_sysfs_data_matching(&sysfs_data) {
+                                        if dev.sysfs_data_matches(&sysfs_data) {
                                             dev.set_sysfs_data(Some(sysfs_data));
                                         }
                                     }
