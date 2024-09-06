@@ -153,7 +153,7 @@ pub trait Environment: std::fmt::Debug {
                 }
 
                 let mut dev = MDev::new(self.clone().as_env(), u);
-                if let Ok(sysfs_data) = MDevSysfsData::load_with_mdev(&dev) {
+                if let Ok(sysfs_data) = MDevSysfsData::load_for_mdev(&dev) {
                     dev.set_sysfs_data(sysfs_data);
                     if dev.active {
                         if parent.is_some() && (parent != dev.parent.as_ref()) {
@@ -262,7 +262,7 @@ pub trait Environment: std::fmt::Debug {
                                 let val = serde_json::from_str(&contents)?;
                                 let mut dev = MDev::new(thisenv.clone(), u);
                                 dev.load_from_json(parentname.to_string(), &val)?;
-                                match MDevSysfsData::load_with_mdev(&dev) {
+                                match MDevSysfsData::load_for_mdev(&dev) {
                                     Err(e) => warn!(
                                         "For device {} a sysfs update caused the error: {:?}",
                                         u, e

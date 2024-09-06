@@ -55,7 +55,7 @@ impl MDevSysfsData {
         }
     }
 
-    pub fn load_with_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>> {
+    pub fn load_for_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>> {
         Self::load(&mdev.env, &mdev.uuid)
     }
 
