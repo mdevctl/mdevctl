@@ -449,7 +449,7 @@ impl<'a> Callout<'a> {
             // live is only supported when script with versioning exists
             debug!("No callout script with version support found that supports live modify");
             return Err(anyhow!(
-                "No callout script with version support found that supports live modify"
+                "Live modification is not supported for this device type. Changing the device configuration requires stopping and restarting the device."
             ));
         }
 
