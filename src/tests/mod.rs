@@ -62,6 +62,10 @@ impl Environment for TestEnvironment {
     fn as_env(self: Rc<Self>) -> Rc<dyn Environment> {
         self.clone()
     }
+
+    fn scripts_base(&self) -> PathBuf {
+        self.root().join("usr/lib/mdevctl/scripts.d")
+    }
 }
 
 impl TestEnvironment {

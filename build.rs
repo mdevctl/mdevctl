@@ -13,6 +13,12 @@ fn apply_template(template: &Path) -> String {
         PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR environment variable not defined"));
     fs::create_dir_all(&outdir).expect("unable to create out dir");
 
+    let script_base_dir = PathBuf::from(env!(
+        "MDEVCTL_SCRIPTDIR",
+        "MDEVCTL_SCRIPTDIR environment variable not defined"
+    ));
+    println!("cargo:rerun-if-env-changed=MDEVCTL_SCRIPTDIR");
+    println!("cargo:rerun-if-changed=.cargo/config.toml");
     let profile = env::var_os("PROFILE").expect("PROFILE environment variable not defined");
     let mdevctl_bin_path = PathBuf::from("target").join(profile).join("mdevctl");
     let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION not set");
@@ -21,6 +27,7 @@ fn apply_template(template: &Path) -> String {
         .unwrap_or_else(|_| panic!("Failed to read template {:?}", template))
         .replace("@@mdevctl@@", mdevctl_bin_path.to_str().unwrap())
         .replace("@@outdir@@", outdir.to_str().unwrap())
+        .replace("@@script_base_dir@@", script_base_dir.to_str().unwrap())
         .replace("@@mdevctl_version@@", version.as_str())
         .replace(
             "@@generated_notice@@",
