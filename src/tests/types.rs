@@ -1,23 +1,13 @@
 use super::*;
 
-fn test_types_helper(
-    test: &Rc<TestEnvironment>,
-    subtest: &str,
-    expect: Expect,
-    parent: Option<String>,
-) {
+fn test_types_helper(test: &TestCase, subtest: &str, expect: Expect, parent: Option<String>) {
     use crate::types_command;
-    let env: Rc<dyn Environment> = test.clone();
 
     // test text output
     let mut outbuf: Vec<u8> = Default::default();
     let text_testfilename = format!("{}.text", subtest);
-    let res = types_command(env.clone(), parent.clone(), false, &mut outbuf);
-    if test
-        .clone()
-        .assert_result(res, expect, Some("text"))
-        .is_ok()
-    {
+    let res = types_command(test.env.clone(), parent.clone(), false, &mut outbuf);
+    if test.assert_result(res, expect, Some("text")).is_ok() {
         test.compare_to_file(
             &text_testfilename,
             &String::from_utf8(outbuf).expect("invalid utf8 output"),
@@ -29,12 +19,8 @@ fn test_types_helper(
     // test JSON output
     let mut outbuf: Vec<u8> = Default::default();
     let json_testfilename = format!("{}.json", subtest);
-    let res = types_command(env.clone(), parent.clone(), true, &mut outbuf);
-    if test
-        .clone()
-        .assert_result(res, expect, Some("json"))
-        .is_ok()
-    {
+    let res = types_command(test.env.clone(), parent.clone(), true, &mut outbuf);
+    if test.assert_result(res, expect, Some("json")).is_ok() {
         test.compare_to_file(
             &json_testfilename,
             &String::from_utf8(outbuf).expect("invalid utf8 output"),
@@ -48,7 +34,7 @@ fn test_types_helper(
 fn test_types() {
     init();
 
-    let test = TestEnvironment::new("types", "default");
+    let test = TestCase::new("types", "default");
 
     // test an empty environment without any devices that suppport mdevs
     test_types_helper(&test, "empty", Expect::Pass, None);

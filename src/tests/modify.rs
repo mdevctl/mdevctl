@@ -21,20 +21,19 @@ fn test_modify_helper<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(Rc<TestEnvironment>),
+    F: Fn(&TestCase),
 {
     use crate::modify_command;
-    let test = TestEnvironment::new("modify", testname);
-    let env: Rc<dyn Environment> = test.clone();
+    let test = TestCase::new("modify", testname);
 
     // load the jsonfile from the test path.
     let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
-    setupfn(test.clone());
+    setupfn(&test);
 
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
-        env.clone(),
+        test.env.clone(),
         uuid,
         parent.clone(),
         mdev_type,
@@ -57,6 +56,7 @@ fn test_modify_helper<F>(
     }
 
     let def = test
+        .env
         .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
@@ -64,7 +64,7 @@ fn test_modify_helper<F>(
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    test.clone().compare_to_file(&testfilename, &filecontents);
+    test.compare_to_file(&testfilename, &filecontents);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -86,20 +86,19 @@ fn test_modify_defined_active_helper<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(Rc<TestEnvironment>),
+    F: Fn(&TestCase),
 {
     use crate::modify_command;
-    let test = TestEnvironment::new("modify", testname);
-    let env: Rc<dyn Environment> = test.clone();
+    let test = TestCase::new("modify", testname);
 
     // load the jsonfile from the test path.
     let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
-    setupfn(test.clone());
+    setupfn(&test);
 
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
-        env.clone(),
+        test.env.clone(),
         uuid,
         parent.clone(),
         mdev_type,
@@ -127,6 +126,7 @@ fn test_modify_defined_active_helper<F>(
     }
 
     let def_active = test
+        .env
         .clone()
         .get_active_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
@@ -137,10 +137,10 @@ fn test_modify_defined_active_helper<F>(
             .expect("Couldn't get json from active device"),
     )
     .expect("Couldn't get json from active device");
-    test.clone()
-        .compare_to_file(&active_expect_testfilename, &def_json);
+    test.compare_to_file(&active_expect_testfilename, &def_json);
 
     let def = test
+        .env
         .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
@@ -148,8 +148,7 @@ fn test_modify_defined_active_helper<F>(
     assert!(path.exists());
     assert!(def.is_defined());
     let filecontents = fs::read_to_string(&path).unwrap();
-    test.clone()
-        .compare_to_file(&defined_expect_testfilename, &filecontents);
+    test.compare_to_file(&defined_expect_testfilename, &filecontents);
 }
 
 #[test]

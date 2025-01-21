@@ -23,7 +23,7 @@ pub struct MDevSysfsData {
 }
 
 impl MDevSysfsData {
-    pub fn load(env: &Rc<dyn Environment>, uuid: &Uuid) -> Result<Option<MDevSysfsData>> {
+    pub fn load(env: Rc<Environment>, uuid: &Uuid) -> Result<Option<MDevSysfsData>> {
         let active_path = Self::active_path(env.clone(), uuid);
         let parent = Self::load_parent_from_sysfs(&active_path)
             .map(Some)
@@ -56,10 +56,10 @@ impl MDevSysfsData {
     }
 
     pub fn load_for_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>> {
-        Self::load(&mdev.env, &mdev.uuid)
+        Self::load(mdev.env.clone(), &mdev.uuid)
     }
 
-    fn active_path(env: Rc<dyn Environment>, uuid: &Uuid) -> PathBuf {
+    fn active_path(env: Rc<Environment>, uuid: &Uuid) -> PathBuf {
         env.mdev_base().join(uuid.hyphenated().to_string())
     }
 
@@ -104,11 +104,11 @@ pub struct MDev {
     pub parent: Option<String>,
     pub mdev_type: Option<String>,
     pub attrs: Vec<(String, String)>,
-    pub env: Rc<dyn Environment>,
+    pub env: Rc<Environment>,
 }
 
 impl MDev {
-    pub fn new(env: Rc<dyn Environment>, uuid: Uuid) -> MDev {
+    pub fn new(env: Rc<Environment>, uuid: Uuid) -> MDev {
         MDev {
             uuid,
             active: false,
@@ -121,7 +121,7 @@ impl MDev {
     }
 
     pub fn new_from_jsonfile(
-        env: Rc<dyn Environment>,
+        env: Rc<Environment>,
         uuid: Uuid,
         parent: String,
         jsonfile: PathBuf,
@@ -422,7 +422,7 @@ impl MDev {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
-        match MDevSysfsData::load(&self.env, &self.uuid) {
+        match MDevSysfsData::load(self.env.clone(), &self.uuid) {
             Ok(Some(mdev_sysfs_data)) => {
                 if Some(mdev_sysfs_data.parent) != self.parent {
                     return Err(anyhow!("Device exists under different parent"));

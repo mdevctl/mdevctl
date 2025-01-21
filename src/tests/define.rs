@@ -11,14 +11,21 @@ fn test_define_command_callout<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(&TestCase),
 {
-    let test = TestEnvironment::new("define-callouts", testname);
-    let env: Rc<dyn Environment> = test.clone();
+    let test = TestCase::new("define-callouts", testname);
     setupfn(&test);
 
     use crate::define_command;
-    let res = define_command(env, uuid, false, parent, mdev_type, None, force);
+    let res = define_command(
+        test.env.clone(),
+        uuid,
+        false,
+        parent,
+        mdev_type,
+        None,
+        force,
+    );
 
     let _ = test.assert_result(res, expect, None);
 }
@@ -35,18 +42,25 @@ fn test_define_helper<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(&TestCase),
 {
     use crate::define_command_helper;
-    let test = TestEnvironment::new("define", testname);
-    let env: Rc<dyn Environment> = test.clone();
+    let test = TestCase::new("define", testname);
 
     // load the jsonfile from the test path.
     let jsonfile = jsonfile.map(|f| test.datapath.join(f));
 
     setupfn(&test);
 
-    let res = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile, force);
+    let res = define_command_helper(
+        test.env.clone(),
+        uuid,
+        auto,
+        parent,
+        mdev_type,
+        jsonfile,
+        force,
+    );
     let expected_testfilename = format!("{}.expected", testname);
     if let Ok(def) = test.assert_result(res, expect, None) {
         let path = def.persistent_path().unwrap();
@@ -536,20 +550,21 @@ fn test_undefine_helper<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(&TestEnvironment),
+    F: Fn(&TestCase),
 {
-    let test = TestEnvironment::new("undefine", testname);
-    let env: Rc<dyn Environment> = test.clone();
+    let test = TestCase::new("undefine", testname);
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
 
-    let result = crate::undefine_command(env.clone(), uuid, parent.clone(), force);
+    let result = crate::undefine_command(test.env.clone(), uuid, parent.clone(), force);
 
     if test.assert_result(result, expect, None).is_err() {
         return;
     }
 
     let devs = test
+        .env
+        .clone()
         .get_defined_devices(Some(&uuid), parent.as_ref())
         .expect("failed to query defined devices");
     assert!(devs.is_empty());

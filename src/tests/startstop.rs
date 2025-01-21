@@ -13,17 +13,18 @@ fn test_start_helper<F>(
     force: bool,
     setupfn: F,
 ) where
-    F: Fn(Rc<TestEnvironment>),
+    F: Fn(&TestCase),
 {
-    let test = TestEnvironment::new("start", testname);
-    let env: Rc<dyn Environment> = test.clone();
-    setupfn(test.clone());
+    let test = TestCase::new("start", testname);
+    setupfn(&test);
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
 
-    let result = crate::start_command_helper(env, uuid, parent, mdev_type, jsonfile, force);
+    let result =
+        crate::start_command_helper(test.env.clone(), uuid, parent, mdev_type, jsonfile, force);
 
     if let Ok(dev) = test.assert_result(result, expect, None) {
         let create_path = test
+            .env
             .parent_base()
             .join(dev.parent.unwrap())
             .join("mdev_supported_types")
@@ -440,16 +441,15 @@ fn test_start() {
 
 fn test_stop_helper<F>(testname: &str, expect: Expect, uuid: &str, force: bool, setupfn: F)
 where
-    F: Fn(Rc<TestEnvironment>),
+    F: Fn(&TestCase),
 {
-    let test = TestEnvironment::new("stop", testname);
-    let env: Rc<dyn Environment> = test.clone();
-    setupfn(test.clone());
+    let test = TestCase::new("stop", testname);
+    setupfn(&test);
 
-    let res = crate::stop_command(env, Uuid::parse_str(uuid).unwrap(), force);
+    let res = crate::stop_command(test.env.clone(), Uuid::parse_str(uuid).unwrap(), force);
 
     if test.assert_result(res, expect, None).is_ok() {
-        let remove_path = test.mdev_base().join(uuid).join("remove");
+        let remove_path = test.env.mdev_base().join(uuid).join("remove");
         assert!(remove_path.exists());
         let contents = fs::read_to_string(remove_path).expect("Unable to read 'remove' file");
         assert_eq!("1", contents);

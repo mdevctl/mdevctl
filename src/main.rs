@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::callouts::*;
 use crate::cli::{LsmdevOptions, MdevctlCommands};
-use crate::environment::{DefaultEnvironment, Environment};
+use crate::environment::Environment;
 use crate::logger::logger;
 use crate::mdev::*;
 
@@ -53,7 +53,7 @@ fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
 
 /// convert 'define' command arguments into a MDev struct
 fn define_command_helper(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -145,7 +145,7 @@ fn define_command_helper(
 
 /// Implementation of the `mdevctl define` command
 fn define_command(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     uuid: Option<Uuid>,
     auto: bool,
     parent: Option<String>,
@@ -180,7 +180,7 @@ fn define_command(
 
 /// Implementation of the `mdevctl undefine` command
 fn undefine_command(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     uuid: Uuid,
     parent: Option<String>,
     force: bool,
@@ -218,7 +218,7 @@ fn undefine_command(
 /// Implementation of the `mdevctl modify` command
 #[allow(clippy::too_many_arguments)]
 fn modify_command(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     uuid: Uuid,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -319,7 +319,7 @@ fn modify_command(
 
 /// convert 'start' command arguments into a MDev struct
 fn start_command_helper(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -409,7 +409,7 @@ fn start_command_helper(
 
 /// Implementation of the `mdevctl start` command
 fn start_command(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     uuid: Option<Uuid>,
     parent: Option<String>,
     mdev_type: Option<String>,
@@ -425,7 +425,7 @@ fn start_command(
 }
 
 /// Implementation of the `mdevctl stop` command
-fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()> {
+fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     match MDevSysfsData::load_for_mdev(&dev) {
@@ -447,7 +447,7 @@ fn stop_command(env: Rc<dyn Environment>, uuid: Uuid, force: bool) -> Result<()>
 
 /// Implementation of the `mdevctl list` command
 fn list_command(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     defined: bool,
     dumpjson: bool,
     verbose: bool,
@@ -519,7 +519,7 @@ fn list_command(
 
 /// convert 'types' command arguments into a text output
 fn types_command(
-    env: Rc<dyn Environment>,
+    env: Rc<Environment>,
     parent: Option<String>,
     dumpjson: bool,
     output: &mut dyn std::io::Write,
@@ -572,7 +572,7 @@ fn types_command(
 }
 
 /// Implementation of the `start-parent-mdevs` command
-fn start_parent_mdevs_command(env: Rc<dyn Environment>, parent: String) -> Result<()> {
+fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> Result<()> {
     let mut devs = env.clone().get_defined_devices(None, Some(&parent))?;
     if devs.is_empty() {
         // nothing to do
@@ -601,7 +601,7 @@ fn main() -> Result<()> {
     logger().init();
     debug!("Starting up");
 
-    let env = DefaultEnvironment::new();
+    let env = Rc::new(Environment::new("/".to_string()));
     debug!("{:?}", env);
 
     // make sure the environment is sane

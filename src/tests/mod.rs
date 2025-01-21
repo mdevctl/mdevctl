@@ -5,11 +5,9 @@ use nix::unistd::{fork, ForkResult};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Mutex;
-use tempfile::Builder;
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 use uuid::Uuid;
 
 use crate::callouts::*;
@@ -38,63 +36,50 @@ enum Expect<'a> {
 }
 
 #[derive(Debug)]
-struct TestEnvironment {
+struct TestCase {
+    env: Rc<Environment>,
     datapath: PathBuf,
+    #[allow(dead_code)]
+    // we need to keep this alive for the whole test case so that the temp dir
+    // won't be automatically cleaned up before we're done.
     scratch: TempDir,
     name: String,
     case: String,
-    callout_scripts: Mutex<CalloutScriptCache>,
 }
 
-impl Environment for TestEnvironment {
-    fn root(&self) -> &Path {
-        self.scratch.path()
-    }
-
-    fn find_script(&self, dev: &MDev) -> Option<CalloutScriptInfo> {
-        return self
-            .callout_scripts
-            .lock()
-            .unwrap()
-            .find_versioned_script(dev);
-    }
-
-    fn as_env(self: Rc<Self>) -> Rc<dyn Environment> {
-        self.clone()
-    }
-}
-
-impl TestEnvironment {
-    pub fn new(testname: &str, testcase: &str) -> Rc<TestEnvironment> {
+impl TestCase {
+    pub fn new(testname: &str, testcase: &str) -> Self {
         let path: PathBuf = [TEST_DATA_DIR, testname].iter().collect();
         let scratchdir = Builder::new().prefix("mdevctl-test").tempdir().unwrap();
-        let test = TestEnvironment {
+        let test = TestCase {
+            env: Rc::new(Environment::new(
+                scratchdir.path().to_string_lossy().to_string(),
+            )),
             datapath: path,
             scratch: scratchdir,
             name: testname.to_owned(),
             case: testcase.to_owned(),
-            callout_scripts: Mutex::new(CalloutScriptCache::new()),
         };
         // populate the basic directories in the environment
-        fs::create_dir_all(test.mdev_base()).expect("Unable to create mdev_base");
-        fs::create_dir_all(test.config_base()).expect("Unable to create config_base");
-        fs::create_dir_all(test.parent_base()).expect("Unable to create parent_base");
-        for dir in test.callout_dirs() {
+        fs::create_dir_all(test.env.mdev_base()).expect("Unable to create mdev_base");
+        fs::create_dir_all(test.env.config_base()).expect("Unable to create config_base");
+        fs::create_dir_all(test.env.parent_base()).expect("Unable to create parent_base");
+        for dir in test.env.callout_dirs() {
             fs::create_dir_all(&dir)
                 .unwrap_or_else(|_| panic!("Unable to create callout_dir {:?}", &dir))
         }
-        for dir in test.notification_dirs() {
+        for dir in test.env.notification_dirs() {
             fs::create_dir_all(&dir)
                 .unwrap_or_else(|_| panic!("Unable to create notification_dir '{:?}'", &dir))
         }
         info!("---- Running test '{}/{}' ----", testname, testcase);
-        Rc::new(test)
+        test
     }
 
     // set up a few files in the test environment to simulate an defined mediated device
     fn populate_defined_device(&self, uuid: &str, parent: &str, filename: &str) {
         let jsonfile = self.datapath.join(filename);
-        let parentdir = self.config_base().join(parent);
+        let parentdir = self.env.config_base().join(parent);
         fs::create_dir_all(&parentdir).expect("Unable to setup parent dir");
         let deffile = parentdir.join(uuid);
         assert!(jsonfile.exists());
@@ -165,7 +150,7 @@ impl TestEnvironment {
         let parentdevdir = parentdir.join(uuid);
         fs::create_dir_all(&parentdevdir).expect("Unable to setup parent device dir");
 
-        let devdir = self.mdev_base().join(uuid);
+        let devdir = self.env.mdev_base().join(uuid);
         fs::create_dir_all(devdir.parent().unwrap()).expect("Unable to setup mdev dir");
         symlink(&parentdevdir, &devdir).expect("Unable to setup parent dir");
 
@@ -208,8 +193,8 @@ impl TestEnvironment {
         let calloutscriptdir: PathBuf = [TEST_DATA_DIR, "callouts"].iter().collect();
         let calloutscript = calloutscriptdir.join(filename);
         let dest = match default_dir {
-            true => self.callout_dir(),
-            false => self.old_callout_dir(),
+            true => self.env.callout_dir(),
+            false => self.env.old_callout_dir(),
         }
         .join(destname.unwrap_or(filename));
         assert!(calloutscript.exists());
@@ -247,7 +232,7 @@ impl TestEnvironment {
         name: &str,
         description: Option<&str>,
     ) -> (PathBuf, PathBuf) {
-        let parentdir = self.parent_base().join(parent);
+        let parentdir = self.env.parent_base().join(parent);
         let parenttypedir = parentdir.join("mdev_supported_types").join(supported_type);
         fs::create_dir_all(&parenttypedir).expect("Unable to setup mdev parent type");
 
@@ -297,12 +282,12 @@ impl TestEnvironment {
         );
     }
 
-    fn load_from_json(self: &Rc<Self>, uuid: &str, parent: &str, filename: &str) -> Result<MDev> {
+    fn load_from_json(&self, uuid: &str, parent: &str, filename: &str) -> Result<MDev> {
         let path = self.datapath.join(filename);
         let uuid = Uuid::parse_str(uuid);
         assert!(uuid.is_ok());
         let uuid = uuid.unwrap();
-        let mut dev = MDev::new(self.clone(), uuid);
+        let mut dev = MDev::new(self.env.clone(), uuid);
 
         let jsonstr = fs::read_to_string(path)?;
         let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;
@@ -350,7 +335,7 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
 const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
 
 fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
-    let test: Rc<TestEnvironment> = TestEnvironment::new("load-json", uuid);
+    let test = TestCase::new("load-json", uuid);
 
     let res = test.load_from_json(uuid, parent, &format!("{}.in", uuid));
     if let Ok(dev) = test.assert_result(res, expect, None) {

@@ -12,64 +12,68 @@ use std::sync::Mutex;
 use std::{env, fs};
 use uuid::Uuid;
 
-/// A trait which provides filesystem paths for certain system resources and provides functions to
-/// query the state of that environment.
+/// An object which provides runtime environment settings and provides functions to
+/// query the filesystem paths for certain system resources within that environment.
 ///
-/// The main purpose that this is a trait is to enable testability of the mdevctl commands by
-/// abstracting out the filesystem locations. Tests can implement [`Environment`] and provide
+/// The main purpose of this object is to enable testability of the mdevctl commands by
+/// abstracting out the filesystem locations. Tests can customize the root path and provide
 /// filesystem paths within a mock filesystem environment that will not affect the system.
-pub trait Environment: std::fmt::Debug {
-    fn root(&self) -> &Path;
+#[derive(Debug)]
+pub struct Environment {
+    rootpath: PathBuf,
+    callout_scripts: Mutex<CalloutScriptCache>,
+}
 
-    fn find_script(&self, dev: &MDev) -> Option<CalloutScriptInfo>;
+impl Environment {
+    fn root(&self) -> &Path {
+        self.rootpath.as_path()
+    }
 
-    fn as_env(self: Rc<Self>) -> Rc<dyn Environment>;
-
-    fn mdev_base(&self) -> PathBuf {
+    pub fn mdev_base(&self) -> PathBuf {
         self.root().join("sys/bus/mdev/devices")
     }
 
-    fn config_base(&self) -> PathBuf {
+    pub fn config_base(&self) -> PathBuf {
         self.root().join("etc/mdevctl.d")
     }
 
-    fn parent_base(&self) -> PathBuf {
+    pub fn parent_base(&self) -> PathBuf {
         self.root().join("sys/class/mdev_bus")
     }
 
-    fn config_scripts_base(&self) -> PathBuf {
+    pub fn config_scripts_base(&self) -> PathBuf {
         self.config_base().join("scripts.d")
     }
 
-    fn scripts_base(&self) -> PathBuf {
+    pub fn scripts_base(&self) -> PathBuf {
         self.root().join("usr/lib/mdevctl/scripts.d")
     }
 
-    fn callout_dir(&self) -> PathBuf {
+    pub fn callout_dir(&self) -> PathBuf {
         self.scripts_base().join("callouts")
     }
 
-    fn old_callout_dir(&self) -> PathBuf {
+    pub fn old_callout_dir(&self) -> PathBuf {
         self.config_scripts_base().join("callouts")
     }
 
-    fn callout_dirs(&self) -> Vec<PathBuf> {
+    pub fn callout_dirs(&self) -> Vec<PathBuf> {
         vec![self.callout_dir(), self.old_callout_dir()]
     }
 
-    fn notification_dir(&self) -> PathBuf {
+    pub fn notification_dir(&self) -> PathBuf {
         self.scripts_base().join("notifiers")
     }
 
-    fn old_notification_dir(&self) -> PathBuf {
+    pub fn old_notification_dir(&self) -> PathBuf {
         self.config_scripts_base().join("notifiers")
     }
 
-    fn notification_dirs(&self) -> Vec<PathBuf> {
+    pub fn notification_dirs(&self) -> Vec<PathBuf> {
         vec![self.notification_dir(), self.old_notification_dir()]
     }
 
-    fn self_check(&self) -> Result<()> {
+    pub fn self_check(&self) -> Result<()> {
         debug!("checking that the environment is sane");
         // ensure required system dirs exist. Generally distro packages or 'make install' should
         // create these dirs.
@@ -86,7 +90,7 @@ pub trait Environment: std::fmt::Debug {
     }
 
     /// convenience function to lookup an active device by uuid and parent
-    fn get_active_device(self: Rc<Self>, uuid: Uuid, parent: Option<&String>) -> Result<MDev> {
+    pub fn get_active_device(self: Rc<Self>, uuid: Uuid, parent: Option<&String>) -> Result<MDev> {
         let devs = self.get_active_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
             match parent {
@@ -119,7 +123,7 @@ pub trait Environment: std::fmt::Debug {
     }
 
     /// Get a map of all active devices, optionally filtered by uuid and parent
-    fn get_active_devices(
+    pub fn get_active_devices(
         self: Rc<Self>,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
@@ -152,7 +156,7 @@ pub trait Environment: std::fmt::Debug {
                     continue;
                 }
 
-                let mut dev = MDev::new(self.clone().as_env(), u);
+                let mut dev = MDev::new(self.clone(), u);
                 if let Ok(sysfs_data) = MDevSysfsData::load_for_mdev(&dev) {
                     dev.set_sysfs_data(sysfs_data);
                     if dev.active {
@@ -166,7 +170,7 @@ pub trait Environment: std::fmt::Debug {
                         }
 
                         // retrieve autostart from persisted mdev if possible
-                        let mut per_dev = MDev::new(self.clone().as_env(), u);
+                        let mut per_dev = MDev::new(self.clone(), u);
                         per_dev.parent.clone_from(&dev.parent);
                         if per_dev.load_definition().is_ok() {
                             dev.autostart = per_dev.autostart;
@@ -193,7 +197,7 @@ pub trait Environment: std::fmt::Debug {
     }
 
     /// Get a map of all defined devices, optionally filtered by uuid and parent
-    fn get_defined_devices(
+    pub fn get_defined_devices(
         self: Rc<Self>,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
@@ -203,9 +207,8 @@ pub trait Environment: std::fmt::Debug {
             "Looking up defined mdevs: uuid={:?}, parent={:?}",
             uuid, parent
         );
-        let thisenv = self.as_env();
-        for parentpath in thisenv.config_base().read_dir()?.skip_while(|x| match x {
-            Ok(d) => d.path() == thisenv.scripts_base(),
+        for parentpath in self.config_base().read_dir()?.skip_while(|x| match x {
+            Ok(d) => d.path() == self.scripts_base(),
             _ => false,
         }) {
             let parentpath = parentpath?;
@@ -260,7 +263,7 @@ pub trait Environment: std::fmt::Debug {
                                 let mut contents = String::new();
                                 f.read_to_string(&mut contents)?;
                                 let val = serde_json::from_str(&contents)?;
-                                let mut dev = MDev::new(thisenv.clone(), u);
+                                let mut dev = MDev::new(self.clone(), u);
                                 dev.load_from_json(parentname.to_string(), &val)?;
                                 match MDevSysfsData::load_for_mdev(&dev) {
                                     Err(e) => warn!(
@@ -293,7 +296,7 @@ pub trait Environment: std::fmt::Debug {
     }
 
     /// convenience function to lookup a defined device by uuid and parent
-    fn get_defined_device(self: Rc<Self>, uuid: Uuid, parent: Option<&String>) -> Result<MDev> {
+    pub fn get_defined_device(self: Rc<Self>, uuid: Uuid, parent: Option<&String>) -> Result<MDev> {
         let devs = self.get_defined_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
             match parent {
@@ -333,7 +336,7 @@ pub trait Environment: std::fmt::Debug {
     }
 
     /// Get a map of all mediated device types that are supported on this machine
-    fn get_supported_types(
+    pub fn get_supported_types(
         self: Rc<Self>,
         parent: Option<String>,
     ) -> Result<BTreeMap<String, Vec<MDevType>>> {
@@ -400,21 +403,8 @@ pub trait Environment: std::fmt::Debug {
         }
         Ok(types)
     }
-}
 
-/// A default implementation of the Environment trait which uses '/' as the filesystem root.
-#[derive(Debug)]
-pub struct DefaultEnvironment {
-    rootpath: PathBuf,
-    callout_scripts: Mutex<CalloutScriptCache>,
-}
-
-impl Environment for DefaultEnvironment {
-    fn root(&self) -> &Path {
-        self.rootpath.as_path()
-    }
-
-    fn find_script(&self, dev: &MDev) -> Option<CalloutScriptInfo> {
+    pub fn find_script(&self, dev: &MDev) -> Option<CalloutScriptInfo> {
         return self
             .callout_scripts
             .lock()
@@ -422,21 +412,14 @@ impl Environment for DefaultEnvironment {
             .find_versioned_script(dev);
     }
 
-    fn as_env(self: Rc<Self>) -> Rc<dyn Environment> {
-        self.clone()
-    }
-}
-
-impl DefaultEnvironment {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new() -> Rc<dyn Environment> {
+    pub fn new(root: String) -> Self {
         let root = match env::var("MDEVCTL_ENV_ROOT") {
             Ok(d) => d,
-            _ => "/".to_string(),
+            _ => root.to_string(),
         };
-        Rc::new(DefaultEnvironment {
-            rootpath: PathBuf::from(root),
+        Environment {
+            rootpath: PathBuf::from(env::var("MDEVCTL_ENV_ROOT").unwrap_or(root)),
             callout_scripts: Mutex::new(CalloutScriptCache::new()),
-        })
+        }
     }
 }
