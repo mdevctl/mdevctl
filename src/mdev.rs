@@ -20,10 +20,15 @@ pub enum FormatType {
 #[derive(Error, Debug)]
 pub(crate) enum Error {
     #[error("I/O Error: {message}")]
+    #[allow(clippy::enum_variant_names)]
     IOError {
         message: String,
         source: std::io::Error,
     },
+    #[error("Invalid JSON file: {0}")]
+    InvalidJSON(#[from] serde_json::Error),
+    #[error("Invalid format for device definition: {0}")]
+    DeviceFormat(String),
 }
 
 pub struct MDevSysfsData {
@@ -143,11 +148,15 @@ impl MDev {
         uuid: Uuid,
         parent: String,
         jsonfile: PathBuf,
-    ) -> anyhow::Result<Self> {
-        let _ = std::fs::File::open(&jsonfile)
-            .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
-        let filecontents = fs::read_to_string(&jsonfile)
-            .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
+    ) -> Result<Self, Error> {
+        let _ = std::fs::File::open(&jsonfile).map_err(|e| Error::IOError {
+            message: format!("Unable to read file {:?}", jsonfile),
+            source: e,
+        })?;
+        let filecontents = fs::read_to_string(&jsonfile).map_err(|e| Error::IOError {
+            message: format!("Unable to read jsonfile {:?}", jsonfile),
+            source: e,
+        })?;
         let jsonval = serde_json::from_str(&filecontents)?;
 
         let mut d = MDev::new(env, uuid);
@@ -237,27 +246,31 @@ impl MDev {
         true
     }
 
-    pub fn add_attributes(&mut self, attrs: &serde_json::Value) -> anyhow::Result<()> {
+    pub fn add_attributes(&mut self, attrs: &serde_json::Value) -> Result<(), Error> {
         if !attrs.is_array() && !attrs.is_null() {
-            return Err(anyhow!("attributes field is not an array"));
+            return Err(Error::DeviceFormat(
+                "attributes field is not an array".to_string(),
+            ));
         }
 
         if let Some(attrarray) = attrs.as_array() {
             if !attrarray.is_empty() {
                 for attr in attrarray {
                     let attrobj = attr.as_object().ok_or_else(|| {
-                        anyhow!("invalid JSON format for attribute: not an object")
+                        Error::DeviceFormat(
+                            "invalid JSON format for attribute: not an object".to_string(),
+                        )
                     })?;
                     // attributes are represented by JSON objects with a single field.
                     if attrobj.len() != 1 {
-                        return Err(anyhow!(
-                            "invalid JSON format for attribute: too many fields"
+                        return Err(Error::DeviceFormat(
+                            "invalid JSON format for attribute: too many fields".to_string(),
                         ));
                     }
                     // get the key and value from the first (only) map entry
                     if let Some((key, val)) = attrobj.iter().next() {
                         let valstr = val.as_str().ok_or_else(|| {
-                            anyhow!("invalid JSON format for attribute {{{:?}, {}}}: value must be of type str", key, val)
+                            Error::DeviceFormat(format!("invalid JSON format for attribute {{{:?}, {}}}: value must be of type str", key, val))
                         })?;
                         self.attrs.push((key.to_string(), valstr.to_string()));
                     }
@@ -272,7 +285,7 @@ impl MDev {
         &mut self,
         parent: String,
         json: &serde_json::Value,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Error> {
         debug!(
             "Loading device '{:?}' from json (parent: {})",
             self.uuid, parent
@@ -286,10 +299,10 @@ impl MDev {
             );
         }
         self.parent = Some(parent);
-        if json["mdev_type"].is_null() || json["start"].is_null() {
-            return Err(anyhow!("invalid json"));
-        }
-        let mdev_type = json["mdev_type"].as_str().unwrap().to_string();
+        let mdev_type = json["mdev_type"]
+            .as_str()
+            .ok_or_else(|| Error::DeviceFormat("JSON must specify 'mdev_type' field".to_string()))?
+            .to_string();
         if self.mdev_type.is_some() && self.mdev_type.as_ref() != Some(&mdev_type) {
             warn!(
                 "Overwriting mdev type for mdev {:?}: {} => {}",
@@ -299,8 +312,10 @@ impl MDev {
             );
         }
         self.mdev_type = Some(mdev_type);
-        let startval = json["start"].as_str();
-        self.autostart = matches!(startval, Some("auto"));
+        let startval = json["start"]
+            .as_str()
+            .ok_or_else(|| Error::DeviceFormat("JSON must specify 'start' field".to_string()))?;
+        self.autostart = startval == "auto";
 
         self.add_attributes(&json["attrs"])?;
         debug!("loaded device {:?}", self);
