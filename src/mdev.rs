@@ -397,7 +397,7 @@ impl MDev {
         output
     }
 
-    pub fn to_json(&self, include_uuid: bool) -> anyhow::Result<serde_json::Value> {
+    pub fn to_json(&self, include_uuid: bool) -> Result<serde_json::Value, Error> {
         let autostart = match self.autostart {
             true => "auto",
             false => "manual",
