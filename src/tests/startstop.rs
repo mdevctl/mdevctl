@@ -328,7 +328,7 @@ fn test_start() {
     test_start_helper(
         "missing-parent",
         Expect::Fail(Some(
-            format!("Unable to find parent device '{}'", PARENT).as_str(),
+            format!("Unable to find parent device: {}", PARENT).as_str(),
         )),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
@@ -341,7 +341,7 @@ fn test_start() {
         "parent-case",
         Expect::Fail(Some(
             format!(
-                "Unable to find parent device '{}'. Did you mean '{}'?",
+                "Unable to find parent device: {} (Did you mean {}?)",
                 PARENT3.to_string().to_uppercase(),
                 PARENT3
             )

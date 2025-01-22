@@ -31,6 +31,8 @@ pub(crate) enum Error {
     DeviceFormat(String),
     #[error("Device state error: {0}")]
     DeviceState(String),
+    #[error("Unable to find parent device: {0}")]
+    ParentNotFound(String),
 }
 
 pub struct MDevSysfsData {
@@ -433,7 +435,7 @@ impl MDev {
             .inspect(|_| self.active = false)
     }
 
-    fn find_parent_dir(&self) -> anyhow::Result<PathBuf> {
+    fn find_parent_dir(&self) -> Result<PathBuf, Error> {
         let parent = self.parent()?;
         let path: PathBuf = self.env.parent_base().join(parent);
 
@@ -442,19 +444,29 @@ impl MDev {
         }
 
         // check if there's a similar parent dir with different capitalization
-        let parentsdir = self.env.parent_base().read_dir()?;
+        let parentsdir = self
+            .env
+            .parent_base()
+            .read_dir()
+            .map_err(|e| Error::IOError {
+                message: "Failed to read parent device directory".to_string(),
+                source: e,
+            })?;
         for subdir in parentsdir {
-            let dir = subdir?;
+            let dir = subdir.map_err(|e| Error::IOError {
+                message: "Failed to read entry in directory parent device directory".to_string(),
+                source: e,
+            })?;
             let parentname = dir.file_name();
             if parentname.to_string_lossy().to_lowercase() == parent.to_lowercase() {
-                return Err(anyhow!(
-                    "Unable to find parent device '{}'. Did you mean '{}'?",
+                return Err(Error::ParentNotFound(format!(
+                    "{} (Did you mean {}?)",
                     parent,
                     parentname.to_string_lossy()
-                ));
+                )));
             }
         }
-        Err(anyhow!("Unable to find parent device '{}'", parent))
+        Err(Error::ParentNotFound(parent.clone()))
     }
 
     fn create(&mut self) -> anyhow::Result<()> {
