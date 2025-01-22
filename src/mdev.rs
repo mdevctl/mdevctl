@@ -324,11 +324,18 @@ impl MDev {
     }
 
     // load the stored definition from disk if it exists
-    pub fn load_definition(&mut self) -> anyhow::Result<()> {
-        if let Some(path) = self.persistent_path() {
-            let mut f = fs::File::open(path)?;
+    pub fn load_definition(&mut self) -> Result<(), Error> {
+        if let Some(path) = self.persistent_path().as_ref() {
+            let mut f = fs::File::open(path).map_err(|e| Error::IOError {
+                message: format!("Failed to open file {path:?}"),
+                source: e,
+            })?;
             let mut contents = String::new();
-            f.read_to_string(&mut contents)?;
+            f.read_to_string(&mut contents)
+                .map_err(|e| Error::IOError {
+                    message: format!("Failed to read file {path:?}"),
+                    source: e,
+                })?;
             let val = serde_json::from_str(&contents)?;
             let parent = self.parent.as_ref().unwrap().clone();
             self.load_from_json(parent, &val)?;
