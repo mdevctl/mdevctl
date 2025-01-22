@@ -443,7 +443,10 @@ fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> Result<()> {
         }
     };
 
-    callout(&mut dev)?.invoke(Action::Stop, force, |c| c.dev.stop())
+    callout(&mut dev)?.invoke(Action::Stop, force, |c| {
+        c.dev.stop()?;
+        Ok(())
+    })
 }
 
 /// Implementation of the `mdevctl list` command

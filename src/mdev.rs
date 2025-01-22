@@ -420,18 +420,17 @@ impl MDev {
         }
     }
 
-    pub fn stop(&mut self) -> anyhow::Result<()> {
+    pub fn stop(&mut self) -> Result<(), Error> {
         debug!("Removing mdev {:?}", self.uuid);
         let mut remove_path = self.active_path();
         remove_path.push("remove");
         debug!("remove path '{:?}'", remove_path);
-        match fs::write(remove_path, "1") {
-            Ok(_) => {
-                self.active = false;
-                Ok(())
-            }
-            Err(e) => Err(e).with_context(|| format!("Error removing device {:?}", self.uuid)),
-        }
+        fs::write(remove_path, "1")
+            .map_err(|e| Error::IOError {
+                message: format!("Error removing device {:?}", self.uuid),
+                source: e,
+            })
+            .inspect(|_| self.active = false)
     }
 
     fn find_parent_dir(&self) -> anyhow::Result<PathBuf> {
