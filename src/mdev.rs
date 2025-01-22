@@ -1,7 +1,7 @@
 //! Structures for representing a mediated device
 
 use crate::environment::Environment;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context};
 use log::{debug, warn};
 use std::fs;
 use std::io::{ErrorKind, Read};
@@ -23,7 +23,7 @@ pub struct MDevSysfsData {
 }
 
 impl MDevSysfsData {
-    pub fn load(env: Rc<Environment>, uuid: &Uuid) -> Result<Option<MDevSysfsData>> {
+    pub fn load(env: Rc<Environment>, uuid: &Uuid) -> anyhow::Result<Option<MDevSysfsData>> {
         let active_path = Self::active_path(env.clone(), uuid);
         let parent = Self::load_parent_from_sysfs(&active_path)
             .map(Some)
@@ -55,7 +55,7 @@ impl MDevSysfsData {
         }
     }
 
-    pub fn load_for_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>> {
+    pub fn load_for_mdev(mdev: &MDev) -> anyhow::Result<Option<MDevSysfsData>> {
         Self::load(mdev.env.clone(), &mdev.uuid)
     }
 
@@ -125,7 +125,7 @@ impl MDev {
         uuid: Uuid,
         parent: String,
         jsonfile: PathBuf,
-    ) -> Result<Self> {
+    ) -> anyhow::Result<Self> {
         let _ = std::fs::File::open(&jsonfile)
             .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
         let filecontents = fs::read_to_string(&jsonfile)
@@ -144,7 +144,7 @@ impl MDev {
     }
 
     // get parent and propagate a consistent error to the caller if absent
-    pub fn parent(&self) -> Result<&String> {
+    pub fn parent(&self) -> anyhow::Result<&String> {
         self.parent.as_ref().ok_or_else(|| {
             anyhow!(
                 "Device {} is missing a parent",
@@ -154,7 +154,7 @@ impl MDev {
     }
 
     // get mdev_type and propagate a consistent error to the caller if absent
-    pub fn mdev_type(&self) -> Result<&String> {
+    pub fn mdev_type(&self) -> anyhow::Result<&String> {
         self.mdev_type.as_ref().ok_or_else(|| {
             anyhow!(
                 "Device {} is missing a mdev_type",
@@ -219,7 +219,7 @@ impl MDev {
         true
     }
 
-    pub fn add_attributes(&mut self, attrs: &serde_json::Value) -> Result<()> {
+    pub fn add_attributes(&mut self, attrs: &serde_json::Value) -> anyhow::Result<()> {
         if !attrs.is_array() && !attrs.is_null() {
             return Err(anyhow!("attributes field is not an array"));
         }
@@ -250,7 +250,11 @@ impl MDev {
         Ok(())
     }
 
-    pub fn load_from_json(&mut self, parent: String, json: &serde_json::Value) -> Result<()> {
+    pub fn load_from_json(
+        &mut self,
+        parent: String,
+        json: &serde_json::Value,
+    ) -> anyhow::Result<()> {
         debug!(
             "Loading device '{:?}' from json (parent: {})",
             self.uuid, parent
@@ -287,7 +291,7 @@ impl MDev {
     }
 
     // load the stored definition from disk if it exists
-    pub fn load_definition(&mut self) -> Result<()> {
+    pub fn load_definition(&mut self) -> anyhow::Result<()> {
         if let Some(path) = self.persistent_path() {
             let mut f = fs::File::open(path)?;
             let mut contents = String::new();
@@ -299,7 +303,7 @@ impl MDev {
         Ok(())
     }
 
-    pub fn to_text(&self, fmt: FormatType, verbose: bool) -> Result<String> {
+    pub fn to_text(&self, fmt: FormatType, verbose: bool) -> anyhow::Result<String> {
         match fmt {
             FormatType::Defined => {
                 if !self.is_defined() {
@@ -357,7 +361,7 @@ impl MDev {
         output
     }
 
-    pub fn to_json(&self, include_uuid: bool) -> Result<serde_json::Value> {
+    pub fn to_json(&self, include_uuid: bool) -> anyhow::Result<serde_json::Value> {
         let autostart = match self.autostart {
             true => "auto",
             false => "manual",
@@ -380,7 +384,7 @@ impl MDev {
         }
     }
 
-    pub fn stop(&mut self) -> Result<()> {
+    pub fn stop(&mut self) -> anyhow::Result<()> {
         debug!("Removing mdev {:?}", self.uuid);
         let mut remove_path = self.active_path();
         remove_path.push("remove");
@@ -394,7 +398,7 @@ impl MDev {
         }
     }
 
-    fn find_parent_dir(&self) -> Result<PathBuf> {
+    fn find_parent_dir(&self) -> anyhow::Result<PathBuf> {
         let parent = self.parent()?;
         let path: PathBuf = self.env.parent_base().join(parent);
 
@@ -418,7 +422,7 @@ impl MDev {
         Err(anyhow!("Unable to find parent device '{}'", parent))
     }
 
-    fn create(&mut self) -> Result<()> {
+    fn create(&mut self) -> anyhow::Result<()> {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
@@ -490,7 +494,7 @@ impl MDev {
         }
     }
 
-    pub fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> anyhow::Result<()> {
         self.create()?;
 
         debug!("Setting attributes for mdev {:?}", self.uuid);
@@ -504,7 +508,7 @@ impl MDev {
         Ok(())
     }
 
-    pub fn write_config(&self) -> Result<()> {
+    pub fn write_config(&self) -> anyhow::Result<()> {
         let jsonstring = serde_json::to_string_pretty(&self.to_json(false)?)?;
         let path = self.persistent_path().unwrap();
         let parentdir = path.parent().unwrap();
@@ -515,11 +519,11 @@ impl MDev {
             .with_context(|| format!("Failed to write config for device {:?}", self.uuid))
     }
 
-    pub fn define(&self) -> Result<()> {
+    pub fn define(&self) -> anyhow::Result<()> {
         self.write_config()
     }
 
-    pub fn undefine(&mut self) -> Result<()> {
+    pub fn undefine(&mut self) -> anyhow::Result<()> {
         let p = self
             .persistent_path()
             .ok_or_else(|| anyhow!("Failed to undefine {}", self.uuid.hyphenated().to_string()))?;
@@ -540,7 +544,7 @@ impl MDev {
         name: String,
         value: String,
         index: Option<usize>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         match index {
             Some(i) => {
                 if i > self.attrs.len() {
@@ -558,7 +562,7 @@ impl MDev {
         Ok(())
     }
 
-    pub fn delete_attribute(&mut self, index: Option<usize>) -> Result<()> {
+    pub fn delete_attribute(&mut self, index: Option<usize>) -> anyhow::Result<()> {
         match index {
             Some(i) => {
                 if i >= self.attrs.len() {
@@ -579,7 +583,7 @@ impl MDev {
     }
 }
 
-fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<()> {
+fn write_attr(basepath: &Path, attr: &str, val: &str) -> anyhow::Result<()> {
     debug!("Writing attribute '{}' -> '{}'", attr, val);
     let path = basepath.join(attr);
     if !path.exists() {
@@ -611,7 +615,7 @@ impl MDevType {
         }
     }
 
-    pub fn to_json(&self) -> Result<serde_json::Value> {
+    pub fn to_json(&self) -> anyhow::Result<serde_json::Value> {
         let mut jsonobj = serde_json::json!({
             "available_instances": self.available_instances,
             "device_api": self.device_api,
