@@ -29,6 +29,8 @@ pub(crate) enum Error {
     InvalidJSON(#[from] serde_json::Error),
     #[error("Invalid format for device definition: {0}")]
     DeviceFormat(String),
+    #[error("Device state error: {0}")]
+    DeviceState(String),
 }
 
 pub struct MDevSysfsData {
@@ -171,22 +173,16 @@ impl MDev {
     }
 
     // get parent and propagate a consistent error to the caller if absent
-    pub fn parent(&self) -> anyhow::Result<&String> {
-        self.parent.as_ref().ok_or_else(|| {
-            anyhow!(
-                "Device {} is missing a parent",
-                self.uuid.hyphenated().to_string()
-            )
-        })
+    pub fn parent(&self) -> Result<&String, Error> {
+        self.parent
+            .as_ref()
+            .ok_or_else(|| Error::DeviceState(format!("Device {} is missing a parent", self.uuid)))
     }
 
     // get mdev_type and propagate a consistent error to the caller if absent
-    pub fn mdev_type(&self) -> anyhow::Result<&String> {
+    pub fn mdev_type(&self) -> Result<&String, Error> {
         self.mdev_type.as_ref().ok_or_else(|| {
-            anyhow!(
-                "Device {} is missing a mdev_type",
-                self.uuid.hyphenated().to_string()
-            )
+            Error::DeviceState(format!("Device {} is missing a mdev_type", self.uuid))
         })
     }
 
@@ -343,16 +339,16 @@ impl MDev {
         Ok(())
     }
 
-    pub fn to_text(&self, fmt: FormatType, verbose: bool) -> anyhow::Result<String> {
+    pub fn to_text(&self, fmt: FormatType, verbose: bool) -> Result<String, Error> {
         match fmt {
             FormatType::Defined => {
                 if !self.is_defined() {
-                    return Err(anyhow!("Device is not defined"));
+                    return Err(Error::DeviceState("Device is not defined".to_string()));
                 }
             }
             FormatType::Active => {
                 if !self.active {
-                    return Err(anyhow!("Device is not active"));
+                    return Err(Error::DeviceState("Device is not active".to_string()));
                 }
             }
         }
