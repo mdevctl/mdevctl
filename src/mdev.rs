@@ -8,12 +8,22 @@ use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::vec::Vec;
+use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Clone, Copy)]
 pub enum FormatType {
     Active,
     Defined,
+}
+
+#[derive(Error, Debug)]
+pub(crate) enum Error {
+    #[error("I/O Error: {message}")]
+    IOError {
+        message: String,
+        source: std::io::Error,
+    },
 }
 
 pub struct MDevSysfsData {
@@ -23,7 +33,7 @@ pub struct MDevSysfsData {
 }
 
 impl MDevSysfsData {
-    pub fn load(env: Rc<Environment>, uuid: &Uuid) -> anyhow::Result<Option<MDevSysfsData>> {
+    pub fn load(env: Rc<Environment>, uuid: &Uuid) -> Result<Option<MDevSysfsData>, Error> {
         let active_path = Self::active_path(env.clone(), uuid);
         let parent = Self::load_parent_from_sysfs(&active_path)
             .map(Some)
@@ -33,6 +43,10 @@ impl MDevSysfsData {
                     Ok(None)
                 }
                 _ => Err(e),
+            })
+            .map_err(|e| Error::IOError {
+                message: "Error loading parent directory".to_string(),
+                source: e,
             })?;
         let mdev_type = Self::load_mdev_type_from_sysfs(&active_path)
             .map(Some)
@@ -42,6 +56,10 @@ impl MDevSysfsData {
                     Ok(None)
                 }
                 _ => Err(e),
+            })
+            .map_err(|e| Error::IOError {
+                message: "Error loading mdev_type directory".to_string(),
+                source: e,
             })?;
         if let (Some(parent), Some(mdev_type)) = (parent, mdev_type) {
             Ok(Some(MDevSysfsData {
@@ -55,7 +73,7 @@ impl MDevSysfsData {
         }
     }
 
-    pub fn load_for_mdev(mdev: &MDev) -> anyhow::Result<Option<MDevSysfsData>> {
+    pub fn load_for_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>, Error> {
         Self::load(mdev.env.clone(), &mdev.uuid)
     }
 

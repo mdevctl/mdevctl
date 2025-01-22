@@ -97,6 +97,7 @@ fn define_command_helper(
     } else {
         if uuid_provided {
             MDevSysfsData::load_for_mdev(&dev)
+                .map_err(Into::into)
                 .and_then(|sysfs_data| {
                     if parent.is_none() && (sysfs_data.is_none() || mdev_type.is_some()) {
                         return Err(anyhow!("No parent specified"));
@@ -433,7 +434,7 @@ fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> Result<()> {
         Ok(sysfs_data) => dev.set_sysfs_data(sysfs_data),
         Err(e) => {
             if !force {
-                return Err(e);
+                return Err(e.into());
             }
             warn!(
                 "For device {} a sysfs update caused the error: {:?}",
