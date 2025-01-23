@@ -1,8 +1,8 @@
 //! A filesystem environment for mdevctl
 
 use crate::callouts::{callout, CalloutScriptCache, CalloutScriptInfo};
+use crate::error::Error;
 use crate::mdev::{MDev, MDevSysfsData, MDevType};
-use anyhow::anyhow;
 use log::{debug, warn};
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -73,7 +73,7 @@ impl Environment {
         vec![self.notification_dir(), self.old_notification_dir()]
     }
 
-    pub fn self_check(&self) -> anyhow::Result<()> {
+    pub fn self_check(&self) -> Result<(), Error> {
         debug!("checking that the environment is sane");
         // ensure required system dirs exist. Generally distro packages or 'make install' should
         // create these dirs.
@@ -83,7 +83,7 @@ impl Environment {
             self.notification_dir(),
         ] {
             if !dir.exists() {
-                return Err(anyhow!("Required directory {:?} doesn't exist. This may indicate a packaging or installation error", dir));
+                return Err(Error::System(format!("Required directory {:?} doesn't exist. This may indicate a packaging or installation error", dir)));
             }
         }
         Ok(())
@@ -94,33 +94,26 @@ impl Environment {
         self: Rc<Self>,
         uuid: Uuid,
         parent: Option<&String>,
-    ) -> anyhow::Result<MDev> {
+    ) -> Result<MDev, Error> {
         let devs = self.get_active_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
-            match parent {
-                None => Err(anyhow!(
-                    "Mediated device {} is not active",
-                    uuid.hyphenated().to_string()
-                )),
-                Some(p) => Err(anyhow!(
-                    "Mediated device {}/{} is not active",
-                    p,
-                    uuid.hyphenated().to_string()
-                )),
-            }
-        } else if devs.len() > 1 {
-            Err(anyhow!(
-                "Multiple parents found for {}. System error?",
-                uuid.hyphenated().to_string()
+            Err(Error::DeviceState(
+                "device is not active".to_string(),
+                uuid,
+                parent.cloned(),
             ))
+        } else if devs.len() > 1 {
+            Err(Error::System(format!(
+                "Multiple parents found for {}",
+                uuid
+            )))
         } else {
             let (parent, children) = devs.iter().next().unwrap();
             if children.len() > 1 {
-                return Err(anyhow!(
+                return Err(Error::System(format!(
                     "Multiple definitions found for {}/{}",
-                    parent,
-                    uuid.hyphenated().to_string()
-                ));
+                    parent, uuid
+                )));
             }
             Ok(children.first().unwrap().clone())
         }
@@ -131,7 +124,7 @@ impl Environment {
         self: Rc<Self>,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
-    ) -> anyhow::Result<BTreeMap<String, Vec<MDev>>> {
+    ) -> Result<BTreeMap<String, Vec<MDev>>, Error> {
         let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
         debug!(
             "Looking up active mdevs: uuid={:?}, parent={:?}",
@@ -139,7 +132,8 @@ impl Environment {
         );
         if let Ok(dir) = self.mdev_base().read_dir() {
             for dir_dev in dir {
-                let dir_dev = dir_dev?;
+                let dir_dev = dir_dev
+                    .map_err(|e| Error::IOError("Failed to read directory entry".to_string(), e))?;
                 let fname = dir_dev.file_name();
                 let basename = fname.to_str().unwrap();
                 debug!("found defined mdev {}", basename);
@@ -182,7 +176,7 @@ impl Environment {
 
                         // if the device is supported by a callout script that gets attributes, show
                         // those in the output
-                        let mut c = callout(&mut dev)?;
+                        let mut c = callout(&mut dev).map_err(Error::Callout)?;
                         if let Ok(attrs) = c.get_attributes() {
                             let _ = c.dev.add_attributes(&attrs);
                         }
@@ -205,21 +199,42 @@ impl Environment {
         self: Rc<Self>,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
-    ) -> anyhow::Result<BTreeMap<String, Vec<MDev>>> {
+    ) -> Result<BTreeMap<String, Vec<MDev>>, Error> {
         let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
         debug!(
             "Looking up defined mdevs: uuid={:?}, parent={:?}",
             uuid, parent
         );
-        for parentpath in self.config_base().read_dir()?.skip_while(|x| match x {
-            Ok(d) => d.path() == self.scripts_base(),
-            _ => false,
-        }) {
-            let parentpath = parentpath?;
+        for parentpath in self
+            .config_base()
+            .read_dir()
+            .map_err(|e| {
+                Error::IOError(
+                    "Failed to read persistent device configuration directory".to_string(),
+                    e,
+                )
+            })?
+            .skip_while(|x| match x {
+                Ok(d) => d.path() == self.scripts_base(),
+                _ => false,
+            })
+        {
+            let parentpath = parentpath.map_err(|e| {
+                Error::IOError(
+                    "Failed to read entry from persistent device configuration directory"
+                        .to_string(),
+                    e,
+                )
+            })?;
             let parentname = parentpath.file_name();
             let parentname = parentname.to_str().unwrap();
             if (parent.is_some() && parent.unwrap() != parentname)
-                || !parentpath.metadata()?.is_dir()
+                || !parentpath
+                    .metadata()
+                    .map_err(|e| {
+                        Error::IOError(format!("Failed to read metadata for {parentpath:?}"), e)
+                    })?
+                    .is_dir()
             {
                 debug!("Ignoring child devices for parent {}", parentname);
                 continue;
@@ -230,7 +245,12 @@ impl Environment {
             match parentpath.path().read_dir() {
                 Ok(res) => {
                     for child in res {
-                        let child = child?;
+                        let child = child.map_err(|e| {
+                            Error::IOError(
+                                format!("Failed to read entry from directory {parentpath:?}"),
+                                e,
+                            )
+                        })?;
                         match child.metadata() {
                             Ok(metadata) => {
                                 if !metadata.is_file() {
@@ -265,7 +285,12 @@ impl Environment {
                         match fs::File::open(&path) {
                             Ok(mut f) => {
                                 let mut contents = String::new();
-                                f.read_to_string(&mut contents)?;
+                                f.read_to_string(&mut contents).map_err(|e| {
+                                    Error::IOError(
+                                        format!("Failed to read contents of {path:?}"),
+                                        e,
+                                    )
+                                })?;
                                 let val = serde_json::from_str(&contents)?;
                                 let mut dev = MDev::new(self.clone(), u);
                                 dev.load_from_json(parentname.to_string(), &val)?;
@@ -304,39 +329,31 @@ impl Environment {
         self: Rc<Self>,
         uuid: Uuid,
         parent: Option<&String>,
-    ) -> anyhow::Result<MDev> {
+    ) -> Result<MDev, Error> {
         let devs = self.get_defined_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
-            match parent {
-                None => Err(anyhow!(
-                    "Mediated device {} is not defined",
-                    uuid.hyphenated().to_string()
-                )),
-                Some(p) => Err(anyhow!(
-                    "Mediated device {}/{} is not defined",
-                    p,
-                    uuid.hyphenated().to_string()
-                )),
-            }
+            Err(Error::DeviceState(
+                "device is not defined".to_string(),
+                uuid,
+                parent.cloned(),
+            ))
         } else if devs.len() > 1 {
-            match parent {
-                None => Err(anyhow!(
-                    "Multiple definitions found for {}, specify a parent",
-                    uuid.hyphenated().to_string()
-                )),
-                Some(p) => Err(anyhow!(
-                    "Multiple definitions found for {}/{}",
-                    p,
-                    uuid.hyphenated().to_string()
-                )),
-            }
+            Err(Error::DeviceState(
+                match parent {
+                    None => "Multiple definitions found, specify a parent",
+                    Some(_) => "Multiple definitions found",
+                }
+                .to_string(),
+                uuid,
+                parent.cloned(),
+            ))
         } else {
             let (parent, children) = devs.iter().next().unwrap();
             if children.len() > 1 {
-                return Err(anyhow!(
-                    "Multiple definitions found for {}/{}",
-                    parent,
-                    uuid.hyphenated().to_string()
+                return Err(Error::DeviceState(
+                    "Multiple definitions found".to_string(),
+                    uuid,
+                    Some(parent.clone()),
                 ));
             }
             Ok(children.first().unwrap().clone())
@@ -347,13 +364,18 @@ impl Environment {
     pub fn get_supported_types(
         self: Rc<Self>,
         parent: Option<String>,
-    ) -> anyhow::Result<BTreeMap<String, Vec<MDevType>>> {
+    ) -> Result<BTreeMap<String, Vec<MDevType>>, Error> {
         debug!("Finding supported mdev types");
         let mut types: BTreeMap<String, Vec<MDevType>> = BTreeMap::new();
 
         if let Ok(dir) = self.parent_base().read_dir() {
             for parentpath in dir {
-                let parentpath = parentpath?;
+                let parentpath = parentpath.map_err(|e| {
+                    Error::IOError(
+                        "Failed to read entry from mdev parent device directory".to_string(),
+                        e,
+                    )
+                })?;
                 let parentname = parentpath.file_name();
                 let parentname = parentname.to_str().unwrap();
                 debug!("Looking for supported types for device {}", parentname);
@@ -365,9 +387,25 @@ impl Environment {
                 let mut childtypes = Vec::new();
                 let mut parentpath = parentpath.path();
                 parentpath.push("mdev_supported_types");
-                for child in parentpath.read_dir()? {
-                    let child = child?;
-                    if !child.metadata()?.is_dir() {
+                for child in parentpath.read_dir().map_err(|e| {
+                    Error::IOError(format!("Failed to read directory {parentpath:?}"), e)
+                })? {
+                    let child = child.map_err(|e| {
+                        Error::IOError(
+                            format!("Failed to read entry from directory {parentpath:?}"),
+                            e,
+                        )
+                    })?;
+                    if !child
+                        .metadata()
+                        .map_err(|e| {
+                            Error::IOError(
+                                format!("Unable to determine file type for {child:?}"),
+                                e,
+                            )
+                        })?
+                        .is_dir()
+                    {
                         continue;
                     }
 
@@ -380,25 +418,27 @@ impl Environment {
 
                     path.push("available_instances");
                     debug!("Checking available instances: {:?}", path);
-                    t.available_instances = fs::read_to_string(&path)?.trim().parse()?;
+                    t.available_instances = file_contents(&path)?.trim().parse().map_err(|e| {
+                        Error::System(format!(
+                            "Failed to parse available instances as a string: {e}"
+                        ))
+                    })?;
 
                     path.pop();
                     path.push("device_api");
-                    t.device_api = fs::read_to_string(&path)?.trim().to_string();
+                    t.device_api = file_contents(&path)?.trim().to_string();
 
                     path.pop();
                     path.push("name");
                     if path.exists() {
-                        t.name = fs::read_to_string(&path)?.trim().to_string();
+                        t.name = file_contents(&path)?.trim().to_string();
                     }
 
                     path.pop();
                     path.push("description");
                     if path.exists() {
-                        t.description = fs::read_to_string(&path)?
-                            .trim()
-                            .replace('\n', ", ")
-                            .to_string();
+                        t.description =
+                            file_contents(&path)?.trim().replace('\n', ", ").to_string();
                     }
 
                     childtypes.push(t);
@@ -430,4 +470,9 @@ impl Environment {
             callout_scripts: Mutex::new(CalloutScriptCache::new()),
         }
     }
+}
+
+fn file_contents(path: &PathBuf) -> Result<String, Error> {
+    fs::read_to_string(path)
+        .map_err(|e| Error::IOError(format!("Failed to read contents of {path:?}"), e))
 }

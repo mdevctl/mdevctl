@@ -767,7 +767,7 @@ fn test_modify() {
     test_modify_helper(
         "live-event-supported-broken-active-mdev-type",
         Expect::Fail(Some(
-            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+            format!("Device state error: device is not active [{PARENT}/{UUID_LIVE}]").as_str(),
         )),
         UUID_LIVE,
         Some(PARENT.to_string()),
@@ -797,7 +797,7 @@ fn test_modify() {
     test_modify_helper(
         "live-event-supported-removed-active-mdev-type",
         Expect::Fail(Some(
-            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+            format!("Device state error: device is not active [{PARENT}/{UUID_LIVE}]").as_str(),
         )),
         UUID_LIVE,
         Some(PARENT.to_string()),
@@ -827,7 +827,7 @@ fn test_modify() {
     test_modify_defined_active_helper(
         "live-defined-supported-broken-active-parent",
         Expect::Fail(Some(
-            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+            format!("Device state error: device is not active [{PARENT}/{UUID_LIVE}]").as_str(),
         )),
         UUID_LIVE,
         Some(PARENT.to_string()),
@@ -857,7 +857,7 @@ fn test_modify() {
     test_modify_defined_active_helper(
         "live-defined-supported-removed-active-parent",
         Expect::Fail(Some(
-            format!("Mediated device {PARENT}/{UUID_LIVE} is not active").as_str(),
+            format!("Device state error: device is not active [{PARENT}/{UUID_LIVE}]").as_str(),
         )),
         UUID_LIVE,
         Some(PARENT.to_string()),
