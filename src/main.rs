@@ -278,16 +278,20 @@ fn modify_command(
 
             let mut c = callout(&mut act_dev)?;
             debug!("mdev device used for live update '{:?}'", c.dev);
-            return c.invoke_modify_live().and_then(|_| {
-                c.invoke(Action::Modify, force, |c| {
-                    c.dev.write_config()?;
-                    Ok(())
+            return c
+                .invoke_modify_live()
+                .and_then(|_| {
+                    c.invoke(Action::Modify, force, |c| {
+                        c.dev.write_config()?;
+                        Ok(())
+                    })
                 })
-                .map_err(Into::into)
-            });
+                .map_err(Into::into);
         }
         // live modify only
-        callout(&mut act_dev)?.invoke_modify_live()
+        callout(&mut act_dev)?
+            .invoke_modify_live()
+            .map_err(Into::into)
     } else {
         let mut dev: MDev;
         // stored configuration modify

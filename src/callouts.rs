@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -429,13 +428,13 @@ impl<'a> Callout<'a> {
         self.dev.env.find_script(self.dev)
     }
 
-    pub fn invoke_modify_live(&mut self) -> anyhow::Result<()> {
+    pub fn invoke_modify_live(&mut self) -> Result<(), Error> {
         self.script = self.find_callout_script();
         if self.script.is_none() {
             // live is only supported when script with versioning exists
             debug!("No callout script with version support found that supports live modify");
-            return Err(anyhow!(
-                "Live modification is not supported for this device type. Changing the device configuration requires stopping and restarting the device."
+            return Err(Error::Unsupported(
+                "Live modification is not supported for this device type. Changing the device configuration requires stopping and restarting the device.".to_string()
             ));
         }
 
@@ -444,13 +443,17 @@ impl<'a> Callout<'a> {
         if let Some(sysfs_data) = sysfs_data {
             if Some(sysfs_data.parent) != self.dev.parent {
                 debug!("Device exists under different parent - cannot run live update");
-                res = Err(anyhow!(
-                    "Device exists under different parent - cannot run live update"
+                res = Err(Error::DeviceState(
+                    "device exists under different parent - cannot run live update".to_string(),
+                    self.dev.uuid,
+                    self.dev.parent.clone(),
                 ));
             } else if Some(sysfs_data.mdev_type) != self.dev.mdev_type {
                 debug!("Device exists with different type - cannot run live update");
-                res = Err(anyhow!(
-                    "Device exists with different type - cannot run live update"
+                res = Err(Error::DeviceState(
+                    "device exists with different type - cannot run live update".to_string(),
+                    self.dev.uuid,
+                    self.dev.parent.clone(),
                 ));
             } else {
                 self.script
