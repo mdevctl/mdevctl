@@ -252,7 +252,7 @@ fn test_define() {
     // defining a device with the same uuid as a running device with a broken mdev_type without specifying mdev_type
     test_define_helper(
         "uuid-running-broken-active-mdev_type-no-mdev_type",
-        Expect::Fail(Some("No type specified")),
+        Expect::Fail(Some("Invalid configuration: No type specified")),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         Some(DEFAULT_PARENT.to_string()),
@@ -271,7 +271,7 @@ fn test_define() {
     );
     test_define_helper(
         "uuid-running-removed-active-mdev_type-no-mdev_type",
-        Expect::Fail(Some("No type specified")),
+        Expect::Fail(Some("Invalid configuration: No type specified")),
         Uuid::parse_str(DEFAULT_UUID).ok(),
         false,
         Some(DEFAULT_PARENT.to_string()),

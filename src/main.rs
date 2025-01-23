@@ -5,7 +5,6 @@
 //!
 //! See `mdevctl help` or the manpage for more information.
 
-use anyhow::{anyhow, Context};
 use clap::Parser;
 use error::Error;
 use log::{debug, warn};
@@ -62,47 +61,51 @@ fn define_command_helper(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> anyhow::Result<MDev> {
+) -> Result<MDev, Error> {
     let uuid_provided = uuid.is_some();
     let uuid = uuid.unwrap_or_else(Uuid::new_v4);
     let mut dev = MDev::new(env.clone(), uuid);
 
     if let Some(jsonfile) = jsonfile {
         let _ = std::fs::File::open(&jsonfile)
-            .with_context(|| format!("Unable to read file {:?}", jsonfile))?;
+            .map_err(|e| Error::IOError(format!("Unable to read file {:?}", jsonfile), e))?;
 
         if mdev_type.is_some() {
-            return Err(anyhow!(
+            return Err(Error::InvalidConfiguration(format!(
                 "Device type cannot be specified separately from {:?}",
                 jsonfile
-            ));
+            )));
         }
 
-        let parent = parent
-            .ok_or_else(|| anyhow!("Parent device required to define device via {:?}", jsonfile))?;
+        let parent = parent.ok_or_else(|| {
+            Error::InvalidConfiguration(format!(
+                "Parent device required to define device via {:?}",
+                jsonfile
+            ))
+        })?;
 
         let devs = env
             .clone()
             .get_defined_devices(Some(&uuid), Some(&parent))?;
         if !devs.is_empty() {
-            return Err(anyhow!(
+            return Err(Error::DeviceExists(format!(
                 "Cowardly refusing to overwrite existing config for {}/{}",
-                parent,
-                uuid.hyphenated().to_string()
-            ));
+                parent, uuid
+            )));
         }
 
         let filecontents = fs::read_to_string(&jsonfile)
-            .with_context(|| format!("Unable to read jsonfile {:?}", jsonfile))?;
+            .map_err(|e| Error::IOError(format!("Unable to read jsonfile {:?}", jsonfile), e))?;
         let jsonval = serde_json::from_str(&filecontents)?;
         dev.load_from_json(parent, &jsonval)?;
     } else {
         if uuid_provided {
             MDevSysfsData::load_for_mdev(&dev)
-                .map_err(Into::into)
                 .and_then(|sysfs_data| {
                     if parent.is_none() && (sysfs_data.is_none() || mdev_type.is_some()) {
-                        return Err(anyhow!("No parent specified"));
+                        return Err(Error::InvalidConfiguration(
+                            "No parent specified".to_string(),
+                        ));
                     }
                     dev.set_sysfs_data(sysfs_data);
                     Ok(())
@@ -128,18 +131,20 @@ fn define_command_helper(
         }
 
         if dev.parent.is_none() {
-            return Err(anyhow!("No parent specified"));
+            return Err(Error::InvalidConfiguration(
+                "No parent specified".to_string(),
+            ));
         }
         if dev.mdev_type.is_none() {
-            return Err(anyhow!("No type specified"));
+            return Err(Error::InvalidConfiguration("No type specified".to_string()));
         }
 
         if dev.is_defined() {
-            return Err(anyhow!(
+            return Err(Error::DeviceExists(format!(
                 "Device {} on {} already defined",
-                dev.uuid.hyphenated().to_string(),
+                dev.uuid,
                 dev.parent()?
-            ));
+            )));
         }
     }
 
@@ -155,7 +160,7 @@ fn define_command(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     debug!("Defining mdev {:?}", uuid);
 
     let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile, force)?;
@@ -691,7 +696,8 @@ fn main() -> anyhow::Result<()> {
                 mdev_type,
                 jsonfile,
                 force,
-            } => define_command(env, uuid, auto, parent, mdev_type, jsonfile, force),
+            } => define_command(env, uuid, auto, parent, mdev_type, jsonfile, force)
+                .map_err(Into::into),
             MdevctlCommands::Undefine {
                 uuid,
                 parent,
