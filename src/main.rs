@@ -344,23 +344,26 @@ fn start_command_helper(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> anyhow::Result<MDev> {
+) -> Result<MDev, Error> {
     debug!("Starting device '{:?}'", uuid);
     let mut dev: Option<MDev> = None;
     match jsonfile {
         Some(fname) => {
             let contents = fs::read_to_string(&fname)
-                .with_context(|| format!("Unable to read jsonfile {:?}", fname))?;
+                .map_err(|e| Error::IOError(format!("Unable to read jsonfile {:?}", fname), e))?;
             let val = serde_json::from_str(&contents)?;
 
             if mdev_type.is_some() {
-                return Err(anyhow!(
-                    "Device type cannot be specified separately from json file"
+                return Err(Error::InvalidConfiguration(
+                    "Device type cannot be specified separately from json file".to_string(),
                 ));
             }
 
-            let parent = parent
-                .ok_or_else(|| anyhow!("Parent device required to start device via json file"))?;
+            let parent = parent.ok_or_else(|| {
+                Error::InvalidConfiguration(
+                    "Parent device required to start device via json file".to_string(),
+                )
+            })?;
 
             let mut d = MDev::new(env.clone(), uuid.unwrap_or_else(Uuid::new_v4));
             d.load_from_json(parent, &val)?;
@@ -368,16 +371,17 @@ fn start_command_helper(
         }
         _ => {
             // if the user specified a uuid, check to see if they're referring to a defined device
-            if uuid.is_some() {
+            if let Some(uuid) = uuid {
                 let devs = env
                     .clone()
-                    .get_defined_devices(uuid.as_ref(), parent.as_ref())?;
+                    .get_defined_devices(Some(&uuid), parent.as_ref())?;
                 let n = devs.values().flatten().count();
                 match n.cmp(&1) {
                     Ordering::Greater => {
-                        return Err(anyhow!(
-                            "Multiple definitions found for device {}. Please specify a parent.",
-                            uuid.unwrap().hyphenated().to_string()
+                        return Err(Error::DeviceState(
+                            "Multiple definitions found. Specify a parent.".to_string(),
+                            uuid,
+                            None,
                         ));
                     }
                     Ordering::Equal => {
@@ -388,12 +392,12 @@ fn start_command_helper(
                             // See https://github.com/mdevctl/mdevctl/issues/38
                             // If a user specifies the uuid (and optional parent) of a defined device
                             if mdev_type.is_some() && mdev_type != d.mdev_type {
-                                return Err(anyhow!(
-                                    "Device {} already exists on parent {} with type {}",
-                                    d.uuid.hyphenated().to_string(),
+                                return Err(Error::DeviceExists(format!(
+                                    "Device {} exists on parent {} with type {}",
+                                    d.uuid,
                                     d.parent().unwrap(),
                                     d.mdev_type.as_ref().unwrap()
-                                ));
+                                )));
                             } else {
                                 dev = Some(d.clone());
                             }
@@ -412,15 +416,19 @@ fn start_command_helper(
 
             if let Some(ref d) = dev {
                 if d.mdev_type.is_some() && d.parent.is_none() {
-                    return Err(anyhow!("can't provide type without parent"));
+                    return Err(Error::InvalidConfiguration(
+                        "can't provide type without parent".to_string(),
+                    ));
                 }
                 if d.mdev_type.is_none() || d.parent.is_none() {
-                    return Err(anyhow!("Device is insufficiently specified"));
+                    return Err(Error::InvalidConfiguration(
+                        "Device is insufficiently specified".to_string(),
+                    ));
                 }
             }
         }
     }
-    let mut dev = dev.ok_or_else(|| anyhow!("Unknown error"))?;
+    let mut dev = dev.ok_or_else(|| Error::System("Unknown error".to_string()))?;
 
     callout(&mut dev)?.invoke(Action::Start, force, |c| {
         c.dev.start()?;
@@ -437,7 +445,7 @@ fn start_command(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile, force)?;
 
     if uuid.is_none() {
@@ -689,7 +697,7 @@ fn main() -> anyhow::Result<()> {
                 mdev_type,
                 jsonfile,
                 force,
-            } => start_command(env, uuid, parent, mdev_type, jsonfile, force),
+            } => start_command(env, uuid, parent, mdev_type, jsonfile, force).map_err(Into::into),
             MdevctlCommands::Stop { uuid, force } => {
                 stop_command(env, uuid, force).map_err(Into::into)
             }
