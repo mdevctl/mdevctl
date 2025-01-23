@@ -36,7 +36,7 @@ mod mdev;
 mod tests;
 
 /// Format a map of mediated devices into a json string
-fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> anyhow::Result<String> {
+fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String, Error> {
     let mut parents = serde_json::map::Map::new();
     for (parentname, children) in devices {
         let mut childrenarray = Vec::new();
@@ -50,7 +50,7 @@ fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> anyhow::Result<String> {
         0 => serde_json::json!([]),
         _ => serde_json::json!([parents]),
     };
-    serde_json::to_string_pretty(&jsonval).map_err(|_e| anyhow!("Unable to serialize json"))
+    serde_json::to_string_pretty(&jsonval).map_err(Into::into)
 }
 
 /// convert 'define' command arguments into a MDev struct
@@ -481,7 +481,7 @@ fn list_command(
     uuid: Option<Uuid>,
     parent: Option<String>,
     output: &mut dyn std::io::Write,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let mut devices: BTreeMap<String, Vec<MDev>>;
     if defined {
         devices = env
@@ -503,24 +503,16 @@ fn list_command(
             // if specified to a single device, output such that it can be piped into a config
             // file, else print entire heirarchy
             if uuid.is_none() || devices.values().flatten().count() > 1 {
-                output.write(
-                    format_json(devices)
-                        .with_context(|| "Failed to format as JSON")?
-                        .as_bytes(),
-                )
+                output.write(format_json(devices)?.as_bytes())
             } else {
                 let jsonval = match devices.values().next() {
                     Some(children) => children
                         .first()
-                        .ok_or_else(|| anyhow!("Failed to get device"))?
+                        .ok_or_else(|| Error::System("Failed to get device".to_string()))?
                         .to_json(false)?,
                     None => serde_json::json!([]),
                 };
-                output.write(
-                    serde_json::to_string_pretty(&jsonval)
-                        .with_context(|| "Unable to serialize json")?
-                        .as_bytes(),
-                )
+                output.write(serde_json::to_string_pretty(&jsonval)?.as_bytes())
             }
         }
         false => {
@@ -541,7 +533,7 @@ fn list_command(
         }
     }
     .map(|_| ())
-    .with_context(|| "Failed to write data")
+    .map_err(|e| Error::IOError("Failed to write data".to_string(), e))
 }
 
 /// convert 'types' command arguments into a text output
@@ -651,6 +643,7 @@ fn main() -> anyhow::Result<()> {
                 opts.parent,
                 &mut stdout(),
             )
+            .map_err(Into::into)
         }
         _ => match MdevctlCommands::parse() {
             MdevctlCommands::Define {
@@ -700,7 +693,8 @@ fn main() -> anyhow::Result<()> {
                 list.uuid,
                 list.parent,
                 &mut stdout(),
-            ),
+            )
+            .map_err(Into::into),
             MdevctlCommands::Types { parent, dumpjson } => {
                 types_command(env, parent, dumpjson, &mut stdout()).map_err(Into::into)
             }
