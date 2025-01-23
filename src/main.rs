@@ -5,8 +5,9 @@
 //!
 //! See `mdevctl help` or the manpage for more information.
 
-use anyhow::{anyhow, ensure, Context};
+use anyhow::{anyhow, Context};
 use clap::Parser;
+use error::Error;
 use log::{debug, warn};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -598,14 +599,18 @@ fn types_command(
 }
 
 /// Implementation of the `start-parent-mdevs` command
-fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> anyhow::Result<()> {
+fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> Result<(), Error> {
     let mut devs = env.clone().get_defined_devices(None, Some(&parent))?;
     if devs.is_empty() {
         // nothing to do
         return Ok(());
     }
 
-    ensure!(devs.len() == 1, "More than one parent found");
+    if devs.len() != 1 {
+        return Err(Error::InvalidConfiguration(
+            "More than one parent found".to_string(),
+        ));
+    };
 
     for (_, children) in devs.iter_mut() {
         for child in children {
@@ -703,7 +708,9 @@ fn main() -> anyhow::Result<()> {
             MdevctlCommands::Types { parent, dumpjson } => {
                 types_command(env, parent, dumpjson, &mut stdout())
             }
-            MdevctlCommands::StartParentMdevs { parent } => start_parent_mdevs_command(env, parent),
+            MdevctlCommands::StartParentMdevs { parent } => {
+                start_parent_mdevs_command(env, parent).map_err(Into::into)
+            }
         },
     }
 }
