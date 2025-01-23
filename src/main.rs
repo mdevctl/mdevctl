@@ -5,7 +5,7 @@
 //!
 //! See `mdevctl help` or the manpage for more information.
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{anyhow, ensure, Context};
 use clap::Parser;
 use log::{debug, warn};
 use std::cmp::Ordering;
@@ -35,7 +35,7 @@ mod mdev;
 mod tests;
 
 /// Format a map of mediated devices into a json string
-fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> Result<String> {
+fn format_json(devices: BTreeMap<String, Vec<MDev>>) -> anyhow::Result<String> {
     let mut parents = serde_json::map::Map::new();
     for (parentname, children) in devices {
         let mut childrenarray = Vec::new();
@@ -61,7 +61,7 @@ fn define_command_helper(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> Result<MDev> {
+) -> anyhow::Result<MDev> {
     let uuid_provided = uuid.is_some();
     let uuid = uuid.unwrap_or_else(Uuid::new_v4);
     let mut dev = MDev::new(env.clone(), uuid);
@@ -154,7 +154,7 @@ fn define_command(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     debug!("Defining mdev {:?}", uuid);
 
     let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile, force)?;
@@ -188,7 +188,7 @@ fn undefine_command(
     uuid: Uuid,
     parent: Option<String>,
     force: bool,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     debug!("Undefining mdev {:?}", uuid);
     let mut failed = false;
     let devs = env
@@ -237,7 +237,7 @@ fn modify_command(
     defined: bool,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     debug!("Modifying mdev {:?}", uuid);
     if live {
         if mdev_type.is_some() {
@@ -343,7 +343,7 @@ fn start_command_helper(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> Result<MDev> {
+) -> anyhow::Result<MDev> {
     debug!("Starting device '{:?}'", uuid);
     let mut dev: Option<MDev> = None;
     match jsonfile {
@@ -436,7 +436,7 @@ fn start_command(
     mdev_type: Option<String>,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let dev = start_command_helper(env, uuid, parent, mdev_type, jsonfile, force)?;
 
     if uuid.is_none() {
@@ -446,7 +446,7 @@ fn start_command(
 }
 
 /// Implementation of the `mdevctl stop` command
-fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> Result<()> {
+fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> anyhow::Result<()> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     match MDevSysfsData::load_for_mdev(&dev) {
@@ -480,7 +480,7 @@ fn list_command(
     uuid: Option<Uuid>,
     parent: Option<String>,
     output: &mut dyn std::io::Write,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let mut devices: BTreeMap<String, Vec<MDev>>;
     if defined {
         devices = env
@@ -549,7 +549,7 @@ fn types_command(
     parent: Option<String>,
     dumpjson: bool,
     output: &mut dyn std::io::Write,
-) -> Result<()> {
+) -> anyhow::Result<()> {
     let types = env.clone().get_supported_types(parent)?;
     debug!("{:?}", types);
     if dumpjson {
@@ -598,7 +598,7 @@ fn types_command(
 }
 
 /// Implementation of the `start-parent-mdevs` command
-fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> Result<()> {
+fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> anyhow::Result<()> {
     let mut devs = env.clone().get_defined_devices(None, Some(&parent))?;
     if devs.is_empty() {
         // nothing to do
@@ -624,7 +624,7 @@ fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> Result<()
 }
 
 /// parse command line arguments and dispatch to command-specific functions
-fn main() -> Result<()> {
+fn main() -> anyhow::Result<()> {
     logger().init();
     debug!("Starting up");
 
