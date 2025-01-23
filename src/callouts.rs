@@ -468,8 +468,7 @@ impl<'a> Callout<'a> {
                         Some(&conf),
                         &DefaultCheckProcessOutput,
                     )
-                    .map(|_output| ())
-                    .map_err(Into::into);
+                    .map(|_output| ());
                 self.notify(Action::Modify);
             }
         } // else mdev is not active
@@ -516,7 +515,7 @@ impl<'a> Callout<'a> {
             });
 
         self.notify(action);
-        res.map_err(Into::into)
+        res
     }
 
     pub fn get_attributes(&mut self) -> Result<serde_json::Value, Error> {

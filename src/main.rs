@@ -185,7 +185,6 @@ fn define_command(
             println!("{}", dev.uuid.hyphenated());
         }
     })
-    .map_err(Into::into)
 }
 
 /// Implementation of the `mdevctl undefine` command
@@ -299,20 +298,15 @@ fn modify_command(
 
             let mut c = callout(&mut act_dev)?;
             debug!("mdev device used for live update '{:?}'", c.dev);
-            return c
-                .invoke_modify_live()
-                .and_then(|_| {
-                    c.invoke(Action::Modify, force, |c| {
-                        c.dev.write_config()?;
-                        Ok(())
-                    })
+            return c.invoke_modify_live().and_then(|_| {
+                c.invoke(Action::Modify, force, |c| {
+                    c.dev.write_config()?;
+                    Ok(())
                 })
-                .map_err(Into::into);
+            });
         }
         // live modify only
-        callout(&mut act_dev)?
-            .invoke_modify_live()
-            .map_err(Into::into)
+        callout(&mut act_dev)?.invoke_modify_live()
     } else {
         let mut dev: MDev;
         // stored configuration modify
@@ -356,12 +350,10 @@ fn modify_command(
                 }
             }
         }
-        callout(&mut dev)?
-            .invoke(Action::Modify, force, |c| {
-                c.dev.write_config()?;
-                Ok(())
-            })
-            .map_err(Into::into)
+        callout(&mut dev)?.invoke(Action::Modify, force, |c| {
+            c.dev.write_config()?;
+            Ok(())
+        })
     }
 }
 
@@ -507,12 +499,10 @@ fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> Result<(), Err
         }
     };
 
-    callout(&mut dev)?
-        .invoke(Action::Stop, force, |c| {
-            c.dev.stop()?;
-            Ok(())
-        })
-        .map_err(Into::into)
+    callout(&mut dev)?.invoke(Action::Stop, force, |c| {
+        c.dev.stop()?;
+        Ok(())
+    })
 }
 
 /// Implementation of the `mdevctl list` command
@@ -660,7 +650,7 @@ fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> Result<()
 }
 
 /// parse command line arguments and dispatch to command-specific functions
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<(), Error> {
     logger().init();
     debug!("Starting up");
 
@@ -686,7 +676,6 @@ fn main() -> anyhow::Result<()> {
                 opts.parent,
                 &mut stdout(),
             )
-            .map_err(Into::into)
         }
         _ => match MdevctlCommands::parse() {
             MdevctlCommands::Define {
@@ -696,13 +685,12 @@ fn main() -> anyhow::Result<()> {
                 mdev_type,
                 jsonfile,
                 force,
-            } => define_command(env, uuid, auto, parent, mdev_type, jsonfile, force)
-                .map_err(Into::into),
+            } => define_command(env, uuid, auto, parent, mdev_type, jsonfile, force),
             MdevctlCommands::Undefine {
                 uuid,
                 parent,
                 force,
-            } => undefine_command(env, uuid, parent, force).map_err(Into::into),
+            } => undefine_command(env, uuid, parent, force),
             MdevctlCommands::Modify {
                 uuid,
                 parent,
@@ -720,18 +708,15 @@ fn main() -> anyhow::Result<()> {
             } => modify_command(
                 env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual, live,
                 defined, jsonfile, force,
-            )
-            .map_err(Into::into),
+            ),
             MdevctlCommands::Start {
                 uuid,
                 parent,
                 mdev_type,
                 jsonfile,
                 force,
-            } => start_command(env, uuid, parent, mdev_type, jsonfile, force).map_err(Into::into),
-            MdevctlCommands::Stop { uuid, force } => {
-                stop_command(env, uuid, force).map_err(Into::into)
-            }
+            } => start_command(env, uuid, parent, mdev_type, jsonfile, force),
+            MdevctlCommands::Stop { uuid, force } => stop_command(env, uuid, force),
             MdevctlCommands::List(list) => list_command(
                 env,
                 list.defined,
@@ -740,14 +725,11 @@ fn main() -> anyhow::Result<()> {
                 list.uuid,
                 list.parent,
                 &mut stdout(),
-            )
-            .map_err(Into::into),
+            ),
             MdevctlCommands::Types { parent, dumpjson } => {
-                types_command(env, parent, dumpjson, &mut stdout()).map_err(Into::into)
+                types_command(env, parent, dumpjson, &mut stdout())
             }
-            MdevctlCommands::StartParentMdevs { parent } => {
-                start_parent_mdevs_command(env, parent).map_err(Into::into)
-            }
+            MdevctlCommands::StartParentMdevs { parent } => start_parent_mdevs_command(env, parent),
         },
     }
 }
