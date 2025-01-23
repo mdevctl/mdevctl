@@ -627,7 +627,9 @@ fn test_modify() {
     );
     test_modify_helper(
         "live-unsupported-script-without-version-support",
-        Expect::Fail(Some("'live' option must be used with 'jsonfile' option")),
+        Expect::Fail(Some(
+            "Invalid configuration: 'live' option must be used with 'jsonfile' option",
+        )),
         UUID,
         Some(PARENT.to_string()),
         None,
@@ -672,9 +674,7 @@ fn test_modify() {
     test_modify_helper(
         "live-fail-without-jsonfile",
         Expect::Fail(Some(
-            "'live' option must be used with 'jsonfile' option"
-                .to_string()
-                .as_str(),
+            "Invalid configuration: 'live' option must be used with 'jsonfile' option",
         )),
         UUID_LIVE,
         Some(PARENT.to_string()),

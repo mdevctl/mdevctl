@@ -241,7 +241,7 @@ fn test_start() {
     test_start_helper(
         "already-running-removed-active-mdev-type",
         Expect::Fail(Some(
-            "Unsupported configuration: parent 0000:00:03.0 does not support mdev type arbitrary_type",
+            "Operation unsupported: parent 0000:00:03.0 does not support mdev type arbitrary_type",
         )),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),

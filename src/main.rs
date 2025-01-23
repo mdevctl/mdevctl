@@ -238,34 +238,47 @@ fn modify_command(
     defined: bool,
     jsonfile: Option<PathBuf>,
     force: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     debug!("Modifying mdev {:?}", uuid);
     if live {
         if mdev_type.is_some() {
-            return Err(anyhow!("'type' cannot be changed on active mdev"));
+            return Err(Error::Unsupported(
+                "'type' cannot be changed on active mdev".to_string(),
+            ));
         }
         if auto {
-            return Err(anyhow!("'auto' cannot be changed on active mdev"));
+            return Err(Error::Unsupported(
+                "'auto' cannot be changed on active mdev".to_string(),
+            ));
         }
         if manual {
-            return Err(anyhow!("'manual' cannot be changed on active mdev"));
+            return Err(Error::Unsupported(
+                "'manual' cannot be changed on active mdev".to_string(),
+            ));
         }
         let mut act_dev = env.clone().get_active_device(uuid, parent.as_ref())?;
         if let Some(f) = jsonfile {
-            let act_parent = act_dev
-                .parent
-                .clone()
-                .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
+            let act_parent = act_dev.parent.clone().ok_or_else(|| {
+                Error::InvalidConfiguration(
+                    "Parent device required to modify device via json file".to_string(),
+                )
+            })?;
             let json_dev = MDev::new_from_jsonfile(env.clone(), uuid, act_parent, f)?;
             if json_dev.mdev_type != act_dev.mdev_type {
-                return Err(anyhow!("'type' cannot be changed on active mdev"));
+                return Err(Error::Unsupported(
+                    "'type' cannot be changed on active mdev".to_string(),
+                ));
             }
             if json_dev.parent != act_dev.parent {
-                return Err(anyhow!("'parent' cannot be changed on active mdev"));
+                return Err(Error::Unsupported(
+                    "'parent' cannot be changed on active mdev".to_string(),
+                ));
             }
             act_dev = json_dev;
         } else {
-            return Err(anyhow!("'live' option must be used with 'jsonfile' option"));
+            return Err(Error::InvalidConfiguration(
+                "'live' option must be used with 'jsonfile' option".to_string(),
+            ));
         }
 
         if defined {
@@ -274,7 +287,9 @@ fn modify_command(
                 .clone()
                 .get_defined_device(uuid, act_dev.parent.as_ref())?;
             if def_dev.mdev_type != act_dev.mdev_type {
-                return Err(anyhow!("'type' of active and defined mdev does not match"));
+                return Err(Error::InvalidConfiguration(
+                    "'type' of active and defined mdev does not match".to_string(),
+                ));
             }
 
             let mut c = callout(&mut act_dev)?;
@@ -297,8 +312,11 @@ fn modify_command(
         let mut dev: MDev;
         // stored configuration modify
         if let Some(f) = jsonfile {
-            let parent = parent
-                .ok_or_else(|| anyhow!("Parent device required to modify device via json file"))?;
+            let parent = parent.ok_or_else(|| {
+                Error::InvalidConfiguration(
+                    "Parent device required to modify device via json file".to_string(),
+                )
+            })?;
             dev = MDev::new_from_jsonfile(env.clone(), uuid, parent, f)?;
         } else {
             dev = env.clone().get_defined_device(uuid, parent.as_ref())?;
@@ -306,7 +324,9 @@ fn modify_command(
                 dev.mdev_type = mdev_type;
             }
             if auto && manual {
-                return Err(anyhow!("'auto' and 'manual' are mutually exclusive"));
+                return Err(Error::InvalidConfiguration(
+                    "'auto' and 'manual' are mutually exclusive".to_string(),
+                ));
             }
             if auto {
                 dev.autostart = true;
@@ -318,7 +338,11 @@ fn modify_command(
         let index = index.map(|n| n as usize);
         match addattr {
             Some(attr) => match value {
-                None => return Err(anyhow!("No attribute value provided")),
+                None => {
+                    return Err(Error::InvalidConfiguration(
+                        "No attribute value provided".to_string(),
+                    ))
+                }
                 Some(v) => dev.add_attribute(attr, v, index)?,
             },
             None => {
@@ -690,7 +714,8 @@ fn main() -> anyhow::Result<()> {
             } => modify_command(
                 env, uuid, parent, mdev_type, addattr, delattr, index, value, auto, manual, live,
                 defined, jsonfile, force,
-            ),
+            )
+            .map_err(Into::into),
             MdevctlCommands::Start {
                 uuid,
                 parent,
