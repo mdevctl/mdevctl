@@ -208,7 +208,10 @@ fn test_start() {
     );
     test_start_helper(
         "already-running",
-        Expect::Fail(Some("Device already exists")),
+        Expect::Fail(Some(&format!(
+            "Device already exists: {}",
+            UUID.to_string()
+        ))),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -238,7 +241,7 @@ fn test_start() {
     test_start_helper(
         "already-running-removed-active-mdev-type",
         Expect::Fail(Some(
-            "Parent 0000:00:03.0 does not support mdev type arbitrary_type",
+            "Unsupported configuration: parent 0000:00:03.0 does not support mdev type arbitrary_type",
         )),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),

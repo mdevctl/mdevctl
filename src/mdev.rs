@@ -33,6 +33,14 @@ pub(crate) enum Error {
     DeviceState(String),
     #[error("Unable to find parent device: {0}")]
     ParentNotFound(String),
+    #[error("Device already exists: {0}")]
+    DeviceExists(String),
+    #[error("Unsupported configuration: {0}")]
+    Unsupported(String),
+    #[error("System error: {0}")]
+    System(String),
+    #[error("Insufficient resources: {0}")]
+    InsufficientResources(String),
 }
 
 pub struct MDevSysfsData {
@@ -469,19 +477,25 @@ impl MDev {
         Err(Error::ParentNotFound(parent.clone()))
     }
 
-    fn create(&mut self) -> anyhow::Result<()> {
+    fn create(&mut self) -> Result<(), Error> {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
         match MDevSysfsData::load(self.env.clone(), &self.uuid) {
             Ok(Some(mdev_sysfs_data)) => {
-                if Some(mdev_sysfs_data.parent) != self.parent {
-                    return Err(anyhow!("Device exists under different parent"));
+                if Some(&mdev_sysfs_data.parent) != self.parent.as_ref() {
+                    return Err(Error::DeviceExists(format!(
+                        "device {} found under different parent '{}'",
+                        self.uuid, mdev_sysfs_data.parent
+                    )));
                 }
-                if Some(mdev_sysfs_data.mdev_type) != self.mdev_type {
-                    return Err(anyhow!("Device exists with different type"));
+                if Some(&mdev_sysfs_data.mdev_type) != self.mdev_type.as_ref() {
+                    return Err(Error::DeviceExists(format!(
+                        "device {} found with different type '{}'",
+                        self.uuid, mdev_sysfs_data.mdev_type
+                    )));
                 }
-                return Err(anyhow!("Device already exists"));
+                return Err(Error::DeviceExists(self.uuid.to_string()));
             }
             Ok(_) => (),
             Err(e) => {
@@ -496,49 +510,55 @@ impl MDev {
         path.push("mdev_supported_types");
         debug!("Checking parent for mdev support: {:?}", path);
         if !path.is_dir() {
-            return Err(anyhow!(
-                "Parent {} is not currently registered for mdev support",
+            return Err(Error::Unsupported(format!(
+                "parent {} is not currently registered for mdev support",
                 parent
-            ));
+            )));
         }
         path.push(mdev_type);
         debug!("Checking parent for mdev type {}: {:?}", mdev_type, path);
         if !path.is_dir() {
-            return Err(anyhow!(
-                "Parent {} does not support mdev type {}",
-                parent,
-                mdev_type
-            ));
+            return Err(Error::Unsupported(format!(
+                "parent {} does not support mdev type {}",
+                parent, mdev_type
+            )));
         }
         path.push("available_instances");
         debug!("Checking available instances: {:?}", path);
-        let avail: i32 = fs::read_to_string(&path)?.trim().parse()?;
+        let avail: i32 = fs::read_to_string(&path)
+            .map_err(|e| Error::IOError {
+                message: "Failed to read number of available instances".to_string(),
+                source: e,
+            })?
+            .trim()
+            .parse()
+            .map_err(|e| {
+                Error::System(format!(
+                    "Failed to parse available instances as a string: {e}"
+                ))
+            })?;
 
         debug!("Available instances: {}", avail);
         if avail == 0 {
-            return Err(anyhow!(
+            return Err(Error::InsufficientResources(format!(
                 "No available instances of {} on {}",
-                mdev_type,
-                parent
-            ));
+                mdev_type, parent
+            )));
         }
         path.pop();
         path.push("create");
         debug!("Creating mediated device: {:?} -> {:?}", self.uuid, path);
-        match fs::write(path, self.uuid.hyphenated().to_string()) {
-            Ok(_) => {
-                self.active = true;
-                Ok(())
-            }
-            Err(e) => Err(e).with_context(|| {
-                format!(
+        fs::write(path, self.uuid.hyphenated().to_string())
+            .map_err(|e| Error::IOError {
+                message: format!(
                     "Failed to create mdev {}, type {} on {}",
                     self.uuid.hyphenated(),
                     mdev_type,
                     parent
-                )
-            }),
-        }
+                ),
+                source: e,
+            })
+            .inspect(|_| self.active = true)
     }
 
     pub fn start(&mut self) -> anyhow::Result<()> {
