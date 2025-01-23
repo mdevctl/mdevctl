@@ -18,12 +18,9 @@ pub enum FormatType {
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
-    #[error("I/O Error: {message}")]
+    #[error("I/O Error: {0}")]
     #[allow(clippy::enum_variant_names)]
-    IOError {
-        message: String,
-        source: std::io::Error,
-    },
+    IOError(String, std::io::Error),
     #[error("Invalid JSON file: {0}")]
     InvalidJSON(#[from] serde_json::Error),
     #[error("Invalid format for device definition: {0}")]
@@ -56,7 +53,7 @@ impl MDevSysfsData {
         let parent = Self::load_parent_from_sysfs(&active_path)
             .map(Some)
             .or_else(|e| match e {
-                Error::IOError { message: _, source } if source.kind() == ErrorKind::NotFound => {
+                Error::IOError(_, source) if source.kind() == ErrorKind::NotFound => {
                     debug!("Mdev {:?} does no longer exist in sysfs", uuid);
                     Ok(None)
                 }
@@ -65,7 +62,7 @@ impl MDevSysfsData {
         let mdev_type = Self::load_mdev_type_from_sysfs(&active_path)
             .map(Some)
             .or_else(|e| match e {
-                Error::IOError { message: _, source } if source.kind() == ErrorKind::NotFound => {
+                Error::IOError(_, source) if source.kind() == ErrorKind::NotFound => {
                     debug!("Mdev {:?} does no longer exist in sysfs", uuid);
                     Ok(None)
                 }
@@ -92,9 +89,11 @@ impl MDevSysfsData {
     }
 
     fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> Result<String, Error> {
-        let canonpath = fs::canonicalize(active_path.as_ref()).map_err(|e| Error::IOError {
-            message: format!("Can't get canonical path for {:?}", active_path.as_ref()),
-            source: e,
+        let canonpath = fs::canonicalize(active_path.as_ref()).map_err(|e| {
+            Error::IOError(
+                format!("Can't get canonical path for {:?}", active_path.as_ref()),
+                e,
+            )
         })?;
         let sysfsparent = canonpath.parent().ok_or_else(|| {
             Error::System(format!(
@@ -112,9 +111,11 @@ impl MDevSysfsData {
     }
 
     fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String, Error> {
-        let path = fs::canonicalize(path.as_ref()).map_err(|e| Error::IOError {
-            message: format!("Failed to get canonical path for {:?}", path.as_ref()),
-            source: e,
+        let path = fs::canonicalize(path.as_ref()).map_err(|e| {
+            Error::IOError(
+                format!("Failed to get canonical path for {:?}", path.as_ref()),
+                e,
+            )
         })?;
         let fname = path
             .file_name()
@@ -159,14 +160,10 @@ impl MDev {
         parent: String,
         jsonfile: PathBuf,
     ) -> Result<Self, Error> {
-        let _ = std::fs::File::open(&jsonfile).map_err(|e| Error::IOError {
-            message: format!("Unable to read file {:?}", jsonfile),
-            source: e,
-        })?;
-        let filecontents = fs::read_to_string(&jsonfile).map_err(|e| Error::IOError {
-            message: format!("Unable to read jsonfile {:?}", jsonfile),
-            source: e,
-        })?;
+        let _ = std::fs::File::open(&jsonfile)
+            .map_err(|e| Error::IOError(format!("Unable to read file {:?}", jsonfile), e))?;
+        let filecontents = fs::read_to_string(&jsonfile)
+            .map_err(|e| Error::IOError(format!("Unable to read jsonfile {:?}", jsonfile), e))?;
         let jsonval = serde_json::from_str(&filecontents)?;
 
         let mut d = MDev::new(env, uuid);
@@ -330,16 +327,11 @@ impl MDev {
     // load the stored definition from disk if it exists
     pub fn load_definition(&mut self) -> Result<(), Error> {
         if let Some(path) = self.persistent_path().as_ref() {
-            let mut f = fs::File::open(path).map_err(|e| Error::IOError {
-                message: format!("Failed to open file {path:?}"),
-                source: e,
-            })?;
+            let mut f = fs::File::open(path)
+                .map_err(|e| Error::IOError(format!("Failed to open file {path:?}"), e))?;
             let mut contents = String::new();
             f.read_to_string(&mut contents)
-                .map_err(|e| Error::IOError {
-                    message: format!("Failed to read file {path:?}"),
-                    source: e,
-                })?;
+                .map_err(|e| Error::IOError(format!("Failed to read file {path:?}"), e))?;
             let val = serde_json::from_str(&contents)?;
             let parent = self.parent.as_ref().unwrap().clone();
             self.load_from_json(parent, &val)?;
@@ -434,10 +426,7 @@ impl MDev {
         remove_path.push("remove");
         debug!("remove path '{:?}'", remove_path);
         fs::write(remove_path, "1")
-            .map_err(|e| Error::IOError {
-                message: format!("Error removing device {:?}", self.uuid),
-                source: e,
-            })
+            .map_err(|e| Error::IOError(format!("Error removing device {:?}", self.uuid), e))
             .inspect(|_| self.active = false)
     }
 
@@ -450,18 +439,16 @@ impl MDev {
         }
 
         // check if there's a similar parent dir with different capitalization
-        let parentsdir = self
-            .env
-            .parent_base()
-            .read_dir()
-            .map_err(|e| Error::IOError {
-                message: "Failed to read parent device directory".to_string(),
-                source: e,
+        let parentsdir =
+            self.env.parent_base().read_dir().map_err(|e| {
+                Error::IOError("Failed to read parent device directory".to_string(), e)
             })?;
         for subdir in parentsdir {
-            let dir = subdir.map_err(|e| Error::IOError {
-                message: "Failed to read entry in directory parent device directory".to_string(),
-                source: e,
+            let dir = subdir.map_err(|e| {
+                Error::IOError(
+                    "Failed to read entry in directory parent device directory".to_string(),
+                    e,
+                )
             })?;
             let parentname = dir.file_name();
             if parentname.to_string_lossy().to_lowercase() == parent.to_lowercase() {
@@ -524,9 +511,11 @@ impl MDev {
         path.push("available_instances");
         debug!("Checking available instances: {:?}", path);
         let avail: i32 = fs::read_to_string(&path)
-            .map_err(|e| Error::IOError {
-                message: "Failed to read number of available instances".to_string(),
-                source: e,
+            .map_err(|e| {
+                Error::IOError(
+                    "Failed to read number of available instances".to_string(),
+                    e,
+                )
             })?
             .trim()
             .parse()
@@ -547,14 +536,16 @@ impl MDev {
         path.push("create");
         debug!("Creating mediated device: {:?} -> {:?}", self.uuid, path);
         fs::write(path, self.uuid.hyphenated().to_string())
-            .map_err(|e| Error::IOError {
-                message: format!(
-                    "Failed to create mdev {}, type {} on {}",
-                    self.uuid.hyphenated(),
-                    mdev_type,
-                    parent
-                ),
-                source: e,
+            .map_err(|e| {
+                Error::IOError(
+                    format!(
+                        "Failed to create mdev {}, type {} on {}",
+                        self.uuid.hyphenated(),
+                        mdev_type,
+                        parent
+                    ),
+                    e,
+                )
             })
             .inspect(|_| self.active = true)
     }
@@ -578,14 +569,18 @@ impl MDev {
         let path = self.persistent_path().unwrap();
         let parentdir = path.parent().unwrap();
         debug!("Ensuring parent directory {:?} exists", parentdir);
-        fs::create_dir_all(parentdir).map_err(|e| Error::IOError {
-            message: format!("Failed to create parent directory {parentdir:?}"),
-            source: e,
+        fs::create_dir_all(parentdir).map_err(|e| {
+            Error::IOError(
+                format!("Failed to create parent directory {parentdir:?}"),
+                e,
+            )
         })?;
         debug!("Writing config for {:?} to {:?}", self.uuid, path);
-        fs::write(path, jsonstring.as_bytes()).map_err(|e| Error::IOError {
-            message: format!("Failed to write config for device {:?}", self.uuid),
-            source: e,
+        fs::write(path, jsonstring.as_bytes()).map_err(|e| {
+            Error::IOError(
+                format!("Failed to write config for device {:?}", self.uuid),
+                e,
+            )
         })
     }
 
@@ -598,10 +593,8 @@ impl MDev {
             .persistent_path()
             .ok_or_else(|| Error::DeviceState(format!("Failed to undefine {}", self.uuid)))?;
 
-        fs::remove_file(&p).map_err(|e| Error::IOError {
-            message: format!("Failed to remove file {:?}", p),
-            source: e,
-        })?;
+        fs::remove_file(&p)
+            .map_err(|e| Error::IOError(format!("Failed to remove file {:?}", p), e))?;
         Ok(())
     }
 
@@ -662,10 +655,8 @@ fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<(), Error> {
     if !path.exists() {
         return Err(Error::Unsupported(format!("Invalid attribute '{}'", attr)));
     }
-    fs::write(path, val).map_err(|e| Error::IOError {
-        message: format!("Failed to write {} to attribute {}", val, attr),
-        source: e,
-    })
+    fs::write(path, val)
+        .map_err(|e| Error::IOError(format!("Failed to write {} to attribute {}", val, attr), e))
 }
 
 /// Representation of a mediated device type
