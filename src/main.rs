@@ -208,7 +208,7 @@ fn undefine_command(
                 warn!(
                     "Undefine of {} on parent {} failed with error: {}",
                     c.dev.uuid,
-                    c.dev.parent().unwrap().to_string(),
+                    c.dev.parent()?,
                     e
                 )
             }
@@ -407,8 +407,8 @@ fn start_command_helper(
                                 return Err(Error::DeviceExists(format!(
                                     "Device {} exists on parent {} with type {}",
                                     d.uuid,
-                                    d.parent().unwrap(),
-                                    d.mdev_type.as_ref().unwrap()
+                                    d.parent()?,
+                                    d.mdev_type()?
                                 )));
                             } else {
                                 dev = Some(d.clone());
@@ -649,7 +649,9 @@ fn main() -> Result<(), Error> {
 
     // check if we're running as the symlink executable 'lsmdev'. If so, just execute the 'list'
     // command directly
-    let exe = std::env::args_os().next().unwrap();
+    let exe = std::env::args_os()
+        .next()
+        .ok_or_else(|| Error::System("Failed to get the executable name".to_string()))?;
     match exe.to_str() {
         Some(val) if val.ends_with("lsmdev") => {
             debug!("running as 'lsmdev'");
