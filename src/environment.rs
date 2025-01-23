@@ -137,36 +137,39 @@ impl Environment {
                 let dir_dev = dir_dev
                     .map_err(|e| Error::IOError("Failed to read directory entry".to_string(), e))?;
                 let fname = dir_dev.file_name();
-                let basename = fname.to_str().unwrap();
+                let basename = fname
+                    .to_str()
+                    .ok_or_else(|| Error::System("filename is not valid utf8".to_string()))?;
                 debug!("found defined mdev {}", basename);
                 let u = Uuid::parse_str(basename);
 
-                if u.is_err() {
+                let Ok(u) = u else {
                     warn!("Can't determine uuid for file '{}'", basename);
                     continue;
-                }
-                let u = u.unwrap();
+                };
 
-                if uuid.is_some() && uuid != Some(&u) {
-                    debug!(
-                        "Ignoring device {} because it doesn't match uuid {}",
-                        u,
-                        uuid.unwrap()
-                    );
-                    continue;
+                if let Some(uuid) = uuid {
+                    if uuid != &u {
+                        debug!(
+                            "Ignoring device {} because it doesn't match uuid {}",
+                            u, uuid
+                        );
+                        continue;
+                    }
                 }
 
                 let mut dev = MDev::new(self, u);
                 if let Ok(sysfs_data) = MDevSysfsData::load_for_mdev(&dev) {
                     dev.set_sysfs_data(sysfs_data);
                     if dev.active {
-                        if parent.is_some() && (parent != dev.parent.as_ref()) {
-                            debug!(
-                                "Ignoring device {} because it doesn't match parent {}",
-                                dev.uuid,
-                                parent.as_ref().unwrap()
-                            );
-                            continue;
+                        if let Some(parent) = parent {
+                            if Some(parent) != dev.parent.as_ref() {
+                                debug!(
+                                    "Ignoring device {} because it doesn't match parent {}",
+                                    dev.uuid, parent
+                                );
+                                continue;
+                            }
                         }
 
                         // retrieve autostart from persisted mdev if possible
@@ -183,12 +186,7 @@ impl Environment {
                             let _ = c.dev.add_attributes(&attrs);
                         }
 
-                        let devparent = dev.parent()?;
-                        if !devices.contains_key(devparent) {
-                            devices.insert(devparent.clone(), Vec::new());
-                        };
-
-                        devices.get_mut(devparent).unwrap().push(dev);
+                        devices.entry(dev.parent().cloned()?).or_default().push(dev)
                     };
                 };
             }
