@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -22,17 +22,6 @@ pub enum Event {
     #[serde(skip_serializing)]
     #[serde(other)]
     Unknown, // used for forward compatibility to newer callout scripts
-}
-
-fn invocation_failure(path: &PathBuf, code: Option<i32>) -> anyhow::Error {
-    anyhow!(
-        "Script '{:?}' failed with status '{}'",
-        path,
-        match code {
-            Some(i) => i.to_string(),
-            None => "unknown".to_string(),
-        }
-    )
 }
 
 impl Display for Event {
@@ -527,7 +516,7 @@ impl<'a> Callout<'a> {
         res.map_err(Into::into)
     }
 
-    pub fn get_attributes(&mut self) -> anyhow::Result<serde_json::Value> {
+    pub fn get_attributes(&mut self) -> Result<serde_json::Value, Error> {
         self.script = self.find_callout_script();
         if self.script.is_none() {
             debug!("No callout script with version support found");
@@ -564,13 +553,23 @@ impl<'a> Callout<'a> {
                         self.dev.uuid.hyphenated().to_string(),
                         st
                     );
-                    serde_json::from_str(st.trim_end_matches('\0'))
-                        .with_context(|| "Invalid JSON received from callout script")
+                    serde_json::from_str(st.trim_end_matches('\0')).map_err(|e| {
+                        Error::CalloutUnexpectedOutput(
+                            self.script
+                                .as_ref()
+                                .map(|info| info.path.clone())
+                                .unwrap_or_default(),
+                            format!("Invalid JSON received from callout script: {e}"),
+                        )
+                    })
                 } else {
                     let path = &self.script.as_ref().unwrap().path;
                     self.print_err(&output, path);
 
-                    Err(invocation_failure(path, output.status.code()))
+                    Err(Error::CalloutInvocationFailure(
+                        path.clone(),
+                        output.status.code(),
+                    ))
                 }
             }
             None => {
