@@ -209,20 +209,16 @@ impl<'e> MDev<'e> {
     pub fn sysfs_data_matches(&self, sysfs_data: &MDevSysfsData) -> bool {
         if self.parent.as_ref() != Some(&sysfs_data.parent) {
             debug!(
-                "Active mdev {:?} has different parent: {}!={}. No match.",
-                self.uuid,
-                self.parent.as_ref().unwrap(),
-                sysfs_data.parent
+                "Active mdev {:?} has different parent: {:?}!={}. No match.",
+                self.uuid, self.parent, sysfs_data.parent
             );
             return false;
         }
 
         if self.mdev_type.as_ref() != Some(&sysfs_data.mdev_type) {
             debug!(
-                "Active mdev {:?} has different type: {}!={}. No match.",
-                self.uuid,
-                self.mdev_type.as_ref().unwrap(),
-                sysfs_data.mdev_type
+                "Active mdev {:?} has different type: {:?}!={}. No match.",
+                self.uuid, self.mdev_type, sysfs_data.mdev_type
             );
             return false;
         }
@@ -273,26 +269,26 @@ impl<'e> MDev<'e> {
             "Loading device '{:?}' from json (parent: {})",
             self.uuid, parent
         );
-        if self.parent.is_some() && self.parent.as_ref() != Some(&parent) {
-            warn!(
-                "Overwriting parent for mdev {:?}: {} => {}",
-                self.uuid,
-                self.parent.as_ref().unwrap(),
-                parent
-            );
+        if let Some(current) = self.parent.as_ref() {
+            if current != &parent {
+                warn!(
+                    "Overwriting parent for mdev {:?}: {} => {}",
+                    self.uuid, current, parent
+                );
+            }
         }
         self.parent = Some(parent);
         let mdev_type = json["mdev_type"]
             .as_str()
             .ok_or_else(|| Error::DeviceFormat("JSON must specify 'mdev_type' field".to_string()))?
             .to_string();
-        if self.mdev_type.is_some() && self.mdev_type.as_ref() != Some(&mdev_type) {
-            warn!(
-                "Overwriting mdev type for mdev {:?}: {} => {}",
-                self.uuid,
-                self.mdev_type.as_ref().unwrap(),
-                mdev_type
-            );
+        if let Some(current) = self.mdev_type.as_ref() {
+            if current != &mdev_type {
+                warn!(
+                    "Overwriting mdev type for mdev {:?}: {} => {}",
+                    self.uuid, current, mdev_type
+                );
+            }
         }
         self.mdev_type = Some(mdev_type);
         let startval = json["start"]
@@ -315,7 +311,7 @@ impl<'e> MDev<'e> {
             f.read_to_string(&mut contents)
                 .map_err(|e| Error::IOError(format!("Failed to read file {path:?}"), e))?;
             let val = serde_json::from_str(&contents)?;
-            let parent = self.parent.as_ref().unwrap().clone();
+            let parent = self.parent().cloned()?;
             self.load_from_json(parent, &val)?;
         }
         Ok(())
@@ -556,8 +552,10 @@ impl<'e> MDev<'e> {
 
     pub fn write_config(&self) -> Result<(), Error> {
         let jsonstring = serde_json::to_string_pretty(&self.to_json(false)?)?;
-        let path = self.persistent_path().unwrap();
-        let parentdir = path.parent().unwrap();
+        let path = self.persistent_path()?;
+        let parentdir = path
+            .parent()
+            .ok_or_else(|| Error::System(format!("Can't get parent directory of {path:?}")))?;
         debug!("Ensuring parent directory {:?} exists", parentdir);
         fs::create_dir_all(parentdir).map_err(|e| {
             Error::IOError(
