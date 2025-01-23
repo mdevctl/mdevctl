@@ -41,6 +41,8 @@ pub(crate) enum Error {
     System(String),
     #[error("Insufficient resources: {0}")]
     InsufficientResources(String),
+    #[error("Invalid configuration: {0}")]
+    InvalidConfiguration(String),
 }
 
 pub struct MDevSysfsData {
@@ -619,15 +621,15 @@ impl MDev {
         name: String,
         value: String,
         index: Option<usize>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Error> {
         match index {
             Some(i) => {
                 if i > self.attrs.len() {
-                    return Err(anyhow!(
+                    return Err(Error::InvalidConfiguration(format!(
                         "Attribute index {} is invalid\n{}",
                         i,
                         self.attribute_hint()
-                    ));
+                    )));
                 }
                 self.attrs.insert(i, (name, value));
             }
@@ -637,15 +639,15 @@ impl MDev {
         Ok(())
     }
 
-    pub fn delete_attribute(&mut self, index: Option<usize>) -> anyhow::Result<()> {
+    pub fn delete_attribute(&mut self, index: Option<usize>) -> Result<(), Error> {
         match index {
             Some(i) => {
                 if i >= self.attrs.len() {
-                    return Err(anyhow!(
+                    return Err(Error::InvalidConfiguration(format!(
                         "Attribute index {} is invalid\n{}",
                         i,
                         self.attribute_hint()
-                    ));
+                    )));
                 }
                 self.attrs.remove(i);
             }
