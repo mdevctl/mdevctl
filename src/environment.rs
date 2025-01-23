@@ -2,7 +2,7 @@
 
 use crate::callouts::{callout, CalloutScriptCache, CalloutScriptInfo};
 use crate::mdev::{MDev, MDevSysfsData, MDevType};
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use log::{debug, warn};
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -73,7 +73,7 @@ impl Environment {
         vec![self.notification_dir(), self.old_notification_dir()]
     }
 
-    pub fn self_check(&self) -> Result<()> {
+    pub fn self_check(&self) -> anyhow::Result<()> {
         debug!("checking that the environment is sane");
         // ensure required system dirs exist. Generally distro packages or 'make install' should
         // create these dirs.
@@ -90,7 +90,11 @@ impl Environment {
     }
 
     /// convenience function to lookup an active device by uuid and parent
-    pub fn get_active_device(self: Rc<Self>, uuid: Uuid, parent: Option<&String>) -> Result<MDev> {
+    pub fn get_active_device(
+        self: Rc<Self>,
+        uuid: Uuid,
+        parent: Option<&String>,
+    ) -> anyhow::Result<MDev> {
         let devs = self.get_active_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
             match parent {
@@ -127,7 +131,7 @@ impl Environment {
         self: Rc<Self>,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
-    ) -> Result<BTreeMap<String, Vec<MDev>>> {
+    ) -> anyhow::Result<BTreeMap<String, Vec<MDev>>> {
         let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
         debug!(
             "Looking up active mdevs: uuid={:?}, parent={:?}",
@@ -201,7 +205,7 @@ impl Environment {
         self: Rc<Self>,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
-    ) -> Result<BTreeMap<String, Vec<MDev>>> {
+    ) -> anyhow::Result<BTreeMap<String, Vec<MDev>>> {
         let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
         debug!(
             "Looking up defined mdevs: uuid={:?}, parent={:?}",
@@ -296,7 +300,11 @@ impl Environment {
     }
 
     /// convenience function to lookup a defined device by uuid and parent
-    pub fn get_defined_device(self: Rc<Self>, uuid: Uuid, parent: Option<&String>) -> Result<MDev> {
+    pub fn get_defined_device(
+        self: Rc<Self>,
+        uuid: Uuid,
+        parent: Option<&String>,
+    ) -> anyhow::Result<MDev> {
         let devs = self.get_defined_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
             match parent {
@@ -339,7 +347,7 @@ impl Environment {
     pub fn get_supported_types(
         self: Rc<Self>,
         parent: Option<String>,
-    ) -> Result<BTreeMap<String, Vec<MDevType>>> {
+    ) -> anyhow::Result<BTreeMap<String, Vec<MDevType>>> {
         debug!("Finding supported mdev types");
         let mut types: BTreeMap<String, Vec<MDevType>> = BTreeMap::new();
 
