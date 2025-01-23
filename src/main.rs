@@ -27,6 +27,7 @@ use crate::mdev::*;
 mod callouts;
 mod cli;
 mod environment;
+mod error;
 mod logger;
 mod mdev;
 
