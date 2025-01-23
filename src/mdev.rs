@@ -561,7 +561,7 @@ impl MDev {
             .inspect(|_| self.active = true)
     }
 
-    pub fn start(&mut self) -> anyhow::Result<()> {
+    pub fn start(&mut self) -> Result<(), Error> {
         self.create()?;
 
         debug!("Setting attributes for mdev {:?}", self.uuid);
@@ -650,13 +650,16 @@ impl MDev {
     }
 }
 
-fn write_attr(basepath: &Path, attr: &str, val: &str) -> anyhow::Result<()> {
+fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<(), Error> {
     debug!("Writing attribute '{}' -> '{}'", attr, val);
     let path = basepath.join(attr);
     if !path.exists() {
-        return Err(anyhow!("Invalid attribute '{}'", attr));
+        return Err(Error::Unsupported(format!("Invalid attribute '{}'", attr)));
     }
-    fs::write(path, val).with_context(|| format!("Failed to write {} to attribute {}", val, attr))
+    fs::write(path, val).map_err(|e| Error::IOError {
+        message: format!("Failed to write {} to attribute {}", val, attr),
+        source: e,
+    })
 }
 
 /// Representation of a mediated device type

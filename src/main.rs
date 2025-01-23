@@ -404,7 +404,10 @@ fn start_command_helper(
     }
     let mut dev = dev.ok_or_else(|| anyhow!("Unknown error"))?;
 
-    callout(&mut dev)?.invoke(Action::Start, force, |c| c.dev.start())?;
+    callout(&mut dev)?.invoke(Action::Start, force, |c| {
+        c.dev.start()?;
+        Ok(())
+    })?;
     Ok(dev)
 }
 
@@ -589,7 +592,10 @@ fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> Result<()
         for child in children {
             if child.autostart {
                 debug!("Autostarting {:?}", child.uuid);
-                if let Err(e) = callout(child)?.invoke(Action::Start, false, |c| c.dev.start()) {
+                if let Err(e) = callout(child)?.invoke(Action::Start, false, |c| {
+                    c.dev.start()?;
+                    Ok(())
+                }) {
                     for x in e.chain() {
                         warn!("{}", x);
                     }
