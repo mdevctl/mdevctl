@@ -473,7 +473,7 @@ impl<'a> Callout<'a> {
         res
     }
 
-    pub fn invoke<F>(&mut self, action: Action, force: bool, func: F) -> anyhow::Result<()>
+    pub fn invoke<F>(&mut self, action: Action, force: bool, func: F) -> Result<(), Error>
     where
         F: Fn(&mut Self) -> anyhow::Result<()>,
     {

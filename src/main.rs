@@ -179,6 +179,7 @@ fn define_command(
             println!("{}", dev.uuid.hyphenated());
         }
     })
+    .map_err(Into::into)
 }
 
 /// Implementation of the `mdevctl undefine` command
@@ -204,14 +205,12 @@ fn undefine_command(
                 Ok(())
             }) {
                 failed = true;
-                for x in e.chain() {
-                    warn!(
-                        "Undefine of {} on parent {} failed with error: {}",
-                        c.dev.uuid,
-                        c.dev.parent().unwrap().to_string(),
-                        x
-                    );
-                }
+                warn!(
+                    "Undefine of {} on parent {} failed with error: {}",
+                    c.dev.uuid,
+                    c.dev.parent().unwrap().to_string(),
+                    e
+                )
             }
         }
     }
@@ -284,6 +283,7 @@ fn modify_command(
                     c.dev.write_config()?;
                     Ok(())
                 })
+                .map_err(Into::into)
             });
         }
         // live modify only
@@ -322,10 +322,12 @@ fn modify_command(
                 }
             }
         }
-        callout(&mut dev)?.invoke(Action::Modify, force, |c| {
-            c.dev.write_config()?;
-            Ok(())
-        })
+        callout(&mut dev)?
+            .invoke(Action::Modify, force, |c| {
+                c.dev.write_config()?;
+                Ok(())
+            })
+            .map_err(Into::into)
     }
 }
 
@@ -457,10 +459,12 @@ fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> Result<()> {
         }
     };
 
-    callout(&mut dev)?.invoke(Action::Stop, force, |c| {
-        c.dev.stop()?;
-        Ok(())
-    })
+    callout(&mut dev)?
+        .invoke(Action::Stop, force, |c| {
+            c.dev.stop()?;
+            Ok(())
+        })
+        .map_err(Into::into)
 }
 
 /// Implementation of the `mdevctl list` command
@@ -607,9 +611,7 @@ fn start_parent_mdevs_command(env: Rc<Environment>, parent: String) -> Result<()
                     c.dev.start()?;
                     Ok(())
                 }) {
-                    for x in e.chain() {
-                        warn!("{}", x);
-                    }
+                    warn!("{e}");
                 }
             }
         }
