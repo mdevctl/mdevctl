@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context};
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -196,7 +196,7 @@ impl CalloutScriptInfo {
         }
     }
 
-    fn supports_event_action(&self, event: Event, action: Action) -> Result<()> {
+    fn supports_event_action(&self, event: Event, action: Action) -> anyhow::Result<()> {
         if !self.supports.has_action(action) {
             debug!(
                 "Callout script {:?} does not support action '{:?}'",
@@ -351,18 +351,24 @@ impl CalloutScriptCache {
 }
 
 pub trait CheckProcessOutput {
-    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output)>;
-    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>>;
+    fn check(&self, p: PathBuf, o: Output) -> anyhow::Result<(PathBuf, Output)>;
+    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output)
+        -> anyhow::Result<Option<Output>>;
 }
 
 struct DefaultCheckProcessOutput;
 
 impl CheckProcessOutput for DefaultCheckProcessOutput {
-    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output)> {
+    fn check(&self, p: PathBuf, o: Output) -> anyhow::Result<(PathBuf, Output)> {
         Ok((p, o))
     }
 
-    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
+    fn process(
+        &self,
+        c: &mut Callout<'_>,
+        p: PathBuf,
+        o: Output,
+    ) -> anyhow::Result<Option<Output>> {
         c.print_err(&o, &p);
         match o.status.code() {
             Some(0) => {
@@ -383,7 +389,7 @@ impl CheckProcessOutput for DefaultCheckProcessOutput {
 struct CapabilitiesCheckProcessOutput;
 
 impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
-    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output)> {
+    fn check(&self, p: PathBuf, o: Output) -> anyhow::Result<(PathBuf, Output)> {
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(_) => Ok((p, o)),
             None => Err(anyhow!(
@@ -393,7 +399,12 @@ impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
         }
     }
 
-    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>> {
+    fn process(
+        &self,
+        c: &mut Callout<'_>,
+        p: PathBuf,
+        o: Output,
+    ) -> anyhow::Result<Option<Output>> {
         c.print_err(&o, &p);
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(cv) => {
@@ -423,12 +434,12 @@ pub struct Callout<'a> {
     pub dev: &'a mut MDev,
 }
 
-pub fn callout(dev: &mut MDev) -> Result<Callout> {
+pub fn callout(dev: &mut MDev) -> anyhow::Result<Callout> {
     Callout::new(dev)
 }
 
 impl<'a> Callout<'a> {
-    pub fn new(dev: &'a mut MDev) -> Result<Callout<'a>> {
+    pub fn new(dev: &'a mut MDev) -> anyhow::Result<Callout<'a>> {
         if dev.mdev_type.is_none() {
             return Err(anyhow!("Device must have a defined mdev_type"));
         }
@@ -443,7 +454,7 @@ impl<'a> Callout<'a> {
         self.dev.env.find_script(self.dev)
     }
 
-    pub fn invoke_modify_live(&mut self) -> Result<()> {
+    pub fn invoke_modify_live(&mut self) -> anyhow::Result<()> {
         self.script = self.find_callout_script();
         if self.script.is_none() {
             // live is only supported when script with versioning exists
@@ -486,9 +497,9 @@ impl<'a> Callout<'a> {
         res
     }
 
-    pub fn invoke<F>(&mut self, action: Action, force: bool, func: F) -> Result<()>
+    pub fn invoke<F>(&mut self, action: Action, force: bool, func: F) -> anyhow::Result<()>
     where
-        F: Fn(&mut Self) -> Result<()>,
+        F: Fn(&mut Self) -> anyhow::Result<()>,
     {
         self.script = self.find_callout_script();
         if self.script.is_none() {
@@ -529,7 +540,7 @@ impl<'a> Callout<'a> {
         res
     }
 
-    pub fn get_attributes(&mut self) -> Result<serde_json::Value> {
+    pub fn get_attributes(&mut self) -> anyhow::Result<serde_json::Value> {
         self.script = self.find_callout_script();
         if self.script.is_none() {
             debug!("No callout script with version support found");
@@ -591,7 +602,7 @@ impl<'a> Callout<'a> {
         event: Event,
         action: Action,
         stdin: Option<&str>,
-    ) -> Result<Output> {
+    ) -> anyhow::Result<Output> {
         debug!(
             "{}-{}: executing {:?}",
             event,
@@ -656,7 +667,7 @@ impl<'a> Callout<'a> {
         event: Event,
         action: Action,
         stdin: Option<&str>,
-        check_result_fn: impl Fn(PathBuf, Output) -> Result<(PathBuf, Output)>,
+        check_result_fn: impl Fn(PathBuf, Output) -> anyhow::Result<(PathBuf, Output)>,
     ) -> Option<(PathBuf, Output)> {
         debug!(
             "{}-{}: looking for a matching callout script for dev type '{}' in {:?}",
@@ -717,7 +728,7 @@ impl<'a> Callout<'a> {
         action: Action,
         stdin: Option<&str>,
         check_process: &dyn CheckProcessOutput,
-    ) -> Result<Option<Output>> {
+    ) -> anyhow::Result<Option<Output>> {
         match self.script {
             Some(ref s) => {
                 s.supports_event_action(event, action)?;
