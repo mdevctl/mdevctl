@@ -1,7 +1,6 @@
 //! Structures for representing a mediated device
 
 use crate::environment::Environment;
-use anyhow::anyhow;
 use log::{debug, warn};
 use std::fs;
 use std::io::{ErrorKind, Read};
@@ -56,29 +55,21 @@ impl MDevSysfsData {
         let active_path = Self::active_path(env.clone(), uuid);
         let parent = Self::load_parent_from_sysfs(&active_path)
             .map(Some)
-            .or_else(|e: std::io::Error| match e.kind() {
-                ErrorKind::NotFound => {
+            .or_else(|e| match e {
+                Error::IOError { message: _, source } if source.kind() == ErrorKind::NotFound => {
                     debug!("Mdev {:?} does no longer exist in sysfs", uuid);
                     Ok(None)
                 }
                 _ => Err(e),
-            })
-            .map_err(|e| Error::IOError {
-                message: "Error loading parent directory".to_string(),
-                source: e,
             })?;
         let mdev_type = Self::load_mdev_type_from_sysfs(&active_path)
             .map(Some)
-            .or_else(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => {
+            .or_else(|e| match e {
+                Error::IOError { message: _, source } if source.kind() == ErrorKind::NotFound => {
                     debug!("Mdev {:?} does no longer exist in sysfs", uuid);
                     Ok(None)
                 }
                 _ => Err(e),
-            })
-            .map_err(|e| Error::IOError {
-                message: "Error loading mdev_type directory".to_string(),
-                source: e,
             })?;
         if let (Some(parent), Some(mdev_type)) = (parent, mdev_type) {
             Ok(Some(MDevSysfsData {
@@ -100,34 +91,39 @@ impl MDevSysfsData {
         env.mdev_base().join(uuid.hyphenated().to_string())
     }
 
-    fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> std::io::Result<String> {
-        let canonpath = fs::canonicalize(&active_path)?;
+    fn load_parent_from_sysfs<P: AsRef<Path>>(active_path: P) -> Result<String, Error> {
+        let canonpath = fs::canonicalize(active_path.as_ref()).map_err(|e| Error::IOError {
+            message: format!("Can't get canonical path for {:?}", active_path.as_ref()),
+            source: e,
+        })?;
         let sysfsparent = canonpath.parent().ok_or_else(|| {
-            std::io::Error::new(
-                ErrorKind::InvalidInput,
-                anyhow!("Path to parent of mdev {:?} does not exist", canonpath),
-            )
+            Error::System(format!(
+                "Path to parent of mdev path {:?} does not exist",
+                canonpath
+            ))
         })?;
         Self::canonical_basename(sysfsparent)
     }
 
-    fn load_mdev_type_from_sysfs<P: Into<PathBuf>>(active_path: P) -> std::io::Result<String> {
+    fn load_mdev_type_from_sysfs<P: Into<PathBuf>>(active_path: P) -> Result<String, Error> {
         let mut typepath: PathBuf = active_path.into();
         typepath.push("mdev_type");
         Self::canonical_basename(typepath)
     }
 
-    fn canonical_basename<P: AsRef<Path>>(path: P) -> std::io::Result<String> {
-        let path = fs::canonicalize(path)?;
+    fn canonical_basename<P: AsRef<Path>>(path: P) -> Result<String, Error> {
+        let path = fs::canonicalize(path.as_ref()).map_err(|e| Error::IOError {
+            message: format!("Failed to get canonical path for {:?}", path.as_ref()),
+            source: e,
+        })?;
         let fname = path
             .file_name()
-            .ok_or_else(|| std::io::Error::new(ErrorKind::InvalidInput, anyhow!("Invalid path")))?;
+            .ok_or_else(|| Error::System(format!("Can't get filename for {path:?}")))?;
         match fname.to_str() {
             Some(x) => Ok(x.to_string()),
-            None => Err(std::io::Error::new(
-                ErrorKind::InvalidInput,
-                anyhow!("Invalid file name"),
-            )),
+            None => Err(Error::System(format!(
+                "file name {fname:?} is not valid unicode"
+            ))),
         }
     }
 }
