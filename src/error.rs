@@ -39,4 +39,8 @@ pub(crate) enum Error {
     CalloutUnsupportedAction(PathBuf, Action),
     #[error("Callout script {0:?} does not support Event '{1:?}'")]
     CalloutUnsupportedEvent(PathBuf, Event),
+    #[error("Script {0:?} failed with status '{code}", code = .1.map(|v| v.to_string()).unwrap_or("unknown".to_string()))]
+    CalloutInvocationFailure(PathBuf, Option<i32>),
+    #[error("Callout script {0:?} returned unexpected output: {1}")]
+    CalloutUnexpectedOutput(PathBuf, String),
 }

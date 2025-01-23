@@ -344,24 +344,18 @@ impl CalloutScriptCache {
 }
 
 pub trait CheckProcessOutput {
-    fn check(&self, p: PathBuf, o: Output) -> anyhow::Result<(PathBuf, Output)>;
-    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output)
-        -> anyhow::Result<Option<Output>>;
+    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output), Error>;
+    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>, Error>;
 }
 
 struct DefaultCheckProcessOutput;
 
 impl CheckProcessOutput for DefaultCheckProcessOutput {
-    fn check(&self, p: PathBuf, o: Output) -> anyhow::Result<(PathBuf, Output)> {
+    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output), Error> {
         Ok((p, o))
     }
 
-    fn process(
-        &self,
-        c: &mut Callout<'_>,
-        p: PathBuf,
-        o: Output,
-    ) -> anyhow::Result<Option<Output>> {
+    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>, Error> {
         c.print_err(&o, &p);
         match o.status.code() {
             Some(0) => {
@@ -373,7 +367,7 @@ impl CheckProcessOutput for DefaultCheckProcessOutput {
                 ));
                 Ok(Some(o))
             }
-            Some(n) => Err(invocation_failure(&p, Some(n))),
+            Some(n) => Err(Error::CalloutInvocationFailure(p, Some(n))),
             None => Ok(None),
         }
     }
@@ -382,22 +376,17 @@ impl CheckProcessOutput for DefaultCheckProcessOutput {
 struct CapabilitiesCheckProcessOutput;
 
 impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
-    fn check(&self, p: PathBuf, o: Output) -> anyhow::Result<(PathBuf, Output)> {
+    fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output), Error> {
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(_) => Ok((p, o)),
-            None => Err(anyhow!(
-                "Output of callout script {:?} is not a valid capabilities XML response",
-                p
+            None => Err(Error::CalloutUnexpectedOutput(
+                p,
+                "Output is not a valid capabilities XML response".to_string(),
             )),
         }
     }
 
-    fn process(
-        &self,
-        c: &mut Callout<'_>,
-        p: PathBuf,
-        o: Output,
-    ) -> anyhow::Result<Option<Output>> {
+    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>, Error> {
         c.print_err(&o, &p);
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(cv) => {
@@ -664,7 +653,7 @@ impl<'a> Callout<'a> {
         event: Event,
         action: Action,
         stdin: Option<&str>,
-        check_result_fn: impl Fn(PathBuf, Output) -> anyhow::Result<(PathBuf, Output)>,
+        check_result_fn: impl Fn(PathBuf, Output) -> Result<(PathBuf, Output), Error>,
     ) -> Option<(PathBuf, Output)> {
         debug!(
             "{}-{}: looking for a matching callout script for dev type '{}' in {:?}",
