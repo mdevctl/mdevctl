@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use log::info;
 use nix::sys::wait::waitpid;
 use nix::unistd::{fork, ForkResult};
@@ -296,12 +296,16 @@ impl TestCase {
         Ok(dev)
     }
 
-    fn assert_result<T: std::fmt::Debug>(
+    fn assert_result<T, E>(
         &self,
-        res: Result<T>,
+        res: Result<T, E>,
         expect: Expect,
         msg: Option<&str>,
-    ) -> Result<T> {
+    ) -> Result<T, E>
+    where
+        T: std::fmt::Debug,
+        E: std::fmt::Display,
+    {
         let mut testname = format!("{}/{}", self.name, self.case);
         if let Some(msg) = msg {
             testname = format!("{}/{}", testname, msg);
@@ -312,11 +316,10 @@ impl TestCase {
                 if let Some(msg) = msg {
                     assert_eq!(msg, e.to_string());
                 }
-                Err(anyhow!(e))
+                Err(e)
             }
-            Expect::Pass => Ok(res.unwrap_or_else(|e| {
-                panic!("Expected {} to pass but result was {:?}", testname, e)
-            })),
+            Expect::Pass => Ok(res
+                .unwrap_or_else(|e| panic!("Expected {} to pass but result was {}", testname, e))),
         }
     }
 }
