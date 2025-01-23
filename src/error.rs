@@ -1,4 +1,12 @@
 use thiserror::Error;
+use uuid::Uuid;
+
+fn format_dev(uuid: &Uuid, parent: Option<&String>) -> String {
+    match parent {
+        Some(parent) => format!("{parent}/{uuid}"),
+        _ => uuid.to_string(),
+    }
+}
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {
@@ -9,8 +17,8 @@ pub(crate) enum Error {
     InvalidJSON(#[from] serde_json::Error),
     #[error("Invalid format for device definition: {0}")]
     DeviceFormat(String),
-    #[error("Device state error: {0}")]
-    DeviceState(String),
+    #[error("Device state error: {0} [{dev}]", dev = format_dev(.1, .2.as_ref()))]
+    DeviceState(String /*msg*/, Uuid, Option<String> /*parent*/),
     #[error("Unable to find parent device: {0}")]
     ParentNotFound(String),
     #[error("Device already exists: {0}")]

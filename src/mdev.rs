@@ -154,20 +154,28 @@ impl MDev {
 
     // get parent and propagate a consistent error to the caller if absent
     pub fn parent(&self) -> Result<&String, Error> {
-        self.parent
-            .as_ref()
-            .ok_or_else(|| Error::DeviceState(format!("Device {} is missing a parent", self.uuid)))
+        self.parent.as_ref().ok_or_else(|| {
+            Error::DeviceState(
+                "parent device is not specified".to_string(),
+                self.uuid,
+                None,
+            )
+        })
     }
 
     // get mdev_type and propagate a consistent error to the caller if absent
     pub fn mdev_type(&self) -> Result<&String, Error> {
         self.mdev_type.as_ref().ok_or_else(|| {
-            Error::DeviceState(format!("Device {} is missing a mdev_type", self.uuid))
+            Error::DeviceState(
+                "mdev_type is not specified".to_string(),
+                self.uuid,
+                self.parent.clone(),
+            )
         })
     }
 
-    pub fn persistent_path(&self) -> Option<PathBuf> {
-        self.parent.as_ref().map(|x| {
+    pub fn persistent_path(&self) -> Result<PathBuf, Error> {
+        self.parent().map(|x| {
             let mut path = self.env.config_base();
             path.push(x);
             path.push(self.uuid.hyphenated().to_string());
@@ -177,8 +185,8 @@ impl MDev {
 
     pub fn is_defined(&self) -> bool {
         match self.persistent_path() {
-            Some(p) => p.exists(),
-            None => false,
+            Ok(p) => p.exists(),
+            _ => false,
         }
     }
 
@@ -301,7 +309,7 @@ impl MDev {
 
     // load the stored definition from disk if it exists
     pub fn load_definition(&mut self) -> Result<(), Error> {
-        if let Some(path) = self.persistent_path().as_ref() {
+        if let Ok(path) = self.persistent_path().as_ref() {
             let mut f = fs::File::open(path)
                 .map_err(|e| Error::IOError(format!("Failed to open file {path:?}"), e))?;
             let mut contents = String::new();
@@ -318,12 +326,20 @@ impl MDev {
         match fmt {
             FormatType::Defined => {
                 if !self.is_defined() {
-                    return Err(Error::DeviceState("Device is not defined".to_string()));
+                    return Err(Error::DeviceState(
+                        "Device is not defined".to_string(),
+                        self.uuid,
+                        self.parent.clone(),
+                    ));
                 }
             }
             FormatType::Active => {
                 if !self.active {
-                    return Err(Error::DeviceState("Device is not active".to_string()));
+                    return Err(Error::DeviceState(
+                        "Device is not active".to_string(),
+                        self.uuid,
+                        self.parent.clone(),
+                    ));
                 }
             }
         }
@@ -564,10 +580,7 @@ impl MDev {
     }
 
     pub fn undefine(&mut self) -> Result<(), Error> {
-        let p = self
-            .persistent_path()
-            .ok_or_else(|| Error::DeviceState(format!("Failed to undefine {}", self.uuid)))?;
-
+        let p = self.persistent_path()?;
         fs::remove_file(&p)
             .map_err(|e| Error::IOError(format!("Failed to remove file {:?}", p), e))?;
         Ok(())
