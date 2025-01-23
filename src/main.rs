@@ -189,14 +189,14 @@ fn undefine_command(
     uuid: Uuid,
     parent: Option<String>,
     force: bool,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     debug!("Undefining mdev {:?}", uuid);
     let mut failed = false;
     let devs = env
         .clone()
         .get_defined_devices(Some(&uuid), parent.as_ref())?;
     if devs.is_empty() {
-        return Err(anyhow!("No devices match the specified uuid"));
+        return Err(Error::DeviceNotFound);
     }
     for (_, mut children) in devs {
         for child in children.iter_mut() {
@@ -216,7 +216,7 @@ fn undefine_command(
         }
     }
     if failed {
-        return Err(anyhow!("Undefine failed"));
+        return Err(Error::System("Undefine failed".to_string()));
     }
     Ok(())
 }
@@ -696,7 +696,7 @@ fn main() -> anyhow::Result<()> {
                 uuid,
                 parent,
                 force,
-            } => undefine_command(env, uuid, parent, force),
+            } => undefine_command(env, uuid, parent, force).map_err(Into::into),
             MdevctlCommands::Modify {
                 uuid,
                 parent,

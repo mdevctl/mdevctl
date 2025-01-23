@@ -27,6 +27,8 @@ pub(crate) enum Error {
     ParentNotFound(String),
     #[error("Device already exists: {0}")]
     DeviceExists(String),
+    #[error("No devices found")]
+    DeviceNotFound,
     #[error("Operation unsupported: {0}")]
     Unsupported(String),
     #[error("System error: {0}")]
