@@ -1,5 +1,9 @@
+use std::path::PathBuf;
+
 use thiserror::Error;
 use uuid::Uuid;
+
+use crate::{Action, Event};
 
 fn format_dev(uuid: &Uuid, parent: Option<&String>) -> String {
     match parent {
@@ -31,4 +35,8 @@ pub(crate) enum Error {
     InsufficientResources(String),
     #[error("Invalid configuration: {0}")]
     InvalidConfiguration(String),
+    #[error("Callout script {0:?} does not support Action '{1:?}'")]
+    CalloutUnsupportedAction(PathBuf, Action),
+    #[error("Callout script {0:?} does not support Event '{1:?}'")]
+    CalloutUnsupportedEvent(PathBuf, Event),
 }

@@ -197,18 +197,14 @@ impl CalloutScriptInfo {
         }
     }
 
-    fn supports_event_action(&self, event: Event, action: Action) -> anyhow::Result<()> {
+    fn supports_event_action(&self, event: Event, action: Action) -> Result<(), Error> {
         if !self.supports.has_action(action) {
             debug!(
                 "Callout script {:?} does not support action '{:?}'",
                 self.path.clone(),
                 action
             );
-            return Err(anyhow!(
-                "Script {:?} does not support action '{:?}'",
-                self.path.clone(),
-                action
-            ));
+            return Err(Error::CalloutUnsupportedAction(self.path.clone(), action));
         }
         if !self.supports.has_event(event) {
             debug!(
@@ -216,11 +212,7 @@ impl CalloutScriptInfo {
                 self.path.clone(),
                 event
             );
-            return Err(anyhow!(
-                "Script {:?} does not support event '{:?}'",
-                self.path.clone(),
-                event
-            ));
+            return Err(Error::CalloutUnsupportedEvent(self.path.clone(), event));
         }
         Ok(())
     }
