@@ -1,7 +1,7 @@
 //! Structures for representing a mediated device
 
 use crate::environment::Environment;
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use log::{debug, warn};
 use std::fs;
 use std::io::{ErrorKind, Read};
@@ -575,27 +575,35 @@ impl MDev {
         Ok(())
     }
 
-    pub fn write_config(&self) -> anyhow::Result<()> {
+    pub fn write_config(&self) -> Result<(), Error> {
         let jsonstring = serde_json::to_string_pretty(&self.to_json(false)?)?;
         let path = self.persistent_path().unwrap();
         let parentdir = path.parent().unwrap();
         debug!("Ensuring parent directory {:?} exists", parentdir);
-        fs::create_dir_all(parentdir)?;
+        fs::create_dir_all(parentdir).map_err(|e| Error::IOError {
+            message: format!("Failed to create parent directory {parentdir:?}"),
+            source: e,
+        })?;
         debug!("Writing config for {:?} to {:?}", self.uuid, path);
-        fs::write(path, jsonstring.as_bytes())
-            .with_context(|| format!("Failed to write config for device {:?}", self.uuid))
+        fs::write(path, jsonstring.as_bytes()).map_err(|e| Error::IOError {
+            message: format!("Failed to write config for device {:?}", self.uuid),
+            source: e,
+        })
     }
 
-    pub fn define(&self) -> anyhow::Result<()> {
+    pub fn define(&self) -> Result<(), Error> {
         self.write_config()
     }
 
-    pub fn undefine(&mut self) -> anyhow::Result<()> {
+    pub fn undefine(&mut self) -> Result<(), Error> {
         let p = self
             .persistent_path()
-            .ok_or_else(|| anyhow!("Failed to undefine {}", self.uuid.hyphenated().to_string()))?;
+            .ok_or_else(|| Error::DeviceState(format!("Failed to undefine {}", self.uuid)))?;
 
-        fs::remove_file(&p).with_context(|| format!("Failed to remove file {:?}", p))?;
+        fs::remove_file(&p).map_err(|e| Error::IOError {
+            message: format!("Failed to remove file {:?}", p),
+            source: e,
+        })?;
         Ok(())
     }
 

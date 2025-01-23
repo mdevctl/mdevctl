@@ -170,7 +170,8 @@ fn define_command(
             let attrs = c.get_attributes()?;
             c.dev.add_attributes(&attrs)?;
         }
-        c.dev.define()
+        c.dev.define()?;
+        Ok(())
     })
     .map(|_| {
         if uuid.is_none() {
@@ -197,7 +198,10 @@ fn undefine_command(
     for (_, mut children) in devs {
         for child in children.iter_mut() {
             let mut c = callout(child)?;
-            if let Err(e) = c.invoke(Action::Undefine, force, |c| c.dev.undefine()) {
+            if let Err(e) = c.invoke(Action::Undefine, force, |c| {
+                c.dev.undefine()?;
+                Ok(())
+            }) {
                 failed = true;
                 for x in e.chain() {
                     warn!(
@@ -274,9 +278,12 @@ fn modify_command(
 
             let mut c = callout(&mut act_dev)?;
             debug!("mdev device used for live update '{:?}'", c.dev);
-            return c
-                .invoke_modify_live()
-                .and_then(|_| c.invoke(Action::Modify, force, |c| c.dev.write_config()));
+            return c.invoke_modify_live().and_then(|_| {
+                c.invoke(Action::Modify, force, |c| {
+                    c.dev.write_config()?;
+                    Ok(())
+                })
+            });
         }
         // live modify only
         callout(&mut act_dev)?.invoke_modify_live()
@@ -314,7 +321,10 @@ fn modify_command(
                 }
             }
         }
-        callout(&mut dev)?.invoke(Action::Modify, force, |c| c.dev.write_config())
+        callout(&mut dev)?.invoke(Action::Modify, force, |c| {
+            c.dev.write_config()?;
+            Ok(())
+        })
     }
 }
 
