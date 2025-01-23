@@ -550,7 +550,7 @@ fn types_command(
     parent: Option<String>,
     dumpjson: bool,
     output: &mut dyn std::io::Write,
-) -> anyhow::Result<()> {
+) -> Result<(), Error> {
     let types = env.clone().get_supported_types(parent)?;
     debug!("{:?}", types);
     if dumpjson {
@@ -567,11 +567,7 @@ fn types_command(
             0 => serde_json::json!([]),
             _ => serde_json::json!([parents]),
         };
-        output.write(
-            serde_json::to_string_pretty(&jsonval)
-                .map_err(|_e| anyhow!("Unable to serialize json"))?
-                .as_bytes(),
-        )
+        output.write(serde_json::to_string_pretty(&jsonval)?.as_bytes())
     } else {
         let mut text: String = Default::default();
         for (parent, children) in types {
@@ -595,7 +591,7 @@ fn types_command(
         output.write(text.as_bytes())
     }
     .map(|_| ())
-    .with_context(|| "Unable to write output")
+    .map_err(|e| Error::IOError("Unable to write output".to_string(), e))
 }
 
 /// Implementation of the `start-parent-mdevs` command
@@ -706,7 +702,7 @@ fn main() -> anyhow::Result<()> {
                 &mut stdout(),
             ),
             MdevctlCommands::Types { parent, dumpjson } => {
-                types_command(env, parent, dumpjson, &mut stdout())
+                types_command(env, parent, dumpjson, &mut stdout()).map_err(Into::into)
             }
             MdevctlCommands::StartParentMdevs { parent } => {
                 start_parent_mdevs_command(env, parent).map_err(Into::into)
