@@ -548,7 +548,7 @@ fn types_command(
         for (parent, children) in types {
             let mut childarray = Vec::new();
             for child in children {
-                childarray.push(child.to_json()?);
+                childarray.push(child.to_json());
             }
             parents.insert(parent, childarray.into());
         }

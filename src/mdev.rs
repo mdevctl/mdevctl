@@ -695,7 +695,7 @@ impl MDevType {
         }
     }
 
-    pub fn to_json(&self) -> anyhow::Result<serde_json::Value> {
+    pub fn to_json(&self) -> serde_json::Value {
         let mut jsonobj = serde_json::json!({
             "available_instances": self.available_instances,
             "device_api": self.device_api,
@@ -713,6 +713,6 @@ impl MDevType {
             );
         }
 
-        Ok(serde_json::json!({ &self.typename: jsonobj }))
+        serde_json::json!({ &self.typename: jsonobj })
     }
 }
