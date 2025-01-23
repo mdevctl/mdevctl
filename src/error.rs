@@ -31,6 +31,4 @@ pub(crate) enum Error {
     InsufficientResources(String),
     #[error("Invalid configuration: {0}")]
     InvalidConfiguration(String),
-    #[error("Callout error: {0}")]
-    Callout(#[source] anyhow::Error),
 }

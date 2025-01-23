@@ -176,7 +176,7 @@ impl Environment {
 
                         // if the device is supported by a callout script that gets attributes, show
                         // those in the output
-                        let mut c = callout(&mut dev).map_err(Error::Callout)?;
+                        let mut c = callout(&mut dev)?;
                         if let Ok(attrs) = c.get_attributes() {
                             let _ = c.dev.add_attributes(&attrs);
                         }

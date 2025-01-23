@@ -8,6 +8,7 @@ use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+use crate::error::Error;
 use crate::mdev::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -434,14 +435,18 @@ pub struct Callout<'a> {
     pub dev: &'a mut MDev,
 }
 
-pub fn callout(dev: &mut MDev) -> anyhow::Result<Callout> {
+pub fn callout(dev: &mut MDev) -> Result<Callout, Error> {
     Callout::new(dev)
 }
 
 impl<'a> Callout<'a> {
-    pub fn new(dev: &'a mut MDev) -> anyhow::Result<Callout<'a>> {
+    pub fn new(dev: &'a mut MDev) -> Result<Callout<'a>, Error> {
         if dev.mdev_type.is_none() {
-            return Err(anyhow!("Device must have a defined mdev_type"));
+            return Err(Error::DeviceState(
+                "mdev_type is not specified".to_string(),
+                dev.uuid,
+                dev.parent.clone(),
+            ));
         }
         Ok(Callout {
             state: State::None,
