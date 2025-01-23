@@ -227,16 +227,24 @@ impl Environment {
                 )
             })?;
             let parentname = parentpath.file_name();
-            let parentname = parentname.to_str().unwrap();
-            if (parent.is_some() && parent.unwrap() != parentname)
-                || !parentpath
-                    .metadata()
-                    .map_err(|e| {
-                        Error::IOError(format!("Failed to read metadata for {parentpath:?}"), e)
-                    })?
-                    .is_dir()
+            let Some(parentname) = parentname.to_str() else {
+                debug!("Skipping potential parent directory {parentname:?} because it is not valid utf8");
+                continue;
+            };
+            if let Some(parent) = parent {
+                if parent != parentname {
+                    debug!("Ignoring child devices for parent {}", parentname);
+                    continue;
+                }
+            }
+            if !parentpath
+                .metadata()
+                .map_err(|e| {
+                    Error::IOError(format!("Failed to read metadata for {parentpath:?}"), e)
+                })?
+                .is_dir()
             {
-                debug!("Ignoring child devices for parent {}", parentname);
+                debug!("Ignoring non-directory {parentpath:?}");
                 continue;
             }
 
@@ -264,22 +272,28 @@ impl Environment {
                         }
 
                         let path = child.path();
-                        let basename = path.file_name().unwrap().to_str().unwrap();
-                        let u = Uuid::parse_str(basename);
-                        if u.is_err() {
+                        let Some(filename) = path.file_name() else {
+                            debug!("Failed to get filename for {child:?}. skipping...");
+                            continue;
+                        };
+                        let Some(basename) = filename.to_str() else {
+                            debug!("Skipping file name because it is invalid utf8");
+                            continue;
+                        };
+                        let Ok(u) = Uuid::parse_str(basename) else {
                             warn!("Can't determine uuid for file '{}'", basename);
                             continue;
-                        }
-                        let u = u.unwrap();
+                        };
 
                         debug!("found mdev {:?}", u);
-                        if uuid.is_some() && uuid != Some(&u) {
-                            debug!(
-                                "Ignoring device {} because it doesn't match uuid {}",
-                                u,
-                                uuid.unwrap()
-                            );
-                            continue;
+                        if let Some(uuid) = uuid {
+                            if uuid != &u {
+                                debug!(
+                                    "Ignoring device {} because it doesn't match uuid {}",
+                                    u, uuid
+                                );
+                                continue;
+                            }
                         }
 
                         match fs::File::open(&path) {
@@ -344,15 +358,22 @@ impl Environment {
                 parent.cloned(),
             ))
         } else {
-            let (parent, children) = devs.iter().next().unwrap();
-            if children.len() > 1 {
-                return Err(Error::DeviceState(
-                    "Multiple definitions found".to_string(),
-                    uuid,
-                    Some(parent.clone()),
-                ));
-            }
-            Ok(children.first().unwrap().clone())
+            devs.iter()
+                .next()
+                .ok_or_else(|| Error::DeviceNotFound)
+                .and_then(|(parent, children)| {
+                    if children.len() > 1 {
+                        return Err(Error::DeviceState(
+                            "Multiple definitions found".to_string(),
+                            uuid,
+                            Some(parent.clone()),
+                        ));
+                    }
+                    children
+                        .first()
+                        .cloned()
+                        .ok_or_else(|| Error::DeviceNotFound)
+                })
         }
     }
 
@@ -372,10 +393,13 @@ impl Environment {
                         e,
                     )
                 })?;
-                let parentname = parentpath.file_name();
-                let parentname = parentname.to_str().unwrap();
+                let Some(parentname) = parentpath.file_name().to_str().map(|s| s.to_string())
+                else {
+                    debug!("Skipping {parentpath:?} because it isn't valid utf8");
+                    continue;
+                };
                 debug!("Looking for supported types for device {}", parentname);
-                if parent.is_some() && parent.as_ref().unwrap() != parentname {
+                if parent.is_some() && parent.as_ref() != Some(&parentname) {
                     debug!("Ignoring types for parent {}", parentname);
                     continue;
                 }
@@ -409,7 +433,17 @@ impl Environment {
                     t.parent = parentname.to_string();
 
                     let mut path = child.path();
-                    t.typename = path.file_name().unwrap().to_str().unwrap().to_string();
+                    let Some(filename) = path.file_name() else {
+                        debug!("Failed to get filename for {path:?}. skipping...");
+                        continue;
+                    };
+                    t.typename = match filename.to_str() {
+                        Some(s) => s.to_string(),
+                        None => {
+                            debug!("Skipping {filename:?} because it is not valid utf8");
+                            continue;
+                        }
+                    };
                     debug!("found mdev type {}", t.typename);
 
                     path.push("available_instances");
