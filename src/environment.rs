@@ -103,14 +103,21 @@ impl Environment {
                 uuid
             )))
         } else {
-            let (parent, children) = devs.iter().next().unwrap();
-            if children.len() > 1 {
-                return Err(Error::System(format!(
-                    "Multiple definitions found for {}/{}",
-                    parent, uuid
-                )));
-            }
-            Ok(children.first().unwrap().clone())
+            devs.iter()
+                .next()
+                .ok_or_else(|| Error::DeviceNotFound)
+                .and_then(|(parent, children)| {
+                    if children.len() > 1 {
+                        return Err(Error::System(format!(
+                            "Multiple devices found for {}/{}",
+                            parent, uuid
+                        )));
+                    }
+                    children
+                        .first()
+                        .cloned()
+                        .ok_or_else(|| Error::DeviceNotFound)
+                })
         }
     }
 
