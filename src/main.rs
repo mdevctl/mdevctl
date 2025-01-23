@@ -447,15 +447,21 @@ fn start_command(
 }
 
 /// Implementation of the `mdevctl stop` command
-fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> anyhow::Result<()> {
+fn stop_command(env: Rc<Environment>, uuid: Uuid, force: bool) -> Result<(), Error> {
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     match MDevSysfsData::load_for_mdev(&dev) {
-        Ok(None) => return Err(anyhow!("Device {} is not an active mdev", uuid)),
+        Ok(None) => {
+            return Err(Error::DeviceState(
+                "device is not active".to_string(),
+                uuid,
+                None,
+            ))
+        }
         Ok(sysfs_data) => dev.set_sysfs_data(sysfs_data),
         Err(e) => {
             if !force {
-                return Err(e.into());
+                return Err(e);
             }
             warn!(
                 "For device {} a sysfs update caused the error: {:?}",
@@ -684,7 +690,9 @@ fn main() -> anyhow::Result<()> {
                 jsonfile,
                 force,
             } => start_command(env, uuid, parent, mdev_type, jsonfile, force),
-            MdevctlCommands::Stop { uuid, force } => stop_command(env, uuid, force),
+            MdevctlCommands::Stop { uuid, force } => {
+                stop_command(env, uuid, force).map_err(Into::into)
+            }
             MdevctlCommands::List(list) => list_command(
                 env,
                 list.defined,
