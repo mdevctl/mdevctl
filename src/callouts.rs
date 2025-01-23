@@ -476,7 +476,8 @@ impl<'a> Callout<'a> {
                         Some(&conf),
                         &DefaultCheckProcessOutput,
                     )
-                    .map(|_output| ());
+                    .map(|_output| ())
+                    .map_err(Into::into);
                 self.notify(Action::Modify);
             }
         } // else mdev is not active
@@ -507,7 +508,7 @@ impl<'a> Callout<'a> {
                     .ok_or(e)
             })
             .and_then(|_| {
-                let tmp_res = func(self);
+                let tmp_res = func(self).map_err(Error::CalloutPrimaryCommand);
                 self.state = match tmp_res {
                     Ok(_) => State::Success,
                     Err(_) => State::Failure,
@@ -523,7 +524,7 @@ impl<'a> Callout<'a> {
             });
 
         self.notify(action);
-        res
+        res.map_err(Into::into)
     }
 
     pub fn get_attributes(&mut self) -> anyhow::Result<serde_json::Value> {
@@ -588,7 +589,7 @@ impl<'a> Callout<'a> {
         event: Event,
         action: Action,
         stdin: Option<&str>,
-    ) -> anyhow::Result<Output> {
+    ) -> Result<Output, Error> {
         debug!(
             "{}-{}: executing {:?}",
             event,
@@ -614,7 +615,9 @@ impl<'a> Callout<'a> {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd.spawn()?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| Error::IOError(format!("Couldn't spawn callout command '{cmd:?}'"), e))?;
 
         if let Some(input) = stdin {
             if let Some(mut child_stdin) = child.stdin.take() {
@@ -626,12 +629,17 @@ impl<'a> Callout<'a> {
                             script.as_ref().as_os_str()
                         )
                     }
-                    Err(e) => Err(e).with_context(|| "Failed to write to stdin of command")?,
+                    Err(e) => Err(Error::IOError(
+                        "Failed to write to stdin of command".to_string(),
+                        e,
+                    ))?,
                 }
             }
         }
 
-        child.wait_with_output().map_err(anyhow::Error::from)
+        child
+            .wait_with_output()
+            .map_err(|e| Error::IOError("Failed to get output of callout script".to_string(), e))
     }
 
     fn print_err<P: AsRef<Path>>(&self, output: &Output, script: P) {
@@ -714,7 +722,7 @@ impl<'a> Callout<'a> {
         action: Action,
         stdin: Option<&str>,
         check_process: &dyn CheckProcessOutput,
-    ) -> anyhow::Result<Option<Output>> {
+    ) -> Result<Option<Output>, Error> {
         match self.script {
             Some(ref s) => {
                 s.supports_event_action(event, action)?;
@@ -722,7 +730,7 @@ impl<'a> Callout<'a> {
                 self.print_err(&output, s);
                 match output.status.code() {
                     None | Some(0) => Ok(Some(output)),
-                    Some(n) => Err(invocation_failure(&s.path, Some(n))),
+                    Some(n) => Err(Error::CalloutInvocationFailure(s.path.clone(), Some(n))),
                 }
             }
             None => {

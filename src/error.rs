@@ -43,4 +43,6 @@ pub(crate) enum Error {
     CalloutInvocationFailure(PathBuf, Option<i32>),
     #[error("Callout script {0:?} returned unexpected output: {1}")]
     CalloutUnexpectedOutput(PathBuf, String),
+    #[error(transparent)]
+    CalloutPrimaryCommand(anyhow::Error),
 }
