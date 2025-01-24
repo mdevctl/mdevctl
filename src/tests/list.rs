@@ -12,28 +12,12 @@ fn test_invalid_files() {
     // just make sure that the list command can deal with invalid files without panic-ing
     let test = TestCase::new("invalid-files", "invalid-active");
     test.populate_active_device("invalid-uuid-value", PARENT, MDEV_TYPE);
-    let result = crate::list_command(
-        test.env.clone(),
-        false,
-        false,
-        false,
-        None,
-        None,
-        &mut outbuf,
-    );
+    let result = crate::list_command(&test.env, false, false, false, None, None, &mut outbuf);
     assert!(result.is_ok());
 
     let test = TestCase::new("invalid-files", "invalid-defined");
     test.populate_defined_device("invalid-uuid-value", PARENT, "device.json");
-    let result = crate::list_command(
-        test.env.clone(),
-        true,
-        false,
-        false,
-        None,
-        None,
-        &mut outbuf,
-    );
+    let result = crate::list_command(&test.env, true, false, false, None, None, &mut outbuf);
     assert!(result.is_ok());
 }
 
@@ -56,7 +40,7 @@ fn test_list_helper<F>(
 
     let mut outbuf: Vec<u8> = Default::default();
     let res = list_command(
-        test.env.clone(),
+        &test.env,
         defined,
         false,
         verbose,
@@ -74,7 +58,7 @@ fn test_list_helper<F>(
 
     let mut outbuf: Vec<u8> = Default::default();
     let res = list_command(
-        test.env.clone(),
+        &test.env,
         defined,
         true,
         verbose,

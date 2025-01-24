@@ -6,7 +6,7 @@ fn test_types_helper(test: &TestCase, subtest: &str, expect: Expect, parent: Opt
     // test text output
     let mut outbuf: Vec<u8> = Default::default();
     let text_testfilename = format!("{}.text", subtest);
-    let res = types_command(test.env.clone(), parent.clone(), false, &mut outbuf);
+    let res = types_command(&test.env, parent.clone(), false, &mut outbuf);
     if test.assert_result(res, expect, Some("text")).is_ok() {
         test.compare_to_file(
             &text_testfilename,
@@ -19,7 +19,7 @@ fn test_types_helper(test: &TestCase, subtest: &str, expect: Expect, parent: Opt
     // test JSON output
     let mut outbuf: Vec<u8> = Default::default();
     let json_testfilename = format!("{}.json", subtest);
-    let res = types_command(test.env.clone(), parent.clone(), true, &mut outbuf);
+    let res = types_command(&test.env, parent.clone(), true, &mut outbuf);
     if test.assert_result(res, expect, Some("json")).is_ok() {
         test.compare_to_file(
             &json_testfilename,

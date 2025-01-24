@@ -17,15 +17,7 @@ fn test_define_command_callout<F>(
     setupfn(&test);
 
     use crate::define_command;
-    let res = define_command(
-        test.env.clone(),
-        uuid,
-        false,
-        parent,
-        mdev_type,
-        None,
-        force,
-    );
+    let res = define_command(&test.env, uuid, false, parent, mdev_type, None, force);
 
     let _ = test.assert_result(res, expect, None);
 }
@@ -52,15 +44,7 @@ fn test_define_helper<F>(
 
     setupfn(&test);
 
-    let res = define_command_helper(
-        test.env.clone(),
-        uuid,
-        auto,
-        parent,
-        mdev_type,
-        jsonfile,
-        force,
-    );
+    let res = define_command_helper(&test.env, uuid, auto, parent, mdev_type, jsonfile, force);
     let expected_testfilename = format!("{}.expected", testname);
     if let Ok(def) = test.assert_result(res, expect, None) {
         let path = def.persistent_path().unwrap();
@@ -556,7 +540,7 @@ fn test_undefine_helper<F>(
     setupfn(&test);
     let uuid = Uuid::parse_str(uuid).unwrap();
 
-    let result = crate::undefine_command(test.env.clone(), uuid, parent.clone(), force);
+    let result = crate::undefine_command(&test.env, uuid, parent.clone(), force);
 
     if test.assert_result(result, expect, None).is_err() {
         return;
@@ -564,7 +548,6 @@ fn test_undefine_helper<F>(
 
     let devs = test
         .env
-        .clone()
         .get_defined_devices(Some(&uuid), parent.as_ref())
         .expect("failed to query defined devices");
     assert!(devs.is_empty());

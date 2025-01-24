@@ -6,7 +6,6 @@ use log::{debug, warn};
 use std::fs;
 use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::vec::Vec;
 use uuid::Uuid;
 
@@ -23,8 +22,8 @@ pub struct MDevSysfsData {
 }
 
 impl MDevSysfsData {
-    pub fn load(env: Rc<Environment>, uuid: &Uuid) -> Result<Option<MDevSysfsData>, Error> {
-        let active_path = Self::active_path(env.clone(), uuid);
+    pub fn load(env: &Environment, uuid: &Uuid) -> Result<Option<MDevSysfsData>, Error> {
+        let active_path = Self::active_path(env, uuid);
         let parent = Self::load_parent_from_sysfs(&active_path)
             .map(Some)
             .or_else(|e| match e {
@@ -56,10 +55,10 @@ impl MDevSysfsData {
     }
 
     pub fn load_for_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>, Error> {
-        Self::load(mdev.env.clone(), &mdev.uuid)
+        Self::load(mdev.env, &mdev.uuid)
     }
 
-    fn active_path(env: Rc<Environment>, uuid: &Uuid) -> PathBuf {
+    fn active_path(env: &Environment, uuid: &Uuid) -> PathBuf {
         env.mdev_base().join(uuid.hyphenated().to_string())
     }
 
@@ -106,18 +105,18 @@ impl MDevSysfsData {
 
 /// Representation of a mediated device
 #[derive(Debug, Clone)]
-pub struct MDev {
+pub struct MDev<'e> {
     pub uuid: Uuid,
     pub active: bool,
     pub autostart: bool,
     pub parent: Option<String>,
     pub mdev_type: Option<String>,
     pub attrs: Vec<(String, String)>,
-    pub env: Rc<Environment>,
+    pub env: &'e Environment,
 }
 
-impl MDev {
-    pub fn new(env: Rc<Environment>, uuid: Uuid) -> MDev {
+impl<'e> MDev<'e> {
+    pub fn new(env: &'e Environment, uuid: Uuid) -> MDev<'e> {
         MDev {
             uuid,
             active: false,
@@ -130,7 +129,7 @@ impl MDev {
     }
 
     pub fn new_from_jsonfile(
-        env: Rc<Environment>,
+        env: &'e Environment,
         uuid: Uuid,
         parent: String,
         jsonfile: PathBuf,
@@ -457,7 +456,7 @@ impl MDev {
         debug!("Creating mdev {:?}", self.uuid);
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
-        match MDevSysfsData::load(self.env.clone(), &self.uuid) {
+        match MDevSysfsData::load(self.env, &self.uuid) {
             Ok(Some(mdev_sysfs_data)) => {
                 if Some(&mdev_sysfs_data.parent) != self.parent.as_ref() {
                     return Err(Error::DeviceExists(format!(

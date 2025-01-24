@@ -33,7 +33,7 @@ fn test_modify_helper<F>(
 
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
-        test.env.clone(),
+        &test.env,
         uuid,
         parent.clone(),
         mdev_type,
@@ -57,7 +57,6 @@ fn test_modify_helper<F>(
 
     let def = test
         .env
-        .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     let path = def.persistent_path().unwrap();
@@ -98,7 +97,7 @@ fn test_modify_defined_active_helper<F>(
 
     let uuid = Uuid::parse_str(uuid).unwrap();
     let result = modify_command(
-        test.env.clone(),
+        &test.env,
         uuid,
         parent.clone(),
         mdev_type,
@@ -127,7 +126,6 @@ fn test_modify_defined_active_helper<F>(
 
     let def_active = test
         .env
-        .clone()
         .get_active_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     assert!(def_active.active);
@@ -141,7 +139,6 @@ fn test_modify_defined_active_helper<F>(
 
     let def = test
         .env
-        .clone()
         .get_defined_device(uuid, parent.as_ref())
         .expect("Couldn't find defined device");
     let path = def.persistent_path().unwrap();

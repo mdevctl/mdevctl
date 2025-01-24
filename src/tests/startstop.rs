@@ -19,8 +19,7 @@ fn test_start_helper<F>(
     setupfn(&test);
     let uuid = uuid.map(|s| Uuid::parse_str(s.as_ref()).unwrap());
 
-    let result =
-        crate::start_command_helper(test.env.clone(), uuid, parent, mdev_type, jsonfile, force);
+    let result = crate::start_command_helper(&test.env, uuid, parent, mdev_type, jsonfile, force);
 
     if let Ok(dev) = test.assert_result(result, expect, None) {
         let create_path = test
@@ -449,7 +448,7 @@ where
     let test = TestCase::new("stop", testname);
     setupfn(&test);
 
-    let res = crate::stop_command(test.env.clone(), Uuid::parse_str(uuid).unwrap(), force);
+    let res = crate::stop_command(&test.env, Uuid::parse_str(uuid).unwrap(), force);
 
     if test.assert_result(res, expect, None).is_ok() {
         let remove_path = test.env.mdev_base().join(uuid).join("remove");

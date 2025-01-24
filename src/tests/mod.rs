@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::rc::Rc;
 use tempfile::{Builder, TempDir};
 use uuid::Uuid;
 
@@ -37,7 +36,7 @@ enum Expect<'a> {
 
 #[derive(Debug)]
 struct TestCase {
-    env: Rc<Environment>,
+    env: Environment,
     datapath: PathBuf,
     #[allow(dead_code)]
     // we need to keep this alive for the whole test case so that the temp dir
@@ -52,9 +51,7 @@ impl TestCase {
         let path: PathBuf = [TEST_DATA_DIR, testname].iter().collect();
         let scratchdir = Builder::new().prefix("mdevctl-test").tempdir().unwrap();
         let test = TestCase {
-            env: Rc::new(Environment::new(
-                scratchdir.path().to_string_lossy().to_string(),
-            )),
+            env: Environment::new(scratchdir.path().to_string_lossy().to_string()),
             datapath: path,
             scratch: scratchdir,
             name: testname.to_owned(),
@@ -287,7 +284,7 @@ impl TestCase {
         let uuid = Uuid::parse_str(uuid);
         assert!(uuid.is_ok());
         let uuid = uuid.unwrap();
-        let mut dev = MDev::new(self.env.clone(), uuid);
+        let mut dev = MDev::new(&self.env, uuid);
 
         let jsonstr = fs::read_to_string(path)?;
         let jsonval: serde_json::Value = serde_json::from_str(&jsonstr)?;

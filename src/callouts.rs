@@ -248,10 +248,9 @@ impl CalloutScriptCache {
             .cloned()
     }
 
-    pub fn find_versioned_script(&mut self, dev: &MDev) -> Option<CalloutScriptInfo> {
+    pub fn find_versioned_script(&mut self, dev: &mut MDev) -> Option<CalloutScriptInfo> {
         // check already found scripts
-        let mut dev = dev.clone();
-        let mut callout = match callout(&mut dev) {
+        let mut callout = match callout(dev) {
             Ok(c) => c,
             Err(e) => {
                 debug!(
@@ -333,7 +332,12 @@ impl CalloutScriptCache {
 
 pub trait CheckProcessOutput {
     fn check(&self, p: PathBuf, o: Output) -> Result<(PathBuf, Output), Error>;
-    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>, Error>;
+    fn process(
+        &self,
+        c: &mut Callout<'_, '_>,
+        p: PathBuf,
+        o: Output,
+    ) -> Result<Option<Output>, Error>;
 }
 
 struct DefaultCheckProcessOutput;
@@ -343,7 +347,12 @@ impl CheckProcessOutput for DefaultCheckProcessOutput {
         Ok((p, o))
     }
 
-    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>, Error> {
+    fn process(
+        &self,
+        c: &mut Callout<'_, '_>,
+        p: PathBuf,
+        o: Output,
+    ) -> Result<Option<Output>, Error> {
         c.print_err(&o, &p);
         match o.status.code() {
             Some(0) => {
@@ -374,7 +383,12 @@ impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
         }
     }
 
-    fn process(&self, c: &mut Callout<'_>, p: PathBuf, o: Output) -> Result<Option<Output>, Error> {
+    fn process(
+        &self,
+        c: &mut Callout<'_, '_>,
+        p: PathBuf,
+        o: Output,
+    ) -> Result<Option<Output>, Error> {
         c.print_err(&o, &p);
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(cv) => {
@@ -398,18 +412,18 @@ impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
     }
 }
 
-pub struct Callout<'a> {
+pub struct Callout<'m, 'e> {
     state: State,
     script: Option<CalloutScriptInfo>,
-    pub dev: &'a mut MDev,
+    pub dev: &'m mut MDev<'e>,
 }
 
-pub fn callout(dev: &mut MDev) -> Result<Callout, Error> {
+pub fn callout<'m, 'e>(dev: &'m mut MDev<'e>) -> Result<Callout<'m, 'e>, Error> {
     Callout::new(dev)
 }
 
-impl<'a> Callout<'a> {
-    pub fn new(dev: &'a mut MDev) -> Result<Callout<'a>, Error> {
+impl<'m, 'e> Callout<'m, 'e> {
+    pub fn new(dev: &'m mut MDev<'e>) -> Result<Callout<'m, 'e>, Error> {
         if dev.mdev_type.is_none() {
             return Err(Error::DeviceState(
                 "mdev_type is not specified".to_string(),
@@ -424,7 +438,7 @@ impl<'a> Callout<'a> {
         })
     }
 
-    fn find_callout_script(&self) -> Option<CalloutScriptInfo> {
+    fn find_callout_script(&mut self) -> Option<CalloutScriptInfo> {
         self.dev.env.find_script(self.dev)
     }
 

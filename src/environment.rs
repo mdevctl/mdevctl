@@ -7,7 +7,6 @@ use log::{debug, warn};
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::Mutex;
 use std::{env, fs};
 use uuid::Uuid;
@@ -90,11 +89,7 @@ impl Environment {
     }
 
     /// convenience function to lookup an active device by uuid and parent
-    pub fn get_active_device(
-        self: Rc<Self>,
-        uuid: Uuid,
-        parent: Option<&String>,
-    ) -> Result<MDev, Error> {
+    pub fn get_active_device(&self, uuid: Uuid, parent: Option<&String>) -> Result<MDev, Error> {
         let devs = self.get_active_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
             Err(Error::DeviceState(
@@ -121,7 +116,7 @@ impl Environment {
 
     /// Get a map of all active devices, optionally filtered by uuid and parent
     pub fn get_active_devices(
-        self: Rc<Self>,
+        &self,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
     ) -> Result<BTreeMap<String, Vec<MDev>>, Error> {
@@ -154,7 +149,7 @@ impl Environment {
                     continue;
                 }
 
-                let mut dev = MDev::new(self.clone(), u);
+                let mut dev = MDev::new(self, u);
                 if let Ok(sysfs_data) = MDevSysfsData::load_for_mdev(&dev) {
                     dev.set_sysfs_data(sysfs_data);
                     if dev.active {
@@ -168,7 +163,7 @@ impl Environment {
                         }
 
                         // retrieve autostart from persisted mdev if possible
-                        let mut per_dev = MDev::new(self.clone(), u);
+                        let mut per_dev = MDev::new(self, u);
                         per_dev.parent.clone_from(&dev.parent);
                         if per_dev.load_definition().is_ok() {
                             dev.autostart = per_dev.autostart;
@@ -196,7 +191,7 @@ impl Environment {
 
     /// Get a map of all defined devices, optionally filtered by uuid and parent
     pub fn get_defined_devices(
-        self: Rc<Self>,
+        &self,
         uuid: Option<&Uuid>,
         parent: Option<&String>,
     ) -> Result<BTreeMap<String, Vec<MDev>>, Error> {
@@ -292,7 +287,7 @@ impl Environment {
                                     )
                                 })?;
                                 let val = serde_json::from_str(&contents)?;
-                                let mut dev = MDev::new(self.clone(), u);
+                                let mut dev = MDev::new(self, u);
                                 dev.load_from_json(parentname.to_string(), &val)?;
                                 match MDevSysfsData::load_for_mdev(&dev) {
                                     Err(e) => warn!(
@@ -325,11 +320,7 @@ impl Environment {
     }
 
     /// convenience function to lookup a defined device by uuid and parent
-    pub fn get_defined_device(
-        self: Rc<Self>,
-        uuid: Uuid,
-        parent: Option<&String>,
-    ) -> Result<MDev, Error> {
+    pub fn get_defined_device(&self, uuid: Uuid, parent: Option<&String>) -> Result<MDev, Error> {
         let devs = self.get_defined_devices(Some(&uuid), parent)?;
         if devs.is_empty() {
             Err(Error::DeviceState(
@@ -362,7 +353,7 @@ impl Environment {
 
     /// Get a map of all mediated device types that are supported on this machine
     pub fn get_supported_types(
-        self: Rc<Self>,
+        &self,
         parent: Option<String>,
     ) -> Result<BTreeMap<String, Vec<MDevType>>, Error> {
         debug!("Finding supported mdev types");
@@ -452,7 +443,7 @@ impl Environment {
         Ok(types)
     }
 
-    pub fn find_script(&self, dev: &MDev) -> Option<CalloutScriptInfo> {
+    pub fn find_script(&self, dev: &mut MDev) -> Option<CalloutScriptInfo> {
         return self
             .callout_scripts
             .lock()
