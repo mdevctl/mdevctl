@@ -290,16 +290,16 @@ impl Environment {
                                 let mut dev = MDev::new(self, u);
                                 dev.load_from_json(parentname.to_string(), &val)?;
                                 match MDevSysfsData::load_for_mdev(&dev) {
+                                    Ok(sysfs_data) => {
+                                        if dev.sysfs_data_matches(&sysfs_data) {
+                                            dev.set_sysfs_data(sysfs_data);
+                                        }
+                                    }
+                                    Err(Error::DeviceNotFound) => (),
                                     Err(e) => warn!(
                                         "For device {} a sysfs update caused the error: {:?}",
                                         u, e
                                     ),
-                                    Ok(Some(sysfs_data)) => {
-                                        if dev.sysfs_data_matches(&sysfs_data) {
-                                            dev.set_sysfs_data(Some(sysfs_data));
-                                        }
-                                    }
-                                    _ => (),
                                 };
                                 childdevices.push(dev);
                             }

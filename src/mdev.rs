@@ -22,7 +22,7 @@ pub struct MDevSysfsData {
 }
 
 impl MDevSysfsData {
-    pub fn load(env: &Environment, uuid: &Uuid) -> Result<Option<MDevSysfsData>, Error> {
+    pub fn load(env: &Environment, uuid: &Uuid) -> Result<MDevSysfsData, Error> {
         let active_path = Self::active_path(env, uuid);
         let parent = Self::load_parent_from_sysfs(&active_path)
             .map(Some)
@@ -43,18 +43,18 @@ impl MDevSysfsData {
                 _ => Err(e),
             })?;
         if let (Some(parent), Some(mdev_type)) = (parent, mdev_type) {
-            Ok(Some(MDevSysfsData {
+            Ok(MDevSysfsData {
                 uuid: uuid.to_owned(),
                 parent,
                 mdev_type,
-            }))
+            })
         } else {
             debug!("Mdev {:?} does not exist in sysfs", uuid);
-            Ok(None)
+            Err(Error::DeviceNotFound)
         }
     }
 
-    pub fn load_for_mdev(mdev: &MDev) -> Result<Option<MDevSysfsData>, Error> {
+    pub fn load_for_mdev(mdev: &MDev) -> Result<MDevSysfsData, Error> {
         Self::load(mdev.env, &mdev.uuid)
     }
 
@@ -189,21 +189,17 @@ impl<'e> MDev<'e> {
         }
     }
 
-    pub fn set_sysfs_data(&mut self, sysfs_data: Option<MDevSysfsData>) {
-        if let Some(d) = sysfs_data {
-            if self.uuid != d.uuid {
-                warn!(
-                    "Attempting to set sysfs data for device {} from sysfs data for UUID {}",
-                    self.uuid, d.uuid
-                );
-                return;
-            }
-            self.parent = Some(d.parent);
-            self.mdev_type = Some(d.mdev_type);
-            self.active = true;
-        } else {
-            self.active = false;
+    pub fn set_sysfs_data(&mut self, sysfs_data: MDevSysfsData) {
+        if self.uuid != sysfs_data.uuid {
+            warn!(
+                "Attempting to set sysfs data for device {} from sysfs data for UUID {}",
+                self.uuid, sysfs_data.uuid
+            );
+            return;
         }
+        self.parent = Some(sysfs_data.parent);
+        self.mdev_type = Some(sysfs_data.mdev_type);
+        self.active = true;
     }
 
     pub fn sysfs_data_matches(&self, sysfs_data: &MDevSysfsData) -> bool {
@@ -457,7 +453,7 @@ impl<'e> MDev<'e> {
         let parent = self.parent()?;
         let mdev_type = self.mdev_type()?;
         match MDevSysfsData::load(self.env, &self.uuid) {
-            Ok(Some(mdev_sysfs_data)) => {
+            Ok(mdev_sysfs_data) => {
                 if Some(&mdev_sysfs_data.parent) != self.parent.as_ref() {
                     return Err(Error::DeviceExists(format!(
                         "device {} found under different parent '{}'",
@@ -472,7 +468,7 @@ impl<'e> MDev<'e> {
                 }
                 return Err(Error::DeviceExists(self.uuid.to_string()));
             }
-            Ok(_) => (),
+            Err(Error::DeviceNotFound) => (),
             Err(e) => {
                 warn!(
                     "A sysfs lookup for device {} caused the error: {:?}",

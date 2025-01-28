@@ -453,39 +453,42 @@ impl<'m, 'e> Callout<'m, 'e> {
         }
 
         let mut res = Ok(());
-        let sysfs_data = MDevSysfsData::load_for_mdev(self.dev)?;
-        if let Some(sysfs_data) = sysfs_data {
-            if Some(sysfs_data.parent) != self.dev.parent {
-                debug!("Device exists under different parent - cannot run live update");
-                res = Err(Error::DeviceState(
-                    "device exists under different parent - cannot run live update".to_string(),
-                    self.dev.uuid,
-                    self.dev.parent.clone(),
-                ));
-            } else if Some(sysfs_data.mdev_type) != self.dev.mdev_type {
-                debug!("Device exists with different type - cannot run live update");
-                res = Err(Error::DeviceState(
-                    "device exists with different type - cannot run live update".to_string(),
-                    self.dev.uuid,
-                    self.dev.parent.clone(),
-                ));
-            } else {
-                self.script
-                    .clone()
-                    .unwrap()
-                    .supports_event_action(Event::Live, Action::Modify)?;
-                let conf = self.dev.to_json(false)?.to_string();
-                res = self
-                    .callout(
-                        Event::Live,
-                        Action::Modify,
-                        Some(&conf),
-                        &DefaultCheckProcessOutput,
-                    )
-                    .map(|_output| ());
-                self.notify(Action::Modify);
+        match MDevSysfsData::load_for_mdev(self.dev) {
+            Ok(sysfs_data) => {
+                if Some(sysfs_data.parent) != self.dev.parent {
+                    debug!("Device exists under different parent - cannot run live update");
+                    res = Err(Error::DeviceState(
+                        "device exists under different parent - cannot run live update".to_string(),
+                        self.dev.uuid,
+                        self.dev.parent.clone(),
+                    ));
+                } else if Some(sysfs_data.mdev_type) != self.dev.mdev_type {
+                    debug!("Device exists with different type - cannot run live update");
+                    res = Err(Error::DeviceState(
+                        "device exists with different type - cannot run live update".to_string(),
+                        self.dev.uuid,
+                        self.dev.parent.clone(),
+                    ));
+                } else {
+                    self.script
+                        .clone()
+                        .unwrap()
+                        .supports_event_action(Event::Live, Action::Modify)?;
+                    let conf = self.dev.to_json(false)?.to_string();
+                    res = self
+                        .callout(
+                            Event::Live,
+                            Action::Modify,
+                            Some(&conf),
+                            &DefaultCheckProcessOutput,
+                        )
+                        .map(|_output| ());
+                    self.notify(Action::Modify);
+                }
             }
-        } // else mdev is not active
+            Err(Error::DeviceNotFound) => (),
+            Err(e) => return Err(e),
+        }
         res
     }
 

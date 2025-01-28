@@ -99,7 +99,7 @@ fn define_command_helper(
         if uuid_provided {
             MDevSysfsData::load_for_mdev(&dev)
                 .and_then(|sysfs_data| {
-                    if parent.is_none() && (sysfs_data.is_none() || mdev_type.is_some()) {
+                    if parent.is_none() && mdev_type.is_some() {
                         return Err(Error::InvalidConfiguration(
                             "No parent specified".to_string(),
                         ));
@@ -107,15 +107,18 @@ fn define_command_helper(
                     dev.set_sysfs_data(sysfs_data);
                     Ok(())
                 })
-                .or_else(|e| {
-                    if !force {
-                        return Err(e);
+                .or_else(|e| match e {
+                    Error::DeviceNotFound => Ok(()),
+                    _ => {
+                        if !force {
+                            return Err(e);
+                        }
+                        warn!(
+                            "For device {} a sysfs update caused the error: {:?}",
+                            dev.uuid, e
+                        );
+                        Ok(())
                     }
-                    warn!(
-                        "For device {} a sysfs update caused the error: {:?}",
-                        dev.uuid, e
-                    );
-                    Ok(())
                 })?;
         }
 
@@ -471,14 +474,14 @@ fn stop_command(env: &Environment, uuid: Uuid, force: bool) -> Result<(), Error>
     debug!("Stopping '{}'", uuid);
     let mut dev = MDev::new(env, uuid);
     match MDevSysfsData::load_for_mdev(&dev) {
-        Ok(None) => {
+        Ok(sysfs_data) => dev.set_sysfs_data(sysfs_data),
+        Err(Error::DeviceNotFound) => {
             return Err(Error::DeviceState(
                 "device is not active".to_string(),
                 uuid,
                 None,
             ))
         }
-        Ok(sysfs_data) => dev.set_sysfs_data(sysfs_data),
         Err(e) => {
             if !force {
                 return Err(e);
