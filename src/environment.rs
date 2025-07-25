@@ -82,7 +82,7 @@ impl Environment {
             self.notification_dir(),
         ] {
             if !dir.exists() {
-                return Err(Error::System(format!("Required directory {:?} doesn't exist. This may indicate a packaging or installation error", dir)));
+                return Err(Error::System(format!("Required directory {dir:?} doesn't exist. This may indicate a packaging or installation error")));
             }
         }
         Ok(())
@@ -98,10 +98,7 @@ impl Environment {
                 parent.cloned(),
             ))
         } else if devs.len() > 1 {
-            Err(Error::System(format!(
-                "Multiple parents found for {}",
-                uuid
-            )))
+            Err(Error::System(format!("Multiple parents found for {uuid}")))
         } else {
             devs.iter()
                 .next()
@@ -109,8 +106,7 @@ impl Environment {
                 .and_then(|(parent, children)| {
                     if children.len() > 1 {
                         return Err(Error::System(format!(
-                            "Multiple devices found for {}/{}",
-                            parent, uuid
+                            "Multiple devices found for {parent}/{uuid}"
                         )));
                     }
                     children
@@ -128,10 +124,7 @@ impl Environment {
         parent: Option<&String>,
     ) -> Result<BTreeMap<String, Vec<MDev>>, Error> {
         let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
-        debug!(
-            "Looking up active mdevs: uuid={:?}, parent={:?}",
-            uuid, parent
-        );
+        debug!("Looking up active mdevs: uuid={uuid:?}, parent={parent:?}");
         if let Ok(dir) = self.mdev_base().read_dir() {
             for dir_dev in dir {
                 let dir_dev = dir_dev
@@ -140,20 +133,17 @@ impl Environment {
                 let basename = fname
                     .to_str()
                     .ok_or_else(|| Error::System("filename is not valid utf8".to_string()))?;
-                debug!("found defined mdev {}", basename);
+                debug!("found defined mdev {basename}");
                 let u = Uuid::parse_str(basename);
 
                 let Ok(u) = u else {
-                    warn!("Can't determine uuid for file '{}'", basename);
+                    warn!("Can't determine uuid for file '{basename}'");
                     continue;
                 };
 
                 if let Some(uuid) = uuid {
                     if uuid != &u {
-                        debug!(
-                            "Ignoring device {} because it doesn't match uuid {}",
-                            u, uuid
-                        );
+                        debug!("Ignoring device {u} because it doesn't match uuid {uuid}");
                         continue;
                     }
                 }
@@ -201,10 +191,7 @@ impl Environment {
         parent: Option<&String>,
     ) -> Result<BTreeMap<String, Vec<MDev>>, Error> {
         let mut devices: BTreeMap<String, Vec<MDev>> = BTreeMap::new();
-        debug!(
-            "Looking up defined mdevs: uuid={:?}, parent={:?}",
-            uuid, parent
-        );
+        debug!("Looking up defined mdevs: uuid={uuid:?}, parent={parent:?}");
         for parentpath in self
             .config_base()
             .read_dir()
@@ -233,7 +220,7 @@ impl Environment {
             };
             if let Some(parent) = parent {
                 if parent != parentname {
-                    debug!("Ignoring child devices for parent {}", parentname);
+                    debug!("Ignoring child devices for parent {parentname}");
                     continue;
                 }
             }
@@ -281,17 +268,14 @@ impl Environment {
                             continue;
                         };
                         let Ok(u) = Uuid::parse_str(basename) else {
-                            warn!("Can't determine uuid for file '{}'", basename);
+                            warn!("Can't determine uuid for file '{basename}'");
                             continue;
                         };
 
-                        debug!("found mdev {:?}", u);
+                        debug!("found mdev {u:?}");
                         if let Some(uuid) = uuid {
                             if uuid != &u {
-                                debug!(
-                                    "Ignoring device {} because it doesn't match uuid {}",
-                                    u, uuid
-                                );
+                                debug!("Ignoring device {u} because it doesn't match uuid {uuid}");
                                 continue;
                             }
                         }
@@ -316,14 +300,13 @@ impl Environment {
                                     }
                                     Err(Error::DeviceNotFound) => (),
                                     Err(e) => warn!(
-                                        "For device {} a sysfs update caused the error: {:?}",
-                                        u, e
+                                        "For device {u} a sysfs update caused the error: {e:?}"
                                     ),
                                 };
                                 childdevices.push(dev);
                             }
                             Err(e) => {
-                                warn!("Unable to open file {:?}: {}", path, e);
+                                warn!("Unable to open file {path:?}: {e}");
                                 continue;
                             }
                         };
@@ -398,9 +381,9 @@ impl Environment {
                     debug!("Skipping {parentpath:?} because it isn't valid utf8");
                     continue;
                 };
-                debug!("Looking for supported types for device {}", parentname);
+                debug!("Looking for supported types for device {parentname}");
                 if parent.is_some() && parent.as_ref() != Some(&parentname) {
-                    debug!("Ignoring types for parent {}", parentname);
+                    debug!("Ignoring types for parent {parentname}");
                     continue;
                 }
 
@@ -447,7 +430,7 @@ impl Environment {
                     debug!("found mdev type {}", t.typename);
 
                     path.push("available_instances");
-                    debug!("Checking available instances: {:?}", path);
+                    debug!("Checking available instances: {path:?}");
                     t.available_instances = file_contents(&path)?.trim().parse().map_err(|e| {
                         Error::System(format!(
                             "Failed to parse available instances as a string: {e}"

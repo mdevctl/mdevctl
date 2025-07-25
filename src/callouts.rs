@@ -232,10 +232,7 @@ impl CalloutScriptCache {
                 None
             }),
             Err(e) => {
-                debug!(
-                    " Callout script has no version support (unparsable stdout): {:?}",
-                    e
-                );
+                debug!(" Callout script has no version support (unparsable stdout): {e:?}");
                 None
             }
         }
@@ -274,12 +271,11 @@ impl CalloutScriptCache {
                 return None;
             }
         };
-        debug!("Looking up callout script for mdev type '{:?}'", mdev_type);
+        debug!("Looking up callout script for mdev type '{mdev_type:?}'");
         match self.lookup_cached_script(&parent, &mdev_type) {
             Some(cs) => {
                 debug!(
-                    "Callout script lookup for mdev type '{:?}' and parent {:?} successful",
-                    mdev_type, parent
+                    "Callout script lookup for mdev type '{mdev_type:?}' and parent {parent:?} successful"
                 );
                 if cs.supports == CalloutVersion::NOT_FOUND && cs.path.as_os_str().is_empty() {
                     debug!("Callout script search returned empty before: no script with versioning available");
@@ -291,8 +287,7 @@ impl CalloutScriptCache {
             }
             None => {
                 debug!(
-                    "Callout script lookup failed. Start searching for mdev type '{:?}' and parent {:?}",
-                    mdev_type, parent
+                    "Callout script lookup failed. Start searching for mdev type '{mdev_type:?}' and parent {parent:?}"
                 );
             }
         }
@@ -392,12 +387,12 @@ impl CheckProcessOutput for CapabilitiesCheckProcessOutput {
         c.print_err(&o, &p);
         match CalloutScriptCache::parse_script_capabilities(&o) {
             Some(cv) => {
-                debug!(" Script supports versioning: {:?}", cv);
+                debug!(" Script supports versioning: {cv:?}");
                 if cv.has_action(Action::Unknown) {
-                    warn!("Callout script {:?} provides unknown Action type", p);
+                    warn!("Callout script {p:?} provides unknown Action type");
                 }
                 if cv.has_event(Event::Unknown) {
-                    warn!("Callout script {:?} provides unknown Event type", p);
+                    warn!("Callout script {p:?} provides unknown Event type");
                 }
                 c.script = Some(CalloutScriptInfo::new(
                     p,
@@ -509,8 +504,7 @@ impl<'m, 'e> Callout<'m, 'e> {
                 force
                     .then(|| {
                         warn!(
-                            "Forcing operation '{}' despite callout failure. Error was: {}",
-                            action, e
+                            "Forcing operation '{action}' despite callout failure. Error was: {e}"
                         );
                     })
                     .ok_or(e)
@@ -553,23 +547,20 @@ impl<'m, 'e> Callout<'m, 'e> {
                     let mut st = String::from_utf8_lossy(&output.stdout).to_string();
 
                     if st.is_empty() {
-                        debug!(
-                            "Script output for {} is empty",
-                            self.dev.uuid.hyphenated().to_string()
-                        );
+                        debug!("Script output for {} is empty", self.dev.uuid.hyphenated());
                         return Ok(serde_json::Value::Null);
                     }
 
                     if &st == "[{}]" {
                         debug!(
                             "Attribute field for {} is empty",
-                            self.dev.uuid.hyphenated().to_string()
+                            self.dev.uuid.hyphenated()
                         );
                         st = "[]".to_string();
                     }
                     debug!(
                         "Script output for {} is: '{}'",
-                        self.dev.uuid.hyphenated().to_string(),
+                        self.dev.uuid.hyphenated(),
                         st
                     );
                     serde_json::from_str(st.trim_end_matches('\0')).map_err(|e| {
@@ -594,7 +585,7 @@ impl<'m, 'e> Callout<'m, 'e> {
             None => {
                 debug!(
                     "Script execution for {} returned without error but also without output",
-                    self.dev.uuid.hyphenated().to_string()
+                    self.dev.uuid.hyphenated()
                 );
                 Ok(serde_json::Value::Null)
             }
@@ -702,7 +693,7 @@ impl<'m, 'e> Callout<'m, 'e> {
             match self.invoke_script(&path, event, action, stdin) {
                 Ok(res) => {
                     if res.status.code().is_none() {
-                        warn!("callout script {:?} was terminated by a signal", path);
+                        warn!("callout script {path:?} was terminated by a signal");
                         continue;
                     } else if res.status.code() == Some(2) {
                         debug!(
@@ -726,7 +717,7 @@ impl<'m, 'e> Callout<'m, 'e> {
                     }
                 }
                 Err(e) => {
-                    debug!("failed to execute callout script {:?}: {:?}", path, e);
+                    debug!("failed to execute callout script {path:?}: {e:?}");
                     continue;
                 }
             }
@@ -797,11 +788,11 @@ impl<'m, 'e> Callout<'m, 'e> {
                     match self.invoke_script(&path, event, action, None) {
                         Ok(output) => {
                             if !output.status.success() {
-                                debug!("Error occurred when executing notify script {:?}", path);
+                                debug!("Error occurred when executing notify script {path:?}");
                             }
                         }
                         _ => {
-                            debug!("Failed to execute callout script {:?}", path);
+                            debug!("Failed to execute callout script {path:?}");
                             continue;
                         }
                     }

@@ -69,7 +69,7 @@ impl TestCase {
             fs::create_dir_all(&dir)
                 .unwrap_or_else(|_| panic!("Unable to create notification_dir '{:?}'", &dir))
         }
-        info!("---- Running test '{}/{}' ----", testname, testcase);
+        info!("---- Running test '{testname}/{testcase}' ----");
         test
     }
 
@@ -234,7 +234,7 @@ impl TestCase {
         fs::create_dir_all(&parenttypedir).expect("Unable to setup mdev parent type");
 
         let instancefile = parenttypedir.join("available_instances");
-        fs::write(instancefile, format!("{}", instances))
+        fs::write(instancefile, format!("{instances}"))
             .expect("Unable to write available_instances");
 
         let apifile = parenttypedir.join("device_api");
@@ -259,9 +259,8 @@ impl TestCase {
         let expected = fs::read_to_string(path).unwrap_or_else(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 println!(
-                    "File {:?} not found, run tests with {}=1 to automatically \
-                         generate expected output",
-                    filename, REGEN_FLAG
+                    "File {filename:?} not found, run tests with {REGEN_FLAG}=1 to automatically \
+                         generate expected output"
                 );
             }
             Default::default()
@@ -305,11 +304,11 @@ impl TestCase {
     {
         let mut testname = format!("{}/{}", self.name, self.case);
         if let Some(msg) = msg {
-            testname = format!("{}/{}", testname, msg);
+            testname = format!("{testname}/{msg}");
         }
         match expect {
             Expect::Fail(msg) => {
-                let e = res.expect_err(format!("Expected {} to fail", testname).as_str());
+                let e = res.expect_err(format!("Expected {testname} to fail").as_str());
                 if let Some(msg) = msg {
                     assert_eq!(msg, e.to_string());
                 }
@@ -322,7 +321,7 @@ impl TestCase {
 }
 
 fn get_flag(varname: &str) -> bool {
-    env::var(varname).map_or(false, |s| matches!(s.trim().parse::<i32>(), Ok(n) if n > 0))
+    env::var(varname).is_ok_and(|s| matches!(s.trim().parse::<i32>(), Ok(n) if n > 0))
 }
 
 fn regen(filename: &PathBuf, data: &str) -> Result<()> {
@@ -330,7 +329,7 @@ fn regen(filename: &PathBuf, data: &str) -> Result<()> {
     fs::create_dir_all(parentdir)?;
 
     fs::write(filename, data.as_bytes())?;
-    println!("Regenerated expected data file {:?}", filename);
+    println!("Regenerated expected data file {filename:?}");
     Ok(())
 }
 
@@ -339,12 +338,12 @@ const REGEN_FLAG: &str = "MDEVCTL_TEST_REGENERATE_OUTPUT";
 fn test_load_json_helper(uuid: &str, parent: &str, expect: Expect) {
     let test = TestCase::new("load-json", uuid);
 
-    let res = test.load_from_json(uuid, parent, &format!("{}.in", uuid));
+    let res = test.load_from_json(uuid, parent, &format!("{uuid}.in"));
     if let Ok(dev) = test.assert_result(res, expect, None) {
         let jsonval = dev.to_json(false).unwrap();
         let jsonstr = serde_json::to_string_pretty(&jsonval).unwrap();
 
-        test.compare_to_file(&format!("{}.out", uuid), &jsonstr);
+        test.compare_to_file(&format!("{uuid}.out"), &jsonstr);
         assert_eq!(uuid, dev.uuid.hyphenated().to_string());
         assert_eq!(Some(parent.to_string()), dev.parent);
     }

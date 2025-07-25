@@ -45,7 +45,7 @@ fn test_define_helper<F>(
     setupfn(&test);
 
     let res = define_command_helper(&test.env, uuid, auto, parent, mdev_type, jsonfile, force);
-    let expected_testfilename = format!("{}.expected", testname);
+    let expected_testfilename = format!("{testname}.expected");
     if let Ok(def) = test.assert_result(res, expect, None) {
         let path = def.persistent_path().unwrap();
         assert!(!path.exists());

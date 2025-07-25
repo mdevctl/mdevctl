@@ -67,32 +67,31 @@ fn define_command_helper(
 
     if let Some(jsonfile) = jsonfile {
         let _ = std::fs::File::open(&jsonfile)
-            .map_err(|e| Error::IOError(format!("Unable to read file {:?}", jsonfile), e))?;
+            .map_err(|e| Error::IOError(format!("Unable to read file {jsonfile:?}"), e))?;
 
         if mdev_type.is_some() {
             return Err(Error::InvalidConfiguration(format!(
-                "Device type cannot be specified separately from {:?}",
-                jsonfile
+                "Device type cannot be specified separately from {jsonfile:?}"
             )));
         }
 
         let parent = parent.ok_or_else(|| {
             Error::InvalidConfiguration(format!(
-                "Parent device required to define device via {:?}",
-                jsonfile
+                "Parent device required to define device via {jsonfile:?}"
             ))
         })?;
 
         let devs = env.get_defined_devices(Some(&uuid), Some(&parent))?;
         if !devs.is_empty() {
             return Err(Error::DeviceExists(format!(
-                "Cowardly refusing to overwrite existing config for {}/{}",
-                parent, uuid
+                "Cowardly refusing to overwrite existing config for {parent}/{uuid}"
             )));
         }
 
-        let filecontents = fs::read_to_string(&jsonfile)
-            .map_err(|e| Error::IOError(format!("Unable to read jsonfile {:?}", jsonfile), e))?;
+        let filecontents = fs::read_to_string(&jsonfile).map_err(|e| {
+            let var_name = format!("Unable to read jsonfile {jsonfile:?}");
+            Error::IOError(var_name, e)
+        })?;
         let jsonval = serde_json::from_str(&filecontents)?;
         dev.load_from_json(parent, &jsonval)?;
     } else {
@@ -161,7 +160,7 @@ fn define_command(
     jsonfile: Option<PathBuf>,
     force: bool,
 ) -> Result<(), Error> {
-    debug!("Defining mdev {:?}", uuid);
+    debug!("Defining mdev {uuid:?}");
 
     let mut dev = define_command_helper(env, uuid, auto, parent, mdev_type, jsonfile, force)?;
 
@@ -194,7 +193,7 @@ fn undefine_command(
     parent: Option<String>,
     force: bool,
 ) -> Result<(), Error> {
-    debug!("Undefining mdev {:?}", uuid);
+    debug!("Undefining mdev {uuid:?}");
     let mut failed = false;
     let devs = env.get_defined_devices(Some(&uuid), parent.as_ref())?;
     if devs.is_empty() {
@@ -241,7 +240,7 @@ fn modify_command(
     jsonfile: Option<PathBuf>,
     force: bool,
 ) -> Result<(), Error> {
-    debug!("Modifying mdev {:?}", uuid);
+    debug!("Modifying mdev {uuid:?}");
     if live {
         if mdev_type.is_some() {
             return Err(Error::Unsupported(
@@ -362,12 +361,12 @@ fn start_command_helper(
     jsonfile: Option<PathBuf>,
     force: bool,
 ) -> Result<MDev, Error> {
-    debug!("Starting device '{:?}'", uuid);
+    debug!("Starting device '{uuid:?}'");
     let mut dev: Option<MDev> = None;
     match jsonfile {
         Some(fname) => {
             let contents = fs::read_to_string(&fname)
-                .map_err(|e| Error::IOError(format!("Unable to read jsonfile {:?}", fname), e))?;
+                .map_err(|e| Error::IOError(format!("Unable to read jsonfile {fname:?}"), e))?;
             let val = serde_json::from_str(&contents)?;
 
             if mdev_type.is_some() {
@@ -471,7 +470,7 @@ fn start_command(
 
 /// Implementation of the `mdevctl stop` command
 fn stop_command(env: &Environment, uuid: Uuid, force: bool) -> Result<(), Error> {
-    debug!("Stopping '{}'", uuid);
+    debug!("Stopping '{uuid}'");
     let mut dev = MDev::new(env, uuid);
     match MDevSysfsData::load_for_mdev(&dev) {
         Ok(sysfs_data) => dev.set_sysfs_data(sysfs_data),
@@ -567,7 +566,7 @@ fn types_command(
     output: &mut dyn std::io::Write,
 ) -> Result<(), Error> {
     let types = env.get_supported_types(parent)?;
-    debug!("{:?}", types);
+    debug!("{types:?}");
     if dumpjson {
         let mut parents = serde_json::map::Map::new();
         for (parent, children) in types {
@@ -586,7 +585,7 @@ fn types_command(
     } else {
         let mut text: String = Default::default();
         for (parent, children) in types {
-            let _ = writeln!(text, "{}", parent);
+            let _ = writeln!(text, "{parent}");
             for child in children {
                 let _ = writeln!(text, "  {}", child.typename);
                 let _ = writeln!(
@@ -645,7 +644,7 @@ fn main() -> Result<(), Error> {
     debug!("Starting up");
 
     let env = Environment::new("/".to_string());
-    debug!("{:?}", env);
+    debug!("{env:?}");
 
     // make sure the environment is sane
     env.self_check()?;

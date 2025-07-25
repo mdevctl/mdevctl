@@ -207,10 +207,7 @@ fn test_start() {
     );
     test_start_helper(
         "already-running",
-        Expect::Fail(Some(&format!(
-            "Device already exists: {}",
-            UUID.to_string()
-        ))),
+        Expect::Fail(Some(&format!("Device already exists: {UUID}"))),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),
         Some(MDEV_TYPE.to_string()),
@@ -330,7 +327,7 @@ fn test_start() {
     test_start_helper(
         "missing-parent",
         Expect::Fail(Some(
-            format!("Unable to find parent device: {}", PARENT).as_str(),
+            format!("Unable to find parent device: {PARENT}").as_str(),
         )),
         Some(UUID.to_string()),
         Some(PARENT.to_string()),

@@ -28,7 +28,7 @@ impl MDevSysfsData {
             .map(Some)
             .or_else(|e| match e {
                 Error::IOError(_, source) if source.kind() == ErrorKind::NotFound => {
-                    debug!("Mdev {:?} does no longer exist in sysfs", uuid);
+                    debug!("Mdev {uuid:?} does no longer exist in sysfs");
                     Ok(None)
                 }
                 _ => Err(e),
@@ -37,7 +37,7 @@ impl MDevSysfsData {
             .map(Some)
             .or_else(|e| match e {
                 Error::IOError(_, source) if source.kind() == ErrorKind::NotFound => {
-                    debug!("Mdev {:?} does no longer exist in sysfs", uuid);
+                    debug!("Mdev {uuid:?} does no longer exist in sysfs");
                     Ok(None)
                 }
                 _ => Err(e),
@@ -49,7 +49,7 @@ impl MDevSysfsData {
                 mdev_type,
             })
         } else {
-            debug!("Mdev {:?} does not exist in sysfs", uuid);
+            debug!("Mdev {uuid:?} does not exist in sysfs");
             Err(Error::DeviceNotFound)
         }
     }
@@ -71,8 +71,7 @@ impl MDevSysfsData {
         })?;
         let sysfsparent = canonpath.parent().ok_or_else(|| {
             Error::System(format!(
-                "Path to parent of mdev path {:?} does not exist",
-                canonpath
+                "Path to parent of mdev path {canonpath:?} does not exist"
             ))
         })?;
         Self::canonical_basename(sysfsparent)
@@ -135,9 +134,9 @@ impl<'e> MDev<'e> {
         jsonfile: PathBuf,
     ) -> Result<Self, Error> {
         let _ = std::fs::File::open(&jsonfile)
-            .map_err(|e| Error::IOError(format!("Unable to read file {:?}", jsonfile), e))?;
+            .map_err(|e| Error::IOError(format!("Unable to read file {jsonfile:?}"), e))?;
         let filecontents = fs::read_to_string(&jsonfile)
-            .map_err(|e| Error::IOError(format!("Unable to read jsonfile {:?}", jsonfile), e))?;
+            .map_err(|e| Error::IOError(format!("Unable to read jsonfile {jsonfile:?}"), e))?;
         let jsonval = serde_json::from_str(&filecontents)?;
 
         let mut d = MDev::new(env, uuid);
@@ -245,7 +244,7 @@ impl<'e> MDev<'e> {
                     // get the key and value from the first (only) map entry
                     if let Some((key, val)) = attrobj.iter().next() {
                         let valstr = val.as_str().ok_or_else(|| {
-                            Error::DeviceFormat(format!("invalid JSON format for attribute {{{:?}, {}}}: value must be of type str", key, val))
+                            Error::DeviceFormat(format!("invalid JSON format for attribute {{{key:?}, {val}}}: value must be of type str"))
                         })?;
                         self.attrs.push((key.to_string(), valstr.to_string()));
                     }
@@ -293,7 +292,7 @@ impl<'e> MDev<'e> {
         self.autostart = startval == "auto";
 
         self.add_attributes(&json["attrs"])?;
-        debug!("loaded device {:?}", self);
+        debug!("loaded device {self:?}");
 
         Ok(())
     }
@@ -372,7 +371,7 @@ impl<'e> MDev<'e> {
         if !self.attrs.is_empty() {
             output.push_str("  Attrs:\n");
             for (i, (key, value)) in self.attrs.iter().enumerate() {
-                let txtattr = format!("    @{{{}}}: {{\"{}\":\"{}\"}}\n", i, key, value);
+                let txtattr = format!("    @{{{i}}}: {{\"{key}\":\"{value}\"}}\n");
                 output.push_str(&txtattr);
             }
         }
@@ -406,7 +405,7 @@ impl<'e> MDev<'e> {
         debug!("Removing mdev {:?}", self.uuid);
         let mut remove_path = self.active_path();
         remove_path.push("remove");
-        debug!("remove path '{:?}'", remove_path);
+        debug!("remove path '{remove_path:?}'");
         fs::write(remove_path, "1")
             .map_err(|e| Error::IOError(format!("Error removing device {:?}", self.uuid), e))
             .inspect(|_| self.active = false)
@@ -475,23 +474,21 @@ impl<'e> MDev<'e> {
 
         let mut path = self.find_parent_dir()?;
         path.push("mdev_supported_types");
-        debug!("Checking parent for mdev support: {:?}", path);
+        debug!("Checking parent for mdev support: {path:?}");
         if !path.is_dir() {
             return Err(Error::Unsupported(format!(
-                "parent {} is not currently registered for mdev support",
-                parent
+                "parent {parent} is not currently registered for mdev support"
             )));
         }
         path.push(mdev_type);
-        debug!("Checking parent for mdev type {}: {:?}", mdev_type, path);
+        debug!("Checking parent for mdev type {mdev_type}: {path:?}");
         if !path.is_dir() {
             return Err(Error::Unsupported(format!(
-                "parent {} does not support mdev type {}",
-                parent, mdev_type
+                "parent {parent} does not support mdev type {mdev_type}"
             )));
         }
         path.push("available_instances");
-        debug!("Checking available instances: {:?}", path);
+        debug!("Checking available instances: {path:?}");
         let avail: i32 = fs::read_to_string(&path)
             .map_err(|e| {
                 Error::IOError(
@@ -507,11 +504,10 @@ impl<'e> MDev<'e> {
                 ))
             })?;
 
-        debug!("Available instances: {}", avail);
+        debug!("Available instances: {avail}");
         if avail == 0 {
             return Err(Error::InsufficientResources(format!(
-                "No available instances of {} on {}",
-                mdev_type, parent
+                "No available instances of {mdev_type} on {parent}"
             )));
         }
         path.pop();
@@ -552,7 +548,7 @@ impl<'e> MDev<'e> {
         let parentdir = path
             .parent()
             .ok_or_else(|| Error::System(format!("Can't get parent directory of {path:?}")))?;
-        debug!("Ensuring parent directory {:?} exists", parentdir);
+        debug!("Ensuring parent directory {parentdir:?} exists");
         fs::create_dir_all(parentdir).map_err(|e| {
             Error::IOError(
                 format!("Failed to create parent directory {parentdir:?}"),
@@ -575,7 +571,7 @@ impl<'e> MDev<'e> {
     pub fn undefine(&mut self) -> Result<(), Error> {
         let p = self.persistent_path()?;
         fs::remove_file(&p)
-            .map_err(|e| Error::IOError(format!("Failed to remove file {:?}", p), e))?;
+            .map_err(|e| Error::IOError(format!("Failed to remove file {p:?}"), e))?;
         Ok(())
     }
 
@@ -631,13 +627,13 @@ impl<'e> MDev<'e> {
 }
 
 fn write_attr(basepath: &Path, attr: &str, val: &str) -> Result<(), Error> {
-    debug!("Writing attribute '{}' -> '{}'", attr, val);
+    debug!("Writing attribute '{attr}' -> '{val}'");
     let path = basepath.join(attr);
     if !path.exists() {
-        return Err(Error::Unsupported(format!("Invalid attribute '{}'", attr)));
+        return Err(Error::Unsupported(format!("Invalid attribute '{attr}'")));
     }
     fs::write(path, val)
-        .map_err(|e| Error::IOError(format!("Failed to write {} to attribute {}", val, attr), e))
+        .map_err(|e| Error::IOError(format!("Failed to write {val} to attribute {attr}"), e))
 }
 
 /// Representation of a mediated device type

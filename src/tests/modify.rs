@@ -49,7 +49,7 @@ fn test_modify_helper<F>(
         force,
     );
 
-    let testfilename = format!("{}.expected", testname);
+    let testfilename = format!("{testname}.expected");
     if test.assert_result(result, expect, None).is_err() {
         test.unused_file(&testfilename);
         return;
@@ -112,13 +112,13 @@ fn test_modify_defined_active_helper<F>(
         jsonfile,
         force,
     );
-    let active_expect_testfilename = format!("{}.active.expected", testname);
-    let defined_expect_testfilename = format!("{}.defined.expected", testname);
+    let active_expect_testfilename = format!("{testname}.active.expected");
+    let defined_expect_testfilename = format!("{testname}.defined.expected");
     if test
         .assert_result(result, expect, Some("modify command"))
         .is_err()
     {
-        let active_expect_testfilename = format!("{}.active.expected", testname);
+        let active_expect_testfilename = format!("{testname}.active.expected");
         test.unused_file(&active_expect_testfilename);
         test.unused_file(&defined_expect_testfilename);
         return;
