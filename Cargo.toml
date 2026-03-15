@@ -27,6 +27,6 @@ clap_complete = "4.0"
 uuid = "1.0"
 
 [dev-dependencies]
-nix = "0.26"
+nix = { version = "0.31", features = ["process"] }
 libc = "0.2"
 tempfile = "3"
